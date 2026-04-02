@@ -1,0 +1,98 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: infra/docker/web.Dockerfile
+    env_file:
+      - .env
+    working_dir: /workspace
+    command: >
+      /bin/sh -lc
+      'export NEXT_PUBLIC_APP_VERSION=$$(cat /workspace/VERSION) &&
+      npm run dev --workspace @pantry/web -- --hostname 0.0.0.0 --port 3000'
+    volumes:
+      - .:/workspace
+      - web_node_modules:/workspace/node_modules
+      - web_next_cache:/workspace/apps/web/.next
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    depends_on:
+      api:
+        condition: service_started
+
+  api:
+    build:
+      context: .
+      dockerfile: infra/docker/api.Dockerfile
+    env_file:
+      - .env
+    environment:
+      PYTHONPATH: /workspace/apps/api
+    working_dir: /workspace/apps/api
+    command: >
+      /bin/sh -lc
+      'export APP_VERSION=$$(cat /workspace/VERSION) &&
+      uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload'
+    volumes:
+      - .:/workspace
+    ports:
+      - "${API_PORT:-8000}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: .
+      dockerfile: infra/docker/worker.Dockerfile
+    env_file:
+      - .env
+    environment:
+      PYTHONPATH: /workspace/apps/worker
+    working_dir: /workspace/apps/worker
+    command: >
+      /bin/sh -lc
+      'export APP_VERSION=$$(cat /workspace/VERSION) &&
+      python -m worker.main'
+    volumes:
+      - .:/workspace
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-pantry}
+      POSTGRES_USER: ${POSTGRES_USER:-pantry}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  postgres_data:
+  web_node_modules:
+  web_next_cache:
+
