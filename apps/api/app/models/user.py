@@ -25,3 +25,4 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     platform_role = relationship("Role")
     memberships = relationship("Membership", back_populates="user")
+    audit_events = relationship("AuditEvent", back_populates="actor_user")

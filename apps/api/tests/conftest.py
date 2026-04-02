@@ -23,25 +23,25 @@ command.upgrade(alembic_config, "head")
 
 from app.core.db import SessionLocal  # noqa: E402
 from app.main import app  # noqa: E402
-from app.models.household import Household  # noqa: E402
-from app.models.membership import Membership  # noqa: E402
-from app.models.user import User  # noqa: E402
+from app.models import Base, Role  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
 def clean_database():
     with SessionLocal() as session:
-        session.execute(delete(Membership))
-        session.execute(delete(Household))
-        session.execute(delete(User))
+        for table in reversed(Base.metadata.sorted_tables):
+            if table.name == Role.__tablename__:
+                continue
+            session.execute(delete(table))
         session.commit()
 
     yield
 
     with SessionLocal() as session:
-        session.execute(delete(Membership))
-        session.execute(delete(Household))
-        session.execute(delete(User))
+        for table in reversed(Base.metadata.sorted_tables):
+            if table.name == Role.__tablename__:
+                continue
+            session.execute(delete(table))
         session.commit()
 
 
@@ -55,4 +55,3 @@ def db_session():
 def client():
     with TestClient(app) as test_client:
         yield test_client
-

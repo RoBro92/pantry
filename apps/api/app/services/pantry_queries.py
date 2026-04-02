@@ -1,0 +1,327 @@
+from __future__ import annotations
+
+from collections import defaultdict
+from dataclasses import dataclass
+from datetime import date, timedelta
+from decimal import Decimal
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session, selectinload
+
+from app.models.audit_event import AuditEvent
+from app.models.location import Location
+from app.models.location_group import LocationGroup
+from app.models.product import Product
+from app.models.stock_lot import StockLot
+from app.schemas.pantry import (
+    AuditEventSummary,
+    LocationGroupSummary,
+    LocationSummary,
+    NearExpiryResponse,
+    PantryCounts,
+    PantryFilters,
+    PantryOverviewResponse,
+    PantryProductSummary,
+    ProductLocationSummary,
+    StockLotSummary,
+)
+from app.services.pantry_normalization import normalize_barcode, normalize_lookup_name
+from app.services.tenancy import HouseholdAccess
+
+
+@dataclass(frozen=True)
+class PantryFilterOptions:
+    q: str | None = None
+    location_group_external_id: str | None = None
+    location_external_id: str | None = None
+
+
+def _today() -> date:
+    return date.today()
+
+
+def _is_near_expiry(lot: StockLot, *, days: int) -> bool:
+    if lot.expires_on is None:
+        return False
+    return lot.expires_on <= (_today() + timedelta(days=days))
+
+
+def _stock_lot_summary(lot: StockLot, *, near_expiry_days: int) -> StockLotSummary:
+    return StockLotSummary(
+        external_id=lot.external_id,
+        product_external_id=lot.product.external_id,
+        product_name=lot.product.name,
+        location_external_id=lot.location.external_id,
+        location_name=lot.location.name,
+        location_group_name=lot.location.location_group.name,
+        quantity=lot.quantity,
+        unit=lot.unit,
+        note=lot.note,
+        purchased_on=lot.purchased_on,
+        expires_on=lot.expires_on,
+        is_near_expiry=_is_near_expiry(lot, days=near_expiry_days),
+    )
+
+
+def build_stock_lot_summary(lot: StockLot, *, near_expiry_days: int = 14) -> StockLotSummary:
+    return _stock_lot_summary(lot, near_expiry_days=near_expiry_days)
+
+
+def _event_summary(event: AuditEvent) -> AuditEventSummary:
+    metadata = event.event_metadata
+    action = event.action
+
+    if action == "stock.added":
+        summary = (
+            f"Added {metadata['quantity']} {metadata['unit']} of {metadata['product_name']} "
+            f"to {metadata['location_group_name']} / {metadata['location_name']}."
+        )
+    elif action == "stock.removed":
+        summary = (
+            f"Removed {metadata['quantity']} {metadata['unit']} of {metadata['product_name']} "
+            f"from {metadata['location_group_name']} / {metadata['location_name']}."
+        )
+    elif action == "stock.moved":
+        summary = (
+            f"Moved {metadata['quantity']} {metadata['unit']} of {metadata['product_name']} "
+            f"from {metadata['from_location_group_name']} / {metadata['from_location_name']} "
+            f"to {metadata['to_location_group_name']} / {metadata['to_location_name']}."
+        )
+    elif action == "product.created":
+        summary = f"Created product {metadata['name']}."
+    elif action == "location.created":
+        summary = f"Created location {metadata['location_group_name']} / {metadata['name']}."
+    elif action == "location_group.created":
+        summary = f"Created location group {metadata['name']}."
+    else:
+        summary = action
+
+    actor_display = None
+    if event.actor_user is not None:
+        actor_display = event.actor_user.display_name or event.actor_user.email
+
+    return AuditEventSummary(
+        external_id=event.external_id,
+        action=event.action,
+        summary=summary,
+        actor_display=actor_display,
+        target_type=event.target_type,
+        target_external_id=event.target_external_id,
+        occurred_at=event.occurred_at,
+    )
+
+
+def _load_reference_lists(
+    db: Session,
+    *,
+    household_id,
+) -> tuple[list[LocationGroup], list[Location], list[Product]]:
+    location_groups = db.scalars(
+        select(LocationGroup).where(LocationGroup.household_id == household_id).order_by(LocationGroup.name)
+    ).all()
+    locations = db.scalars(
+        select(Location)
+        .where(Location.household_id == household_id)
+        .options(selectinload(Location.location_group))
+        .order_by(Location.name)
+    ).all()
+    products = db.scalars(
+        select(Product)
+        .where(Product.household_id == household_id)
+        .options(selectinload(Product.aliases), selectinload(Product.barcodes))
+        .order_by(Product.name)
+    ).all()
+    return location_groups, locations, products
+
+
+def _load_active_lots(db: Session, *, household_id) -> list[StockLot]:
+    return db.scalars(
+        select(StockLot)
+        .where(StockLot.household_id == household_id)
+        .where(StockLot.depleted_at.is_(None))
+        .where(StockLot.quantity > Decimal("0"))
+        .options(
+            selectinload(StockLot.product).selectinload(Product.aliases),
+            selectinload(StockLot.product).selectinload(Product.barcodes),
+            selectinload(StockLot.location).selectinload(Location.location_group),
+        )
+        .order_by(StockLot.expires_on, StockLot.created_at)
+    ).all()
+
+
+def _matches_query(lot: StockLot, *, query: str | None) -> bool:
+    if not query:
+        return True
+
+    normalized_query = normalize_lookup_name(query)
+    try:
+        barcode_query = normalize_barcode(query)
+    except ValueError:
+        barcode_query = None
+
+    haystacks = [
+        lot.product.normalized_name,
+        lot.location.normalized_name,
+        lot.location.location_group.normalized_name,
+        *[alias.normalized_name for alias in lot.product.aliases],
+    ]
+    if any(normalized_query in value for value in haystacks):
+        return True
+    if barcode_query and any(barcode_query in barcode.normalized_value for barcode in lot.product.barcodes):
+        return True
+    return False
+
+
+def _matches_filters(lot: StockLot, *, filters: PantryFilterOptions) -> bool:
+    if filters.location_group_external_id and lot.location.location_group.external_id != filters.location_group_external_id:
+        return False
+    if filters.location_external_id and lot.location.external_id != filters.location_external_id:
+        return False
+    return _matches_query(lot, query=filters.q)
+
+
+def build_pantry_overview(
+    db: Session,
+    *,
+    access: HouseholdAccess,
+    filters: PantryFilterOptions,
+    near_expiry_days: int = 14,
+) -> PantryOverviewResponse:
+    location_groups, locations, products = _load_reference_lists(db, household_id=access.household.id)
+    active_lots = _load_active_lots(db, household_id=access.household.id)
+    filtered_lots = [lot for lot in active_lots if _matches_filters(lot, filters=filters)]
+
+    grouped_products: dict[str, dict[str, object]] = {}
+    for lot in filtered_lots:
+        product_bucket = grouped_products.setdefault(
+            lot.product.external_id,
+            {
+                "product_external_id": lot.product.external_id,
+                "product_name": lot.product.name,
+                "unit": lot.unit,
+                "total_quantity": Decimal("0.000"),
+                "lot_count": 0,
+                "aliases": [alias.name for alias in lot.product.aliases],
+                "barcodes": [barcode.value for barcode in lot.product.barcodes],
+                "locations": defaultdict(lambda: {"total_quantity": Decimal("0.000"), "lot_count": 0, "location": None}),
+            },
+        )
+        product_bucket["total_quantity"] = product_bucket["total_quantity"] + lot.quantity
+        product_bucket["lot_count"] = product_bucket["lot_count"] + 1
+
+        location_bucket = product_bucket["locations"][lot.location.external_id]
+        location_bucket["total_quantity"] = location_bucket["total_quantity"] + lot.quantity
+        location_bucket["lot_count"] = location_bucket["lot_count"] + 1
+        location_bucket["location"] = lot.location
+
+    product_summaries = sorted(
+        [
+            PantryProductSummary(
+                product_external_id=bucket["product_external_id"],
+                product_name=bucket["product_name"],
+                unit=bucket["unit"],
+                total_quantity=bucket["total_quantity"],
+                lot_count=bucket["lot_count"],
+                aliases=bucket["aliases"],
+                barcodes=bucket["barcodes"],
+                locations=sorted(
+                    [
+                        ProductLocationSummary(
+                            location_external_id=location_external_id,
+                            location_name=location_data["location"].name,
+                            location_group_name=location_data["location"].location_group.name,
+                            total_quantity=location_data["total_quantity"],
+                            lot_count=location_data["lot_count"],
+                        )
+                        for location_external_id, location_data in bucket["locations"].items()
+                    ],
+                    key=lambda location: (location.location_group_name.lower(), location.location_name.lower()),
+                ),
+            )
+            for bucket in grouped_products.values()
+        ],
+        key=lambda item: item.product_name.lower(),
+    )
+
+    recent_events = db.scalars(
+        select(AuditEvent)
+        .where(AuditEvent.household_id == access.household.id)
+        .options(selectinload(AuditEvent.actor_user))
+        .order_by(AuditEvent.occurred_at.desc())
+        .limit(10)
+    ).all()
+
+    return PantryOverviewResponse(
+        household_external_id=access.household.external_id,
+        household_name=access.household.name,
+        effective_role=access.effective_role,
+        can_administer=access.can_administer,
+        filters=PantryFilters(
+            q=filters.q,
+            location_group_external_id=filters.location_group_external_id,
+            location_external_id=filters.location_external_id,
+        ),
+        counts=PantryCounts(
+            location_group_count=len(location_groups),
+            location_count=len(locations),
+            product_count=len(products),
+            active_lot_count=len(active_lots),
+            near_expiry_lot_count=sum(1 for lot in active_lots if _is_near_expiry(lot, days=near_expiry_days)),
+        ),
+        location_groups=[
+            LocationGroupSummary(
+                external_id=group.external_id,
+                name=group.name,
+                location_count=sum(1 for location in locations if location.location_group_id == group.id),
+            )
+            for group in location_groups
+        ],
+        locations=[
+            LocationSummary(
+                external_id=location.external_id,
+                name=location.name,
+                location_group_external_id=location.location_group.external_id,
+                location_group_name=location.location_group.name,
+            )
+            for location in locations
+        ],
+        products=product_summaries,
+        stock_lots=[
+            _stock_lot_summary(lot, near_expiry_days=near_expiry_days)
+            for lot in sorted(
+                filtered_lots,
+                key=lambda lot: (
+                    lot.expires_on is None,
+                    lot.expires_on or date.max,
+                    lot.product.name.lower(),
+                    lot.location.location_group.name.lower(),
+                    lot.location.name.lower(),
+                ),
+            )
+        ],
+        recent_events=[_event_summary(event) for event in recent_events],
+    )
+
+
+def build_near_expiry_response(
+    db: Session,
+    *,
+    access: HouseholdAccess,
+    days: int,
+) -> NearExpiryResponse:
+    active_lots = _load_active_lots(db, household_id=access.household.id)
+    near_expiry_lots = [lot for lot in active_lots if _is_near_expiry(lot, days=days)]
+    near_expiry_lots.sort(
+        key=lambda lot: (
+            lot.expires_on or date.max,
+            lot.product.name.lower(),
+            lot.location.location_group.name.lower(),
+            lot.location.name.lower(),
+        )
+    )
+
+    return NearExpiryResponse(
+        household_external_id=access.household.external_id,
+        days=days,
+        lots=[_stock_lot_summary(lot, near_expiry_days=days) for lot in near_expiry_lots],
+    )

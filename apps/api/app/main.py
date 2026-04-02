@@ -11,6 +11,7 @@ from app.api.routes.admin import router as admin_router
 from app.api.routes.auth import router as auth_router
 from app.api.routes.health import router as health_router
 from app.api.routes.households import router as households_router
+from app.api.routes.pantry import router as pantry_router
 from app.core.config import get_settings
 from app.core.logging import configure_logging
 
@@ -92,3 +93,4 @@ app.include_router(health_router, prefix="/api")
 app.include_router(auth_router, prefix="/api")
 app.include_router(admin_router, prefix="/api")
 app.include_router(households_router, prefix="/api")
+app.include_router(pantry_router, prefix="/api")

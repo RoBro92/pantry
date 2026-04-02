@@ -16,4 +16,10 @@ class Household(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
 
     memberships = relationship("Membership", back_populates="household")
-
+    location_groups = relationship("LocationGroup", back_populates="household")
+    locations = relationship("Location", back_populates="household")
+    products = relationship("Product", back_populates="household")
+    product_aliases = relationship("ProductAlias", back_populates="household")
+    barcodes = relationship("Barcode", back_populates="household")
+    stock_lots = relationship("StockLot", back_populates="household")
+    audit_events = relationship("AuditEvent", back_populates="household")
