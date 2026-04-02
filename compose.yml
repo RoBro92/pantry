@@ -32,6 +32,7 @@ services:
     command: >
       /bin/sh -lc
       'export APP_VERSION=$$(cat /workspace/VERSION) &&
+      alembic upgrade head &&
       uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload'
     volumes:
       - .:/workspace
@@ -95,4 +96,3 @@ volumes:
   postgres_data:
   web_node_modules:
   web_next_cache:
-
