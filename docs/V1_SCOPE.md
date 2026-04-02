@@ -9,6 +9,8 @@ V1 means the first usable self-hosted release, not the final product vision.
 - Role enforcement for `platform_admin`, `household_admin`, and `household_user`.
 - Location groups and locations.
 - Product, barcode, and stock-lot tracking.
+- Manual recipe entry, ingredient mapping, pantry coverage, and shopping-gap calculation.
+- Recipe URL import capture foundation for later parsing work.
 - Basic household dashboards and admin shell pages.
 - Admin bootstrap CLI and password reset CLI.
 - PostgreSQL-backed API with Redis available for worker jobs and rate-limited or queued work.
@@ -17,8 +19,8 @@ V1 means the first usable self-hosted release, not the final product vision.
 ## Explicitly Not In Scope For This Initial Scaffold
 
 - Full receipt import implementation.
+- Shopping-list persistence and workflow automation.
 - Full AI workflows.
 - SaaS billing internals.
 - Rich email or SMTP management UI.
 - Public multi-tenant cloud control plane.
-

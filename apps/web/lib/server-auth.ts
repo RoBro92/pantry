@@ -5,6 +5,8 @@ import type {
   AdminUserSummary,
   NearExpiryResponse,
   PantryOverview,
+  RecipeDetailResponse,
+  RecipeListResponse,
   SessionResponse
 } from "./api-types";
 import { apiGet, apiGetIfOk } from "./server-api";
@@ -81,5 +83,20 @@ export async function getNearExpiry(
     withQuery(`/api/households/${householdExternalId}/pantry/near-expiry`, {
       days: String(days)
     })
+  );
+}
+
+export async function getRecipeList(
+  householdExternalId: string
+): Promise<RecipeListResponse> {
+  return apiGet<RecipeListResponse>(`/api/households/${householdExternalId}/recipes`);
+}
+
+export async function getRecipeDetail(
+  householdExternalId: string,
+  recipeExternalId: string
+): Promise<RecipeDetailResponse> {
+  return apiGet<RecipeDetailResponse>(
+    `/api/households/${householdExternalId}/recipes/${recipeExternalId}`
   );
 }

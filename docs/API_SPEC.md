@@ -36,12 +36,23 @@ This file records the initial API shape and conventions, not a completed endpoin
   - Removes quantity from a lot, depletes the lot when quantity reaches zero, and emits an audit event.
 - `POST /api/households/{household_external_id}/stock-lots/{lot_external_id}/move`
   - Moves stock to another location, preserving lot identity for full moves and splitting partial moves into a new lot.
+- `GET /api/households/{household_external_id}/recipes`
+  - Returns household recipes with recipe-level pantry coverage summaries and shopping-gap counts.
+- `GET /api/households/{household_external_id}/recipes/{recipe_external_id}`
+  - Returns recipe detail, ingredient coverage, linked pantry products, and derived shopping gaps.
+- `POST /api/households/{household_external_id}/recipes`
+  - Creates a manual household recipe, resolves deterministic ingredient-to-product matches, and emits an audit event.
+- `PUT /api/households/{household_external_id}/recipes/{recipe_external_id}`
+  - Replaces recipe title, notes, and ingredient lines, recomputes deterministic links, and emits an audit event.
+- `POST /api/households/{household_external_id}/recipe-imports/url`
+  - Captures a normalized recipe URL import request as v1 foundation work and emits an audit event.
 
 ## Planned API Conventions
 
 - All household-scoped endpoints resolve tenant access server-side.
 - Request and response payloads should use opaque external IDs for tenant-facing objects.
 - Mutation endpoints should emit audit events for domain-significant changes.
+- Recipe coverage and shopping-gap calculations should stay deterministic and server-derived from pantry state.
 - Bulk import and AI flows should be asynchronous where latency or safety review makes synchronous APIs inappropriate.
 
 ## Auth Assumptions
@@ -53,4 +64,5 @@ This file records the initial API shape and conventions, not a completed endpoin
 
 - Household create/update flows for platform admins or household admins as product requirements sharpen.
 - Edit and archive flows for pantry structure records.
-- Broader audit-event coverage for future domain areas such as recipes, shopping, and imports.
+- Shopping-list persistence and consumption/replenishment workflows.
+- Deeper recipe URL parsing and worker-backed import execution.

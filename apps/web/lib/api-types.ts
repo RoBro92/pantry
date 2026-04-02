@@ -135,3 +135,88 @@ export type NearExpiryResponse = {
   days: number;
   lots: PantryStockLotSummary[];
 };
+
+export type RecipeCoverageSummary = {
+  status: "fully_covered" | "partially_covered" | "missing";
+  fully_covered_count: number;
+  partially_covered_count: number;
+  missing_count: number;
+  shopping_gap_count: number;
+};
+
+export type RecipeLinkedProductSummary = {
+  external_id: string;
+  name: string;
+  default_unit: string;
+};
+
+export type RecipeIngredientCoverageSummary = {
+  status: "fully_covered" | "partially_covered" | "missing";
+  pantry_available_quantity: string;
+  covered_quantity: string;
+  missing_quantity: string;
+  comparison_unit: string | null;
+  reason: string | null;
+};
+
+export type RecipeIngredientSummary = {
+  external_id: string;
+  position: number;
+  name: string;
+  quantity: string;
+  unit: string;
+  note: string | null;
+  match_source: "manual" | "automatic" | "none";
+  product: RecipeLinkedProductSummary | null;
+  coverage: RecipeIngredientCoverageSummary;
+};
+
+export type RecipeShoppingGapItem = {
+  label: string;
+  quantity: string;
+  unit: string;
+  product_external_id: string | null;
+  product_name: string | null;
+  ingredient_count: number;
+};
+
+export type RecipeListItem = {
+  external_id: string;
+  title: string;
+  notes: string | null;
+  source_kind: string;
+  source_url: string | null;
+  ingredient_count: number;
+  pantry_coverage: RecipeCoverageSummary;
+  updated_at: string;
+};
+
+export type RecipeDetail = {
+  external_id: string;
+  title: string;
+  notes: string | null;
+  source_kind: string;
+  source_url: string | null;
+  ingredient_count: number;
+  pantry_coverage: RecipeCoverageSummary;
+  ingredients: RecipeIngredientSummary[];
+  shopping_gap_items: RecipeShoppingGapItem[];
+  created_at: string;
+  updated_at: string;
+};
+
+export type RecipeListResponse = {
+  household_external_id: string;
+  household_name: string;
+  effective_role: string;
+  can_administer: boolean;
+  recipes: RecipeListItem[];
+};
+
+export type RecipeDetailResponse = {
+  household_external_id: string;
+  household_name: string;
+  effective_role: string;
+  can_administer: boolean;
+  recipe: RecipeDetail;
+};

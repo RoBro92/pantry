@@ -6,9 +6,13 @@ type ApiErrorBody = {
   detail?: string;
 };
 
-export async function postToApi<T>(path: string, payload: unknown): Promise<T> {
+async function sendToApi<T>(
+  method: "POST" | "PUT",
+  path: string,
+  payload: unknown
+): Promise<T> {
   const response = await fetch(`${appConfig.apiBaseUrl}${path}`, {
-    method: "POST",
+    method,
     credentials: "include",
     headers: {
       "content-type": "application/json"
@@ -22,4 +26,12 @@ export async function postToApi<T>(path: string, payload: unknown): Promise<T> {
   }
 
   return (await response.json()) as T;
+}
+
+export async function postToApi<T>(path: string, payload: unknown): Promise<T> {
+  return sendToApi("POST", path, payload);
+}
+
+export async function putToApi<T>(path: string, payload: unknown): Promise<T> {
+  return sendToApi("PUT", path, payload);
 }

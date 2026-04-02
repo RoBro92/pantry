@@ -21,12 +21,13 @@ export function AppShell({ session, children }: AppShellProps) {
           <nav className="nav-list">
             <Link href="/app">Dashboard</Link>
             {session.memberships.map((membership) => (
-              <Link
-                key={membership.external_id}
-                href={`/app/households/${membership.household_external_id}`}
-              >
-                {membership.household_name}
-              </Link>
+              <div key={membership.external_id} className="nav-group">
+                <span className="nav-group-title">{membership.household_name}</span>
+                <Link href={`/app/households/${membership.household_external_id}`}>Pantry</Link>
+                <Link href={`/app/households/${membership.household_external_id}/recipes`}>
+                  Recipes
+                </Link>
+              </div>
             ))}
             {session.user.platform_role === "platform_admin" ? (
               <>

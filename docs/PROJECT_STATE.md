@@ -10,13 +10,17 @@ Updated: 2026-04-02
 - Next.js web app with a login page, authenticated app shell, and initial platform admin pages.
 - FastAPI app with health endpoint, auth/session endpoints, platform admin endpoints, and tenant-aware household access checks.
 - FastAPI pantry core with household-scoped location groups, locations, products, aliases, barcodes, stock lots, aggregated pantry views, near-expiry queries, and pantry audit events.
+- FastAPI recipe core with household-scoped recipes, ingredients, deterministic pantry-product matching, pantry coverage checks, shopping-gap calculation, and URL import capture foundations.
 - Minimal Python worker with config scaffold, structured logging, and placeholder status output.
 - Shared TypeScript package with deployment modes, roles, and domain-entity constants.
 - SQLAlchemy models plus Alembic migrations for identity, tenancy, pantry structure, stock lots, and audit events.
+- SQLAlchemy models plus Alembic migrations for household recipes, recipe ingredients, and recipe URL import capture records.
 - Password hashing via Argon2 and signed cookie sessions for the web login foundation.
 - CLI commands for first-platform-admin bootstrap and password reset.
 - API tests covering login/session behavior, email normalization, tenant membership enforcement, and pantry add/remove/move behavior.
+- API tests covering recipe create/update flows, deterministic ingredient matching, pantry coverage, shopping gaps, URL import capture, and household scoping.
 - Next.js pantry household page with creation controls, lot mutations, search/filtering, aggregated product totals, near-expiry view, and recent pantry activity.
+- Next.js recipe pages for household-scoped recipe list, detail, create, and edit flows with pantry coverage and shopping-gap displays.
 - Updated documentation covering product direction, architecture, security, tenancy, deployment, testing, and contribution rules.
 - Durable Codex operating instructions centered on `AGENTS.md`, with milestone validation policy in `docs/TEST_STRATEGY.md`.
 - A repeatable local smoke-check helper at `infra/scripts/smoke-check.sh` for web, API, and worker baseline validation.
@@ -39,30 +43,31 @@ Updated: 2026-04-02
 
 ## Latest Change
 
-- Added pantry-core persistence with models and migrations for `LocationGroup`, `Location`, `Product`, `ProductAlias`, `Barcode`, `StockLot`, and `AuditEvent`.
-- Added household-scoped pantry API routes for pantry overview, near-expiry, location creation, product creation, stock-lot creation, stock removal, and stock moves.
-- Added deterministic normalization for product names, aliases, and barcodes, plus lot-preserving move semantics that keep aggregate views derived from stock lots.
-- Added a household pantry web page with search/filter controls, aggregated product totals, stock-lot actions, near-expiry view, and recent pantry activity.
-- Added pantry API tests and updated docs so the milestone state, endpoint catalog, and durable decisions reflect Milestone 2 delivery.
+- Added recipe-core persistence with models and migration for `Recipe`, `RecipeIngredient`, and `RecipeURLImport`.
+- Added household-scoped recipe API routes for recipe list/detail, manual create/update, deterministic ingredient linking, pantry coverage checks, shopping-gap derivation, and URL import capture.
+- Added household recipe web pages for list, create, edit, and detail views, including ingredient-level coverage and shopping-gap displays.
+- Updated milestone, API, domain, architecture, and file-map docs to reflect recipe core delivery and the roadmap shift that now places generic imports after recipe core.
 
 ## Validation Results
 
+- `cd apps/api && pytest tests/test_recipe_api.py -q`: passed.
 - `cd apps/api && pytest tests/test_pantry_api.py -q`: passed.
 - `npm run typecheck:web`: passed.
 - `cd apps/api && pytest -q`: passed.
 - `npm run build:web`: passed.
-- `docker compose up -d --build`: passed.
-- `docker compose run --rm api alembic upgrade head`: passed.
-- `./infra/scripts/smoke-check.sh`: passed.
-- `docker compose down`: passed.
+- `docker compose up -d --build`: pending.
+- `docker compose run --rm api alembic upgrade head`: pending.
+- `./infra/scripts/smoke-check.sh`: pending.
+- `docker compose down`: pending.
 
 ## Blockers / Gaps
 
 - No dedicated E2E suite exists yet, so user-facing changes currently rely on targeted smoke checks plus service-specific tests.
+- Recipe URL import is intentionally foundation-only in this pass: URL requests are captured and audited, but no parsing, scraping, or worker execution is implemented yet.
 
 ## Recommended Next Milestone
 
-Milestone 3 should implement:
+Milestone 4 should implement:
 
 - Import job lifecycle and persistence
 - Source-file storage and hostile-upload validation
@@ -80,6 +85,7 @@ docker compose run --rm api python -m app.cli bootstrap-platform-admin --email a
 docker compose run --rm api python -m app.cli reset-password --email admin@example.com
 python3 -m pip install -r apps/api/requirements-dev.txt
 cd apps/api && pytest
+cd apps/api && pytest tests/test_recipe_api.py -q
 cd apps/api && pytest tests/test_pantry_api.py -q
 npm run typecheck:web
 npm run build:web

@@ -86,6 +86,7 @@ Run focused tests first when the change affects:
 - Shared types or utility code with deterministic behavior.
 
 For API work, `cd apps/api && pytest` is the current integration baseline and should run for any API or migration change.
+Focused API suites such as `cd apps/api && pytest tests/test_recipe_api.py -q` should still run first when the changed domain has an isolated test module.
 
 ### Smoke Checks
 

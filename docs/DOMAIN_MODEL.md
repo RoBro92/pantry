@@ -93,10 +93,30 @@ Current implementation notes:
 ### Recipe
 
 Structured recipe owned by a household or imported for a household.
+Current implementation notes:
+
+- Uses an opaque external ID for tenant-facing references.
+- Supports manual recipe entry with household-scoped title, notes, and source metadata.
+- Pantry coverage and shopping gaps are derived from linked ingredients against active stock lots.
 
 ### RecipeIngredient
 
 Ingredient line linked to a recipe, with optional mapping to a product.
+Current implementation notes:
+
+- Uses an opaque external ID for tenant-facing references.
+- Stores quantity, normalized unit, optional note, and stable order within the recipe.
+- Supports explicit pantry-product links plus deterministic server-side auto-matching by normalized product or alias name.
+- Coverage is calculated in ingredient order so repeated ingredients do not over-count the same pantry stock.
+
+### RecipeURLImport
+
+Persisted household-scoped request to import a recipe from a URL.
+Current implementation notes:
+
+- Uses an opaque external ID for tenant-facing references.
+- Stores the original URL, a normalized URL, capture status, and requesting actor.
+- Current v1 behavior only captures import requests as a clean foundation for later parsing and worker-backed processing.
 
 ### ImportJob
 

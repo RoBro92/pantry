@@ -42,6 +42,14 @@ export default async function HouseholdPantryPage({
           Household role: <strong>{overview.effective_role}</strong>. Stock totals are aggregated
           from active lots, and lot moves preserve identity when the entire lot moves intact.
         </p>
+        <div className="page-actions">
+          <Link
+            href={`/app/households/${overview.household_external_id}/recipes`}
+            className="secondary-link"
+          >
+            View recipes
+          </Link>
+        </div>
       </section>
 
       <section className="status-grid">

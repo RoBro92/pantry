@@ -237,6 +237,18 @@ ul {
   gap: 0.5rem;
 }
 
+.nav-group {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.nav-group-title {
+  padding: 0.25rem 0.1rem;
+  color: var(--accent-strong);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
 .nav-list a {
   padding: 0.65rem 0.8rem;
   border-radius: 12px;
@@ -362,14 +374,54 @@ ul {
   align-items: center;
 }
 
+.household-card-actions,
+.page-actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
 .household-card p,
 .product-card p {
   margin: 0.35rem 0 0;
 }
 
+.button-link {
+  font: inherit;
+  cursor: pointer;
+}
+
 .product-card-header {
   display: grid;
   gap: 0.75rem;
+}
+
+.coverage-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.4rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 0.85rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.coverage-fully_covered {
+  background: rgba(86, 131, 74, 0.14);
+  color: #2f6030;
+}
+
+.coverage-partially_covered {
+  background: rgba(204, 142, 32, 0.14);
+  color: #8c5c0c;
+}
+
+.coverage-missing {
+  background: rgba(160, 51, 31, 0.14);
+  color: #8d2517;
 }
 
 .tag-row {
@@ -437,6 +489,53 @@ ul {
   font-size: 0.9rem;
 }
 
+.section-copy {
+  margin: 0;
+}
+
+.recipe-card-grid,
+.recipe-ingredient-list {
+  display: grid;
+  gap: 1rem;
+}
+
+.recipe-card,
+.recipe-ingredient-card {
+  display: grid;
+  gap: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.recipe-card:first-child,
+.recipe-ingredient-card:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.recipe-card h2,
+.recipe-form h1 {
+  margin: 0;
+}
+
+.recipe-card-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.recipe-form {
+  display: grid;
+  gap: 1rem;
+}
+
+.recipe-form-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
 @media (max-width: 720px) {
   .page-shell {
     width: min(100% - 1rem, 1120px);
@@ -455,12 +554,20 @@ ul {
   .split-fields,
   .filter-form,
   .household-card,
-  .inline-form {
+  .inline-form,
+  .recipe-card-header,
+  .page-actions {
     grid-template-columns: 1fr;
   }
 
   .membership-list li {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .recipe-card-header,
+  .page-actions {
+    display: grid;
+    align-items: stretch;
   }
 }

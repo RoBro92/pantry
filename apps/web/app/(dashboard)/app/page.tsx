@@ -47,12 +47,20 @@ export default async function SessionPage() {
                   <strong>{membership.household_name}</strong>
                   <p>{membership.role}</p>
                 </div>
-                <Link
-                  href={`/app/households/${membership.household_external_id}`}
-                  className="primary-link"
-                >
-                  Open pantry
-                </Link>
+                <div className="household-card-actions">
+                  <Link
+                    href={`/app/households/${membership.household_external_id}`}
+                    className="primary-link"
+                  >
+                    Open pantry
+                  </Link>
+                  <Link
+                    href={`/app/households/${membership.household_external_id}/recipes`}
+                    className="secondary-link"
+                  >
+                    Open recipes
+                  </Link>
+                </div>
               </article>
             ))}
           </div>
