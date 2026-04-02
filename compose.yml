@@ -5,6 +5,8 @@ services:
       dockerfile: infra/docker/web.Dockerfile
     env_file:
       - .env
+    environment:
+      INTERNAL_API_BASE_URL: ${INTERNAL_API_BASE_URL:-http://api:8000}
     working_dir: /workspace
     command: >
       /bin/sh -lc
