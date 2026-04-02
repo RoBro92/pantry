@@ -14,12 +14,20 @@ export function AppShell({ session, children }: AppShellProps) {
       <div className="shell-grid">
         <aside className="sidebar panel">
           <p className="eyebrow">Pantry</p>
-          <h1 className="shell-title">Admin Shell</h1>
+          <h1 className="shell-title">Household Shell</h1>
           <p className="sidebar-copy">
             Logged in as {session.user.display_name ?? session.user.email}
           </p>
           <nav className="nav-list">
-            <Link href="/app">Session</Link>
+            <Link href="/app">Dashboard</Link>
+            {session.memberships.map((membership) => (
+              <Link
+                key={membership.external_id}
+                href={`/app/households/${membership.household_external_id}`}
+              >
+                {membership.household_name}
+              </Link>
+            ))}
             {session.user.platform_role === "platform_admin" ? (
               <>
                 <Link href="/admin">Overview</Link>
@@ -35,4 +43,3 @@ export function AppShell({ session, children }: AppShellProps) {
     </main>
   );
 }
-

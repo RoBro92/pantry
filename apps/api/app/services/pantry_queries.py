@@ -285,6 +285,16 @@ def build_pantry_overview(
             )
             for location in locations
         ],
+        catalog_products=[
+            {
+                "external_id": product.external_id,
+                "name": product.name,
+                "default_unit": product.default_unit,
+                "aliases": [alias.name for alias in product.aliases],
+                "barcodes": [barcode.value for barcode in product.barcodes],
+            }
+            for product in products
+        ],
         products=product_summaries,
         stock_lots=[
             _stock_lot_summary(lot, near_expiry_days=near_expiry_days)

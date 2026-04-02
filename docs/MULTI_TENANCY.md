@@ -12,6 +12,7 @@ Pantry is multi-household from the beginning even in self-hosted mode.
 
 - Tenant scoping is never trusted from the client alone.
 - Every API path handling household data must resolve and verify tenant access server-side.
+- Pantry product, location, barcode, alias, stock-lot, and near-expiry queries must all resolve the household first and then look up nested records inside that household on the server.
 - Workers must receive tenant context as explicit job input and re-check access assumptions before making changes.
 - Internal numeric database IDs should not be exposed as household-facing identifiers.
 - Household API access uses the household external ID plus the authenticated session to resolve membership on the server.

@@ -36,25 +36,36 @@ export default async function SessionPage() {
       </section>
 
       <section className="panel">
-        <p className="eyebrow">Household Memberships</p>
+        <p className="eyebrow">Pantry Households</p>
         {session.memberships.length === 0 ? (
           <p>No active household memberships yet.</p>
         ) : (
-          <ul className="membership-list">
+          <div className="household-card-grid">
             {session.memberships.map((membership) => (
-              <li key={membership.external_id}>
-                <strong>{membership.household_name}</strong>
-                <span>{membership.role}</span>
-              </li>
+              <article key={membership.external_id} className="household-card">
+                <div>
+                  <strong>{membership.household_name}</strong>
+                  <p>{membership.role}</p>
+                </div>
+                <Link
+                  href={`/app/households/${membership.household_external_id}`}
+                  className="primary-link"
+                >
+                  Open pantry
+                </Link>
+              </article>
             ))}
-          </ul>
+          </div>
         )}
       </section>
 
       {session.user.platform_role === "platform_admin" ? (
         <section className="panel">
           <p className="eyebrow">Platform Admin</p>
-          <p>The platform admin dashboard is available for installation-level visibility.</p>
+          <p>
+            The platform admin dashboard is available for installation-level visibility and
+            direct links into household pantry views.
+          </p>
           <Link href="/admin" className="primary-link">
             Open admin dashboard
           </Link>
@@ -63,4 +74,3 @@ export default async function SessionPage() {
     </div>
   );
 }
-

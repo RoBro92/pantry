@@ -170,6 +170,17 @@ ul {
   font: inherit;
 }
 
+.field select,
+.field textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 0.85rem 0.95rem;
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--text);
+  font: inherit;
+}
+
 .form-panel h1 {
   margin-bottom: 1rem;
 }
@@ -233,6 +244,11 @@ ul {
   background: rgba(255, 255, 255, 0.35);
 }
 
+.inline-link {
+  color: var(--accent-strong);
+  text-decoration: underline;
+}
+
 .shell-content {
   min-width: 0;
 }
@@ -262,6 +278,10 @@ ul {
   overflow-x: auto;
 }
 
+.table-action-cell {
+  min-width: 320px;
+}
+
 .data-table {
   width: 100%;
   border-collapse: collapse;
@@ -286,6 +306,137 @@ ul {
   background: rgba(255, 255, 255, 0.3);
 }
 
+.control-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.control-card h2,
+.product-card h2 {
+  margin: 0 0 0.6rem;
+}
+
+.split-fields {
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.filter-form {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  align-items: end;
+}
+
+.filter-actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.household-card-grid,
+.product-list {
+  display: grid;
+  gap: 1rem;
+}
+
+.household-card,
+.product-card {
+  display: grid;
+  gap: 1rem;
+  padding: 1rem 0;
+  border-top: 1px solid var(--border);
+}
+
+.household-card:first-child,
+.product-card:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.household-card {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.household-card p,
+.product-card p {
+  margin: 0.35rem 0 0;
+}
+
+.product-card-header {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.tag-row {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.tag {
+  padding: 0.35rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.45);
+  font-size: 0.85rem;
+  color: var(--accent-strong);
+}
+
+.subtle-tag {
+  color: var(--muted);
+}
+
+.detail-list {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.detail-list li {
+  display: grid;
+  gap: 0.2rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
+.detail-list li:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.lot-actions {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.inline-form {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: minmax(80px, 100px) minmax(0, 1fr) auto;
+}
+
+.inline-form input,
+.inline-form select {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.55rem 0.65rem;
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--text);
+  font: inherit;
+}
+
+.compact-error {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
 @media (max-width: 720px) {
   .page-shell {
     width: min(100% - 1rem, 1120px);
@@ -298,6 +449,13 @@ ul {
 
   .auth-grid,
   .shell-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .split-fields,
+  .filter-form,
+  .household-card,
+  .inline-form {
     grid-template-columns: 1fr;
   }
 

@@ -16,7 +16,7 @@ htmlcov/
 dist/
 build/
 coverage/
+*.tsbuildinfo
 .idea/
 .vscode/
 private-docs/
-

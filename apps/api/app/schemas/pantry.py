@@ -130,6 +130,7 @@ class PantryOverviewResponse(BaseModel):
     counts: PantryCounts
     location_groups: list[LocationGroupSummary]
     locations: list[LocationSummary]
+    catalog_products: list[ProductSummary]
     products: list[PantryProductSummary]
     stock_lots: list[StockLotSummary]
     recent_events: list[AuditEventSummary]

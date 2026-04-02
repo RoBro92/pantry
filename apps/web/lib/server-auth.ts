@@ -3,6 +3,8 @@ import type {
   AdminHouseholdSummary,
   AdminOverview,
   AdminUserSummary,
+  NearExpiryResponse,
+  PantryOverview,
   SessionResponse
 } from "./api-types";
 import { apiGet, apiGetIfOk } from "./server-api";
@@ -39,4 +41,45 @@ export async function getAdminUsers(): Promise<AdminUserSummary[]> {
 
 export async function getAdminHouseholds(): Promise<AdminHouseholdSummary[]> {
   return apiGet<AdminHouseholdSummary[]>("/api/platform-admin/households");
+}
+
+function withQuery(
+  path: string,
+  params: Record<string, string | null | undefined>
+): string {
+  const search = new URLSearchParams();
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (!value) {
+      return;
+    }
+    search.set(key, value);
+  });
+
+  const query = search.toString();
+  return query ? `${path}?${query}` : path;
+}
+
+export async function getPantryOverview(
+  householdExternalId: string,
+  params: {
+    q?: string | null;
+    location_group_external_id?: string | null;
+    location_external_id?: string | null;
+  } = {}
+): Promise<PantryOverview> {
+  return apiGet<PantryOverview>(
+    withQuery(`/api/households/${householdExternalId}/pantry/overview`, params)
+  );
+}
+
+export async function getNearExpiry(
+  householdExternalId: string,
+  days = 14
+): Promise<NearExpiryResponse> {
+  return apiGet<NearExpiryResponse>(
+    withQuery(`/api/households/${householdExternalId}/pantry/near-expiry`, {
+      days: String(days)
+    })
+  );
 }

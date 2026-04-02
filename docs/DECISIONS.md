@@ -19,6 +19,7 @@ Initial architectural decisions recorded on 2026-04-02.
 | D-011 | Use SQLAlchemy with Alembic for the first persistence and migration layer. | The project needed a clear migration path before identity and tenancy tables were introduced. |
 | D-012 | Use signed cookie sessions for the first web auth foundation. | This keeps Milestone 1 simple for self-hosted deployments while preserving a server-side authorization boundary. |
 | D-013 | Use Argon2 password hashing. | Password storage should start with a modern memory-hard hash instead of a weaker transitional choice. |
+| D-014 | Keep stock lots as the source of truth for pantry totals, and preserve lot identity on whole-lot moves while splitting partial moves. | This keeps aggregate inventory views derivable, mutation behavior auditable, and future import or reconciliation flows aligned with real lot history. |
 
 ## Deferred
 

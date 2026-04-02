@@ -26,16 +26,21 @@
 ## Key Backend Paths
 
 - `apps/api/alembic/`: migration environment and migration history.
-- `apps/api/app/models/`: SQLAlchemy identity and tenancy models.
+- `apps/api/app/models/`: SQLAlchemy identity, tenancy, pantry, stock-lot, and audit-event models.
 - `apps/api/app/api/routes/`: health, auth, admin, and household routes.
 - `apps/api/app/api/deps/`: auth and tenancy dependencies.
+- `apps/api/app/api/routes/pantry.py`: household-scoped pantry routes for locations, products, stock lots, and pantry views.
 - `apps/api/app/cli.py`: admin bootstrap and password reset commands.
-- `apps/api/tests/`: focused API tests for auth and tenancy.
+- `apps/api/app/services/pantry_*.py`: pantry catalog, stock mutation, normalization, and query services.
+- `apps/api/tests/`: focused API tests for auth, tenancy, and pantry flows.
 
 ## Key Frontend Paths
 
 - `apps/web/app/(auth)/login/page.tsx`: login page.
-- `apps/web/app/(dashboard)/`: authenticated shell and platform admin pages.
+- `apps/web/app/(dashboard)/`: authenticated shell, pantry pages, and platform admin pages.
+- `apps/web/app/(dashboard)/app/households/[householdExternalId]/page.tsx`: household pantry view with search, stock lots, near-expiry, and audit activity.
+- `apps/web/components/pantry-controls.tsx`: pantry creation and add-stock controls.
+- `apps/web/components/pantry-lot-actions.tsx`: inline remove and move stock actions.
 - `apps/web/lib/server-auth.ts`: server-side session and admin data fetching helpers.
 
 ## Documentation
