@@ -67,18 +67,29 @@ Current scope delivered:
 - Source-file storage and validation.
 - Reviewable import lines.
 - Safe parsing pipeline for hostile uploads.
+- Reviewed confirm-to-pantry workflow.
+- Worker-backed asynchronous import processing.
 
-## Milestone 5: Shopping
+Status: foundation implemented.
+Current scope delivered:
+
+- Alembic migration and SQLAlchemy models for `ImportJob`, `ImportSourceFile`, and `ImportLine`.
+- Safe upload storage outside web-served paths with application-level size/type validation and future scan-status hooks.
+- Household-scoped import API routes for upload, inbox/history, detail, line review, ignore/update, and confirm-to-pantry flows.
+- Worker-backed parsing for structured JSON, CSV, TSV, and plain-text imports with deterministic matching and observable lifecycle transitions.
+- Next.js import inbox/history and import detail review pages with line editing, suggested matches, and explicit confirmation into pantry stock lots.
+
+## Milestone 5: AI Provider Abstraction And Pantry-Aware Suggestions
+
+- AI provider configuration model and service abstractions.
+- Ollama and OpenAI-compatible provider adapters.
+- Pantry-aware suggestion foundations that can plug into recipes and import review without hard-coding a single provider.
+- Feature-gated entrypoints for future AI-assisted parsing and matching.
+
+## Milestone 6: Shopping
 
 - Shopping lists and list items.
 - Basic consumption and replenishment workflows.
-
-## Milestone 6: AI Integration
-
-- LLM provider configuration.
-- Ollama and OpenAI-compatible adapters.
-- AI-assisted normalization and suggestion flows.
-- Feature-gated AI entrypoints.
 
 ## Milestone 7: Hardening
 

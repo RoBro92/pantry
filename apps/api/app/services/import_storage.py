@@ -5,10 +5,12 @@ import json
 import secrets
 from dataclasses import dataclass
 from pathlib import Path
-
-from fastapi import UploadFile
+from typing import TYPE_CHECKING
 
 from app.core.config import AppSettings
+
+if TYPE_CHECKING:
+    from fastapi import UploadFile
 
 ALLOWED_UPLOAD_EXTENSIONS = {
     ".csv",
@@ -95,7 +97,7 @@ async def store_import_upload(
     settings: AppSettings,
     household_external_id: str,
     import_job_external_id: str,
-    upload: UploadFile,
+    upload: "UploadFile",
 ) -> StoredImportUpload:
     original_filename = sanitize_upload_filename(upload.filename)
     data = await upload.read(settings.import_max_upload_bytes + 1)

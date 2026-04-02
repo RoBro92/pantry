@@ -17,6 +17,8 @@ Security needs to shape the architecture before feature depth arrives.
 - Enforce tenant scoping on the server for every household-owned resource.
 - Use opaque external IDs for tenant-facing entities.
 - Keep audit events for sensitive domain actions.
+- Store import uploads outside any web-served path.
+- Validate upload size and type in the application before worker processing.
 
 ## Logging Guidance
 
@@ -26,8 +28,6 @@ Security needs to shape the architecture before feature depth arrives.
 
 ## Deferred Security Work
 
-- Auth implementation and password hashing choice.
 - CSRF/session hardening details.
-- File scanning and storage isolation details.
+- File scanning and stronger quarantine/isolation details beyond the current storage and status foundation.
 - Secret rotation and backup policies for hosted environments.
-

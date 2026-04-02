@@ -121,14 +121,31 @@ Current implementation notes:
 ### ImportJob
 
 Tracks the lifecycle of an import run, including source, status, timing, and review outcome.
+Current implementation notes:
+
+- Uses an opaque external ID for tenant-facing references.
+- Belongs to one household and one requesting actor when available.
+- Stores source type, lifecycle status, optional occurred-on date, parser kind, failure detail, and line-status counts.
+- Review-ready imports remain distinct from confirmed imports; confirmation is the only point that writes pantry stock.
 
 ### ImportSourceFile
 
 Metadata about an uploaded file tied to an import job. The file is untrusted input.
+Current implementation notes:
+
+- Uses an opaque external ID for tenant-facing references.
+- Stores upload metadata such as original filename, detected content type, file size, checksum, and relative storage path.
+- Tracks application-level validation and scan status so future quarantine or malware-scanning work has a clean persistence hook.
 
 ### ImportLine
 
 Reviewable parsed line or record extracted from an import source.
+Current implementation notes:
+
+- Uses an opaque external ID for tenant-facing references.
+- Stores raw label, normalized label, quantity, unit, optional barcode, optional notes, and line-level status.
+- Keeps current matched product separate from suggested product so manual review can override deterministic matching without losing the original suggestion.
+- Can link to a confirmed `StockLot` once the reviewed import is written into pantry inventory.
 
 ### ShoppingList
 
@@ -165,3 +182,4 @@ Metering record for rate limits, plan enforcement, or SaaS usage analysis.
 - `AuditEvent` references actors and targets without becoming a substitute for business tables.
 - `FeatureFlag` and `UsageCounter` are needed early in the model so SaaS later does not require structural rewrites.
 - The current auth foundation does not persist server-side sessions as a domain entity; a signed session cookie carries the authenticated user reference.
+- `ImportSourceFile`, `ImportLine`, and confirmed `StockLot` records stay explicitly linked but do not collapse into a single table, preserving reviewability and audit traceability.

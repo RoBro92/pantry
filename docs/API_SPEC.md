@@ -46,6 +46,16 @@ This file records the initial API shape and conventions, not a completed endpoin
   - Replaces recipe title, notes, and ingredient lines, recomputes deterministic links, and emits an audit event.
 - `POST /api/households/{household_external_id}/recipe-imports/url`
   - Captures a normalized recipe URL import request as v1 foundation work and emits an audit event.
+- `GET /api/households/{household_external_id}/imports`
+  - Returns household import history with job status, review counts, and source-file summaries.
+- `GET /api/households/{household_external_id}/imports/{import_external_id}`
+  - Returns import detail with source-file metadata, parsed lines, review state, and confirmation readiness.
+- `POST /api/households/{household_external_id}/imports/uploads`
+  - Stores an upload outside web-served paths, validates size/type, creates an `ImportJob`, and queues worker processing.
+- `PUT /api/households/{household_external_id}/imports/{import_external_id}/lines/{line_external_id}`
+  - Updates a parsed import line, re-resolves deterministic matching, and records import review audit activity.
+- `POST /api/households/{household_external_id}/imports/{import_external_id}/confirm`
+  - Confirms a reviewed import and creates pantry stock lots from matched lines only.
 
 ## Planned API Conventions
 
@@ -54,6 +64,7 @@ This file records the initial API shape and conventions, not a completed endpoin
 - Mutation endpoints should emit audit events for domain-significant changes.
 - Recipe coverage and shopping-gap calculations should stay deterministic and server-derived from pantry state.
 - Bulk import and AI flows should be asynchronous where latency or safety review makes synchronous APIs inappropriate.
+- Import endpoints must never write pantry stock before explicit confirmation of reviewed lines.
 
 ## Auth Assumptions
 
@@ -65,4 +76,5 @@ This file records the initial API shape and conventions, not a completed endpoin
 - Household create/update flows for platform admins or household admins as product requirements sharpen.
 - Edit and archive flows for pantry structure records.
 - Shopping-list persistence and consumption/replenishment workflows.
-- Deeper recipe URL parsing and worker-backed import execution.
+- Recipe URL import worker execution tied into the new import-job architecture.
+- Pantry-aware suggestion and AI-assisted import review behind provider abstractions.
