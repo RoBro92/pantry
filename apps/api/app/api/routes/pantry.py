@@ -23,6 +23,7 @@ from app.schemas.pantry import (
     StockMutationResponse,
 )
 from app.services.pantry_catalog import create_location, create_location_group, create_product
+from app.services.location_links import serialize_location_link
 from app.services.pantry_queries import (
     PantryFilterOptions,
     build_near_expiry_response,
@@ -109,6 +110,7 @@ def post_location(
         name=location.name,
         location_group_external_id=location.location_group.external_id,
         location_group_name=location.location_group.name,
+        **serialize_location_link(db, location=location),
     )
 
 

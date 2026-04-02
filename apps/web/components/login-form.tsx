@@ -4,7 +4,11 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 import { appConfig } from "../lib/app-config";
 
-export function LoginForm() {
+type LoginFormProps = {
+  nextPath?: string;
+};
+
+export function LoginForm({ nextPath = "/app" }: LoginFormProps) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -36,7 +40,7 @@ export function LoginForm() {
       return;
     }
 
-    router.push("/app");
+    router.push(nextPath);
     router.refresh();
   }
 
@@ -59,4 +63,3 @@ export function LoginForm() {
     </form>
   );
 }
-

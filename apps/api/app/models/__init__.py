@@ -6,6 +6,7 @@ from app.models.household import Household
 from app.models.import_job import ImportJob
 from app.models.import_line import ImportLine
 from app.models.import_source_file import ImportSourceFile
+from app.models.instance_setting import InstanceSetting
 from app.models.location import Location
 from app.models.location_group import LocationGroup
 from app.models.membership import Membership
@@ -27,6 +28,7 @@ __all__ = [
     "ImportJob",
     "ImportLine",
     "ImportSourceFile",
+    "InstanceSetting",
     "Location",
     "LocationGroup",
     "Membership",

@@ -10,6 +10,18 @@ def _parse_bool(value: str | None, default: bool) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _parse_optional_bool(value: str | None) -> bool | None:
+    if value is None or not value.strip():
+        return None
+    return _parse_bool(value, False)
+
+
+def _parse_optional_int(value: str | None) -> int | None:
+    if value is None or not value.strip():
+        return None
+    return int(value)
+
+
 def _sanitize_url(value: str) -> str:
     if not value:
         return value
@@ -31,6 +43,7 @@ class AppSettings:
     environment: str
     log_level: str
     app_version: str
+    deployment_mode: str
     ai_feature_enabled: bool
     web_app_url: str
     api_base_url: str
@@ -44,6 +57,16 @@ class AppSettings:
     session_max_age_seconds: int
     session_https_only: bool
     session_same_site: str
+    public_browser_base_url: str | None
+    smtp_host: str | None
+    smtp_port: int | None
+    smtp_username: str | None
+    smtp_password: str | None
+    smtp_from_email: str | None
+    smtp_from_name: str | None
+    smtp_security: str | None
+    smtp_enabled: bool | None
+    smtp_timeout_seconds: int
 
     @property
     def cors_origins(self) -> list[str]:
@@ -65,6 +88,7 @@ def get_settings() -> AppSettings:
         environment=os.getenv("ENVIRONMENT", "development"),
         log_level=os.getenv("LOG_LEVEL", "INFO"),
         app_version=os.getenv("APP_VERSION", "0.1.0"),
+        deployment_mode=os.getenv("DEPLOYMENT_MODE", "self_hosted"),
         ai_feature_enabled=_parse_bool(os.getenv("AI_FEATURE_ENABLED"), True),
         web_app_url=os.getenv("WEB_APP_URL", "http://localhost:3000"),
         api_base_url=os.getenv("API_BASE_URL", "http://localhost:8000"),
@@ -81,4 +105,14 @@ def get_settings() -> AppSettings:
         session_max_age_seconds=int(os.getenv("SESSION_MAX_AGE_SECONDS", "604800")),
         session_https_only=_parse_bool(os.getenv("SESSION_HTTPS_ONLY"), False),
         session_same_site=os.getenv("SESSION_SAME_SITE", "lax"),
+        public_browser_base_url=os.getenv("PUBLIC_BROWSER_BASE_URL") or None,
+        smtp_host=os.getenv("SMTP_HOST") or None,
+        smtp_port=_parse_optional_int(os.getenv("SMTP_PORT")),
+        smtp_username=os.getenv("SMTP_USERNAME") or None,
+        smtp_password=os.getenv("SMTP_PASSWORD") or None,
+        smtp_from_email=os.getenv("SMTP_FROM_EMAIL") or None,
+        smtp_from_name=os.getenv("SMTP_FROM_NAME") or None,
+        smtp_security=os.getenv("SMTP_SECURITY") or None,
+        smtp_enabled=_parse_optional_bool(os.getenv("SMTP_ENABLED")),
+        smtp_timeout_seconds=int(os.getenv("SMTP_TIMEOUT_SECONDS", "5")),
     )

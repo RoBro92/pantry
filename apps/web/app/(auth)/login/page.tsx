@@ -2,10 +2,18 @@ import { redirect } from "next/navigation";
 import { LoginForm } from "../../../components/login-form";
 import { getSession } from "../../../lib/server-auth";
 
-export default async function LoginPage() {
+type LoginPageProps = {
+  searchParams: Promise<{
+    next?: string;
+  }>;
+};
+
+export default async function LoginPage({ searchParams }: LoginPageProps) {
   const session = await getSession();
+  const params = await searchParams;
+  const nextPath = params.next && params.next.startsWith("/") ? params.next : "/app";
   if (session) {
-    redirect("/app");
+    redirect(nextPath);
   }
 
   return (
@@ -18,7 +26,7 @@ export default async function LoginPage() {
         </p>
       </section>
       <div className="auth-grid">
-        <LoginForm />
+        <LoginForm nextPath={nextPath} />
         <section className="panel">
           <p className="eyebrow">Current scope</p>
           <ul>

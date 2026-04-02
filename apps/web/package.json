@@ -10,11 +10,13 @@
   "dependencies": {
     "@pantry/shared-types": "file:../../packages/shared-types",
     "next": ">=15.0.0 <16.0.0",
+    "qrcode": "^1.5.4",
     "react": ">=19.0.0 <20.0.0",
     "react-dom": ">=19.0.0 <20.0.0"
   },
   "devDependencies": {
     "@types/node": ">=20.0.0 <21.0.0",
+    "@types/qrcode": "^1.5.6",
     "@types/react": ">=19.0.0 <20.0.0",
     "@types/react-dom": ">=19.0.0 <20.0.0",
     "typescript": ">=5.0.0 <6.0.0"

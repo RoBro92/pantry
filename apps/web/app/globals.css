@@ -266,6 +266,26 @@ ul {
   background: rgba(255, 255, 255, 0.35);
 }
 
+.admin-nav {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-top: 1rem;
+}
+
+.admin-nav-link {
+  padding: 0.65rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.admin-nav-link-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff9f0;
+}
+
 .checkbox-row {
   display: flex;
   align-items: center;
@@ -516,6 +536,32 @@ ul {
 .import-line-list {
   display: grid;
   gap: 1rem;
+}
+
+.location-link-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  margin-top: 1rem;
+}
+
+.location-link-card {
+  align-content: start;
+}
+
+.qr-frame {
+  display: inline-flex;
+  width: fit-content;
+  padding: 0.75rem;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.qr-frame svg {
+  display: block;
+  height: auto;
+  max-width: 100%;
 }
 
 .recipe-card,

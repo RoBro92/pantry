@@ -1,9 +1,8 @@
 import Link from "next/link";
 import { DataTable } from "../../../../components/data-table";
-import { getAdminHouseholds, requirePlatformAdminSession } from "../../../../lib/server-auth";
+import { getAdminHouseholds } from "../../../../lib/server-auth";
 
 export default async function AdminHouseholdsPage() {
-  await requirePlatformAdminSession();
   const households = await getAdminHouseholds();
 
   return (

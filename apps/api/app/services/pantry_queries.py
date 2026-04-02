@@ -25,6 +25,7 @@ from app.schemas.pantry import (
     ProductLocationSummary,
     StockLotSummary,
 )
+from app.services.location_links import serialize_location_link
 from app.services.pantry_normalization import normalize_barcode, normalize_lookup_name
 from app.services.tenancy import HouseholdAccess
 
@@ -282,6 +283,7 @@ def build_pantry_overview(
                 name=location.name,
                 location_group_external_id=location.location_group.external_id,
                 location_group_name=location.location_group.name,
+                **serialize_location_link(db, location=location),
             )
             for location in locations
         ],

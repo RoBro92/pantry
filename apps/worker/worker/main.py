@@ -1,11 +1,13 @@
 import argparse
 import json
 import time
+from datetime import datetime, timezone
 from uuid import uuid4
 
 import structlog
 
 from app.services.import_processing import process_next_import_job
+from app.services.runtime_status import publish_worker_heartbeat
 from worker.core.config import get_settings
 from worker.core.logging import configure_logging
 from worker.status import build_status_snapshot
@@ -20,6 +22,7 @@ def main() -> None:
     settings = get_settings()
     configure_logging(service_name=settings.service_name, log_level=settings.log_level)
     logger = structlog.get_logger(__name__)
+    started_at = datetime.now(timezone.utc)
 
     if args.status:
         print(json.dumps(build_status_snapshot(settings)))
@@ -38,14 +41,38 @@ def main() -> None:
         import_storage_root=settings.import_storage_root,
     )
     logger.info("worker.status", **build_status_snapshot(settings))
+    publish_worker_heartbeat(
+        service=settings.service_name,
+        environment=settings.environment,
+        version=settings.app_version,
+        mode="import-poller",
+        poll_interval_seconds=settings.poll_interval_seconds,
+        started_at=started_at,
+    )
 
     if args.once or settings.run_once:
         processed = process_next_import_job()
+        publish_worker_heartbeat(
+            service=settings.service_name,
+            environment=settings.environment,
+            version=settings.app_version,
+            mode="import-poller",
+            poll_interval_seconds=settings.poll_interval_seconds,
+            started_at=started_at,
+        )
         logger.info("worker.exiting", reason="single_run", processed_job=processed)
         return
 
     while True:
         processed = process_next_import_job()
+        publish_worker_heartbeat(
+            service=settings.service_name,
+            environment=settings.environment,
+            version=settings.app_version,
+            mode="import-poller",
+            poll_interval_seconds=settings.poll_interval_seconds,
+            started_at=started_at,
+        )
         if processed:
             logger.info("worker.poll.completed", queue="imports", result="processed_job")
             continue

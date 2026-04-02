@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { LocationQRCodeCard } from "../../../../../components/location-qr-card";
 import { PantryControls } from "../../../../../components/pantry-controls";
 import { PantryLotActions } from "../../../../../components/pantry-lot-actions";
 import { StatusCard } from "../../../../../components/status-card";
@@ -146,6 +147,23 @@ export default async function HouseholdPantryPage({
         locations={overview.locations}
         products={overview.catalog_products}
       />
+
+      <section className="panel">
+        <p className="eyebrow">Location QR Links</p>
+        <p>
+          QR codes resolve to an authenticated browser route for each location and use the current
+          configured public browser URL.
+        </p>
+        {overview.locations.length === 0 ? (
+          <p>Create a location to generate its QR link.</p>
+        ) : (
+          <div className="location-link-grid">
+            {overview.locations.map((location) => (
+              <LocationQRCodeCard key={location.external_id} location={location} />
+            ))}
+          </div>
+        )}
+      </section>
 
       <section className="panel">
         <p className="eyebrow">Aggregated Pantry View</p>

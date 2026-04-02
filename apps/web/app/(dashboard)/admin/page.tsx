@@ -1,22 +1,22 @@
 import { AdminStatCard } from "../../../components/admin-stat-card";
-import { requirePlatformAdminSession, getAdminOverview } from "../../../lib/server-auth";
+import { StatusCard } from "../../../components/status-card";
+import {
+  getAIProviderConfig,
+  getAdminOverview,
+  getPublicBaseURL,
+  getSMTPConfig
+} from "../../../lib/server-auth";
 
 export default async function AdminOverviewPage() {
-  await requirePlatformAdminSession();
-  const overview = await getAdminOverview();
+  const [overview, aiConfig, smtpConfig, publicBaseUrl] = await Promise.all([
+    getAdminOverview(),
+    getAIProviderConfig(),
+    getSMTPConfig(),
+    getPublicBaseURL()
+  ]);
 
   return (
     <div className="stack">
-      <section className="panel">
-        <p className="eyebrow">Platform Admin</p>
-        <h1>Overview</h1>
-        <p>
-          This is the initial installation-level dashboard for Milestone 1. It
-          stays read-oriented for now and leaves richer admin workflows for
-          follow-up passes.
-        </p>
-      </section>
-
       <section className="status-grid">
         <AdminStatCard
           label="Users"
@@ -38,11 +38,51 @@ export default async function AdminOverviewPage() {
           value={overview.membership_count}
           detail="User-to-household membership assignments."
         />
-        <AdminStatCard
-          label="AI Provider"
-          value={1}
-          detail="Instance-level provider configuration and health checks now live under admin."
+      </section>
+
+      <section className="status-grid">
+        <StatusCard
+          title="AI Provider"
+          value={aiConfig.config?.provider_type ?? "none"}
+          detail={
+            aiConfig.config
+              ? `Configured as ${aiConfig.config.provider_type} with ${aiConfig.config.health_status} health.`
+              : "No instance AI provider is configured."
+          }
         />
+        <StatusCard
+          title="SMTP"
+          value={smtpConfig.configured ? "configured" : "not ready"}
+          detail={
+            smtpConfig.configured
+              ? `SMTP is configured with ${smtpConfig.last_test_status} test status.`
+              : "SMTP is not ready yet."
+          }
+        />
+        <StatusCard
+          title="Browser URL"
+          value={publicBaseUrl.effective_source}
+          detail={`Location QR links currently use ${publicBaseUrl.effective_value}.`}
+        />
+      </section>
+
+      <section className="content-grid">
+        <article className="panel">
+          <p className="eyebrow">Current Scope</p>
+          <h2>Operational surfaces</h2>
+          <p>
+            Diagnostics, AI, SMTP, and public link settings are all instance-level and remain
+            separate from tenant data. Household access checks still happen server-side.
+          </p>
+        </article>
+        <article className="panel">
+          <p className="eyebrow">Real Data Policy</p>
+          <h2>Measured only</h2>
+          <p>
+            Admin diagnostics intentionally omit host CPU, memory, and disk metrics because the
+            app cannot observe them directly in a portable self-hosted deployment.
+          </p>
+        </article>
       </section>
     </div>
   );

@@ -5,12 +5,16 @@ import type {
   AdminHouseholdSummary,
   AdminOverview,
   AdminUserSummary,
+  DiagnosticsResponse,
   ImportDetailResponse,
   ImportListResponse,
+  LocationAccessResponse,
   NearExpiryResponse,
   PantryOverview,
+  PublicBaseURLSummary,
   RecipeDetailResponse,
   RecipeListResponse,
+  SMTPConfigResponse,
   SessionResponse
 } from "./api-types";
 import { apiGet, apiGetIfOk } from "./server-api";
@@ -51,6 +55,18 @@ export async function getAdminHouseholds(): Promise<AdminHouseholdSummary[]> {
 
 export async function getAIProviderConfig(): Promise<AIProviderConfigResponse> {
   return apiGet<AIProviderConfigResponse>("/api/platform-admin/ai/provider-config");
+}
+
+export async function getSMTPConfig(): Promise<SMTPConfigResponse> {
+  return apiGet<SMTPConfigResponse>("/api/platform-admin/smtp");
+}
+
+export async function getPublicBaseURL(): Promise<PublicBaseURLSummary> {
+  return apiGet<PublicBaseURLSummary>("/api/platform-admin/settings/public-base-url");
+}
+
+export async function getDiagnostics(): Promise<DiagnosticsResponse> {
+  return apiGet<DiagnosticsResponse>("/api/platform-admin/diagnostics");
 }
 
 function withQuery(
@@ -128,4 +144,10 @@ export async function getHouseholdAIStatus(
   householdExternalId: string
 ): Promise<AIFeatureStatus> {
   return apiGet<AIFeatureStatus>(`/api/households/${householdExternalId}/ai/status`);
+}
+
+export async function getLocationAccess(
+  locationRoute: string
+): Promise<LocationAccessResponse> {
+  return apiGet<LocationAccessResponse>(`/api/locations/${locationRoute}`);
 }

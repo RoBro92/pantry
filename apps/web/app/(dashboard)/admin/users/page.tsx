@@ -1,8 +1,7 @@
 import { DataTable } from "../../../../components/data-table";
-import { getAdminUsers, requirePlatformAdminSession } from "../../../../lib/server-auth";
+import { getAdminUsers } from "../../../../lib/server-auth";
 
 export default async function AdminUsersPage() {
-  await requirePlatformAdminSession();
   const users = await getAdminUsers();
 
   return (
@@ -19,4 +18,3 @@ export default async function AdminUsersPage() {
     </DataTable>
   );
 }
-

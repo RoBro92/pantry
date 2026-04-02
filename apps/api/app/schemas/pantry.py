@@ -53,6 +53,9 @@ class LocationSummary(BaseModel):
     name: str
     location_group_external_id: str
     location_group_name: str
+    location_route: str | None = None
+    browser_path: str | None = None
+    browser_url: str | None = None
 
 
 class ProductSummary(BaseModel):

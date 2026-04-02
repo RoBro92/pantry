@@ -40,6 +40,12 @@ export type AdminHouseholdSummary = {
   membership_count: number;
 };
 
+export type PublicBaseURLSummary = {
+  stored_value: string | null;
+  effective_value: string;
+  effective_source: string;
+};
+
 export type AIProviderConfigSummary = {
   external_id: string;
   scope_type: string;
@@ -74,6 +80,104 @@ export type AIProviderHealthResponse = {
   feature_enabled: boolean;
   config: AIProviderConfigSummary;
   health: AIProviderHealthSummary;
+};
+
+export type SMTPConfigValue = {
+  host: string | null;
+  port: number | null;
+  username: string | null;
+  has_password: boolean;
+  from_email: string | null;
+  from_name: string | null;
+  security: string | null;
+  is_enabled: boolean;
+};
+
+export type SMTPConfigResponse = {
+  effective: SMTPConfigValue;
+  effective_source: string;
+  stored: SMTPConfigValue;
+  configured: boolean;
+  last_test_status: string;
+  last_tested_at: string | null;
+  last_test_error: string | null;
+};
+
+export type SMTPTestResponse = {
+  ok: boolean;
+  status: string;
+  message: string | null;
+  config: SMTPConfigResponse;
+};
+
+export type DiagnosticsResponse = {
+  generated_at: string;
+  policy: string;
+  app: {
+    service: string;
+    environment: string;
+    version: string;
+    deployment_mode: string;
+    started_at: string;
+    uptime_seconds: number;
+  };
+  api: {
+    status: string;
+    message: string | null;
+  };
+  worker: {
+    status: string;
+    service: string | null;
+    version: string | null;
+    mode: string | null;
+    poll_interval_seconds: number | null;
+    started_at: string | null;
+    last_seen_at: string | null;
+    heartbeat_age_seconds: number | null;
+    message: string | null;
+  };
+  redis: {
+    status: string;
+    latency_ms: number | null;
+    message: string | null;
+  };
+  queue: {
+    backend: string;
+    queued_import_jobs: number;
+    processing_import_jobs: number;
+    failed_import_jobs: number;
+    completed_import_jobs: number;
+    confirmed_import_jobs: number;
+    message: string;
+  };
+  database: {
+    status: string;
+    engine: string;
+    latency_ms: number | null;
+    database_name: string | null;
+    size_bytes: number | null;
+    size_pretty: string | null;
+    note: string | null;
+  };
+  counts: {
+    households: number;
+    users: number;
+    products: number;
+    stock_lots: number;
+    recipes: number;
+    import_jobs: number;
+  };
+  ai_provider: {
+    configured: boolean;
+    provider_type: string | null;
+    is_enabled: boolean;
+    health_status: string | null;
+    default_model: string | null;
+    last_success_at: string | null;
+  };
+  smtp: SMTPConfigResponse;
+  public_base_url: PublicBaseURLSummary;
+  limitations: string[];
 };
 
 export type AIFeatureStatus = {
@@ -130,6 +234,9 @@ export type PantryLocationSummary = {
   name: string;
   location_group_external_id: string;
   location_group_name: string;
+  location_route: string | null;
+  browser_path: string | null;
+  browser_url: string | null;
 };
 
 export type PantryProductLocationSummary = {
@@ -213,6 +320,31 @@ export type NearExpiryResponse = {
   household_external_id: string;
   days: number;
   lots: PantryStockLotSummary[];
+};
+
+export type LocationAccessLotSummary = {
+  external_id: string;
+  product_external_id: string;
+  product_name: string;
+  quantity: string;
+  unit: string;
+  note: string | null;
+  expires_on: string | null;
+};
+
+export type LocationAccessResponse = {
+  location_route: string;
+  browser_path: string;
+  browser_url: string;
+  pantry_path: string;
+  household_external_id: string;
+  household_name: string;
+  effective_role: string;
+  can_administer: boolean;
+  location: PantryLocationSummary;
+  stock_lots: LocationAccessLotSummary[];
+  active_lot_count: number;
+  active_product_count: number;
 };
 
 export type RecipeCoverageSummary = {
