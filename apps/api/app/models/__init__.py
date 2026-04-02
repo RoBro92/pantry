@@ -1,3 +1,4 @@
+from app.models.ai_provider_config import AIProviderConfig
 from app.models.audit_event import AuditEvent
 from app.models.barcode import Barcode
 from app.models.base import Base
@@ -18,6 +19,7 @@ from app.models.stock_lot import StockLot
 from app.models.user import User
 
 __all__ = [
+    "AIProviderConfig",
     "AuditEvent",
     "Barcode",
     "Base",

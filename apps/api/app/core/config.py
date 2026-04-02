@@ -31,10 +31,12 @@ class AppSettings:
     environment: str
     log_level: str
     app_version: str
+    ai_feature_enabled: bool
     web_app_url: str
     api_base_url: str
     database_url: str
     redis_url: str
+    settings_encryption_key: str | None
     import_storage_root: str
     import_max_upload_bytes: int
     session_secret_key: str
@@ -63,6 +65,7 @@ def get_settings() -> AppSettings:
         environment=os.getenv("ENVIRONMENT", "development"),
         log_level=os.getenv("LOG_LEVEL", "INFO"),
         app_version=os.getenv("APP_VERSION", "0.1.0"),
+        ai_feature_enabled=_parse_bool(os.getenv("AI_FEATURE_ENABLED"), True),
         web_app_url=os.getenv("WEB_APP_URL", "http://localhost:3000"),
         api_base_url=os.getenv("API_BASE_URL", "http://localhost:8000"),
         database_url=os.getenv(
@@ -70,6 +73,7 @@ def get_settings() -> AppSettings:
             "postgresql+psycopg://pantry:change-me@postgres:5432/pantry",
         ),
         redis_url=os.getenv("REDIS_URL", "redis://redis:6379/0"),
+        settings_encryption_key=os.getenv("SETTINGS_ENCRYPTION_KEY") or None,
         import_storage_root=os.getenv("IMPORT_STORAGE_ROOT", "/workspace/.local/imports"),
         import_max_upload_bytes=int(os.getenv("IMPORT_MAX_UPLOAD_BYTES", "10485760")),
         session_secret_key=os.getenv("SESSION_SECRET_KEY", "change-me-for-production"),

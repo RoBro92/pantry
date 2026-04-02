@@ -28,4 +28,5 @@ class Household(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     import_jobs = relationship("ImportJob", back_populates="household")
     import_source_files = relationship("ImportSourceFile", back_populates="household")
     import_lines = relationship("ImportLine", back_populates="household")
+    ai_provider_configs = relationship("AIProviderConfig", back_populates="household")
     audit_events = relationship("AuditEvent", back_populates="household")
