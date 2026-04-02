@@ -5,18 +5,36 @@
 ### User
 
 Represents a human account that can belong to one or more households. Users may also hold platform-level capabilities.
+Current implementation notes:
+
+- Uses an opaque external ID for tenant-facing references.
+- Stores normalized email, password hash, active flag, and optional platform role.
+- Tracks `last_login_at` for basic session activity visibility.
 
 ### Household
 
 Primary tenant boundary for pantry, recipe, shopping, import, and most settings data.
+Current implementation notes:
+
+- Uses an opaque external ID for tenant-facing routes and API payloads.
+- The initial model only stores identity metadata and timestamps.
 
 ### Membership
 
 Joins a `User` to a `Household` and carries household-scoped role and lifecycle state.
+Current implementation notes:
+
+- Unique per user-household pair.
+- Stores an active flag for future lifecycle changes.
+- Carries the household-scoped role assignment.
 
 ### Role
 
 Represents access level. Current role set is `platform_admin`, `household_admin`, and `household_user`.
+Current implementation notes:
+
+- Seeded by the first Alembic migration.
+- Supports both platform-scoped and household-scoped assignments.
 
 ### LocationGroup
 
@@ -92,4 +110,4 @@ Metering record for rate limits, plan enforcement, or SaaS usage analysis.
 - `Membership` mediates household access.
 - `AuditEvent` references actors and targets without becoming a substitute for business tables.
 - `FeatureFlag` and `UsageCounter` are needed early in the model so SaaS later does not require structural rewrites.
-
+- The current auth foundation does not persist server-side sessions as a domain entity; a signed session cookie carries the authenticated user reference.

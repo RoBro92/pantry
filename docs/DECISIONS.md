@@ -16,6 +16,9 @@ Initial architectural decisions recorded on 2026-04-02.
 | D-008 | Keep reverse proxy and TLS external to the app stack. | Simplifies the application boundary and supports varied deployment environments. |
 | D-009 | Use structured logging and distinguish system logs from audit/domain events. | Operational diagnostics and business accountability serve different purposes. |
 | D-010 | Introduce AI through a provider abstraction layer from the start. | Avoids hard-coding domain logic to a single provider or hosting model. |
+| D-011 | Use SQLAlchemy with Alembic for the first persistence and migration layer. | The project needed a clear migration path before identity and tenancy tables were introduced. |
+| D-012 | Use signed cookie sessions for the first web auth foundation. | This keeps Milestone 1 simple for self-hosted deployments while preserving a server-side authorization boundary. |
+| D-013 | Use Argon2 password hashing. | Password storage should start with a modern memory-hard hash instead of a weaker transitional choice. |
 
 ## Deferred
 
@@ -23,4 +26,3 @@ Initial architectural decisions recorded on 2026-04-02.
 - The exact session/auth implementation choice.
 - The exact file storage backend for uploads in hosted deployments.
 - The exact QR-code library and rendering location.
-

@@ -2,10 +2,12 @@
 
 Pantry is a self-hosted-first pantry management application designed for households that want reliable inventory tracking, import workflows, recipe support, and future AI-assisted features without locking the core product to a single hosting or provider model.
 
-This repository starts with the self-hosted foundation and keeps the architecture ready for later SaaS deployment modes. The current scaffold includes:
+This repository starts with the self-hosted foundation and keeps the architecture ready for later SaaS deployment modes. Milestone 1 now adds the first identity, tenancy, and admin foundations on top of that scaffold.
+
+The current repository includes:
 
 - `apps/web`: Next.js frontend
-- `apps/api`: FastAPI backend
+- `apps/api`: FastAPI backend with SQLAlchemy, Alembic, session auth, and admin CLI
 - `apps/worker`: Python background worker
 - `packages/shared-types`: minimal shared TypeScript constants and types
 - `compose.yml`: local development stack with web, API, worker, PostgreSQL, and Redis
@@ -17,6 +19,8 @@ This repository starts with the self-hosted foundation and keeps the architectur
 - Self-hosted first, SaaS-ready later
 - Multi-household from the start
 - Roles: `platform_admin`, `household_admin`, `household_user`
+- Session-based web login with secure password hashing
+- Opaque external IDs for tenant-facing identity and household records
 - AI provider abstraction from day one
 - Initial provider targets: Ollama and OpenAI-compatible APIs
 - Uploaded files treated as hostile input
@@ -42,8 +46,28 @@ docker compose up --build
 
 - Web: `http://localhost:3000`
 - API health: `http://localhost:8000/api/health`
+- Login: `http://localhost:3000/login`
 - PostgreSQL: `localhost:5432`
 - Redis: `localhost:6379`
+
+## Admin Bootstrap
+
+Create the first platform admin:
+
+```bash
+docker compose run --rm api python -m app.cli bootstrap-platform-admin \
+  --email admin@example.com \
+  --display-name "Pantry Admin"
+```
+
+Reset an existing user password:
+
+```bash
+docker compose run --rm api python -m app.cli reset-password \
+  --email admin@example.com
+```
+
+Both commands will prompt for a password if one is not supplied as a flag.
 
 ## Repository Layout
 
@@ -69,10 +93,22 @@ docker compose up --build
 docker compose down
 npm install
 npm run dev:web
-python3 -m venv .venv
+cd apps/api && python3 -m pytest
 ```
 
-The Python services currently run most easily through Docker Compose because the repo does not yet include a unified local Python environment manager.
+For local API tests outside Docker:
+
+```bash
+python3 -m pip install -r apps/api/requirements-dev.txt
+cd apps/api && pytest
+```
+
+Important environment variables:
+
+- `NEXT_PUBLIC_API_BASE_URL`: browser-facing API URL for frontend requests.
+- `INTERNAL_API_BASE_URL`: server-side API URL used by Next.js server components. In Docker Compose this should point to `http://api:8000`.
+- `SESSION_SECRET_KEY`: secret used to sign web sessions. Replace the placeholder before any real deployment.
+- `SESSION_HTTPS_ONLY`: set to `true` behind HTTPS.
 
 ## Documentation
 
@@ -83,4 +119,3 @@ Start with these files:
 - [docs/ARCHITECTURE.md](/Users/robinbrown/Documents/GitHub/pantry/docs/ARCHITECTURE.md)
 - [docs/SECURITY.md](/Users/robinbrown/Documents/GitHub/pantry/docs/SECURITY.md)
 - [docs/MILESTONES.md](/Users/robinbrown/Documents/GitHub/pantry/docs/MILESTONES.md)
-

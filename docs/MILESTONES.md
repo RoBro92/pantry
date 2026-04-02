@@ -9,6 +9,8 @@
 - Docker Compose local stack.
 - Initial product, architecture, security, and operational docs.
 
+Status: complete.
+
 ## Milestone 1: Identity And Household Core
 
 - Users, households, memberships, and roles.
@@ -18,12 +20,23 @@
 - Initial admin shell pages in the web app.
 - First database migrations and persistence model.
 
+Status: foundation implemented.
+Current scope delivered:
+
+- Alembic migration and SQLAlchemy models for identity and tenancy foundations.
+- Session-based auth endpoints with signed cookies.
+- Initial authorization helpers and tenant membership resolution.
+- Platform admin overview, user, and household pages.
+- Focused API tests for auth and server-side household scoping.
+
 ## Milestone 2: Pantry Structure And Inventory
 
 - Location groups and locations.
 - Products, aliases, barcodes, and stock lots.
 - Basic CRUD flows and stock adjustments.
 - Audit event capture for key inventory mutations.
+
+Status: next recommended milestone.
 
 ## Milestone 3: Imports
 
@@ -57,4 +70,3 @@
 - Hosted deployment topology.
 - Plan-aware feature flags and usage counters.
 - Private operational runbooks in `private-docs/`.
-

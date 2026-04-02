@@ -16,5 +16,17 @@
 
 ## Current State
 
-No formal test harness is added in this scaffold yet. Milestone 1 should add the first API and domain tests alongside the initial persistence layer.
+Milestone 1 adds the first API tests:
 
+- Login, current-session, and logout flow.
+- Email normalization during authentication.
+- Server-side household membership enforcement.
+
+## Current Commands
+
+```bash
+python3 -m pip install -r apps/api/requirements-dev.txt
+cd apps/api && pytest
+npm run typecheck:web
+npm run build:web
+```

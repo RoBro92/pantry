@@ -10,8 +10,8 @@
 
 ## Applications
 
-- `apps/web/`: Next.js frontend scaffold.
-- `apps/api/`: FastAPI backend scaffold.
+- `apps/web/`: Next.js frontend with login page, protected shell, and platform admin pages.
+- `apps/api/`: FastAPI backend with SQLAlchemy models, Alembic migrations, auth routes, and CLI commands.
 - `apps/worker/`: Python worker scaffold.
 
 ## Packages
@@ -22,6 +22,21 @@
 
 - `infra/docker/`: Dockerfiles for web, API, and worker.
 - `infra/scripts/`: small repository utility scripts such as version helpers.
+
+## Key Backend Paths
+
+- `apps/api/alembic/`: migration environment and migration history.
+- `apps/api/app/models/`: SQLAlchemy identity and tenancy models.
+- `apps/api/app/api/routes/`: health, auth, admin, and household routes.
+- `apps/api/app/api/deps/`: auth and tenancy dependencies.
+- `apps/api/app/cli.py`: admin bootstrap and password reset commands.
+- `apps/api/tests/`: focused API tests for auth and tenancy.
+
+## Key Frontend Paths
+
+- `apps/web/app/(auth)/login/page.tsx`: login page.
+- `apps/web/app/(dashboard)/`: authenticated shell and platform admin pages.
+- `apps/web/lib/server-auth.ts`: server-side session and admin data fetching helpers.
 
 ## Documentation
 
@@ -34,4 +49,3 @@
 ## Local-Only
 
 - `private-docs/`: gitignored space for SaaS operations or private runbooks.
-
