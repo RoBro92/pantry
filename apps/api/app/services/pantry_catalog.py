@@ -274,3 +274,44 @@ def create_product(
     db.commit()
     db.refresh(product)
     return get_product_by_external_id(db, household=household, external_id=product.external_id) or product
+
+
+def ensure_product_alias(
+    db: Session,
+    *,
+    household: Household,
+    product: Product,
+    alias_name: str,
+) -> bool:
+    display_name = require_text(alias_name, field_name="Alias")
+    normalized_name = normalize_lookup_name(display_name)
+
+    if normalized_name == product.normalized_name:
+        return False
+
+    existing_product = db.scalar(
+        select(Product)
+        .where(Product.household_id == household.id)
+        .where(Product.normalized_name == normalized_name)
+    )
+    if existing_product is not None:
+        return existing_product.id == product.id and False
+
+    existing_alias = db.scalar(
+        select(ProductAlias)
+        .where(ProductAlias.household_id == household.id)
+        .where(ProductAlias.normalized_name == normalized_name)
+    )
+    if existing_alias is not None:
+        return False
+
+    db.add(
+        ProductAlias(
+            household_id=household.id,
+            product_id=product.id,
+            name=display_name,
+            normalized_name=normalized_name,
+        )
+    )
+    db.flush()
+    return True

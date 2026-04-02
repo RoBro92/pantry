@@ -30,3 +30,4 @@ class StockLot(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     household = relationship("Household", back_populates="stock_lots")
     product = relationship("Product", back_populates="stock_lots")
     location = relationship("Location", back_populates="stock_lots")
+    import_lines = relationship("ImportLine", back_populates="confirmed_stock_lot")

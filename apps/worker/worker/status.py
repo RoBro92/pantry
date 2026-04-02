@@ -7,7 +7,6 @@ def build_status_snapshot(settings: WorkerSettings) -> dict[str, object]:
         "service": settings.service_name,
         "environment": settings.environment,
         "version": settings.app_version,
-        "mode": "placeholder",
+        "mode": "import-poller",
         "poll_interval_seconds": settings.poll_interval_seconds,
     }
-

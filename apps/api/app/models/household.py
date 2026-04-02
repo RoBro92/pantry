@@ -25,4 +25,7 @@ class Household(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     recipes = relationship("Recipe", back_populates="household")
     recipe_ingredients = relationship("RecipeIngredient", back_populates="household")
     recipe_url_imports = relationship("RecipeURLImport", back_populates="household")
+    import_jobs = relationship("ImportJob", back_populates="household")
+    import_source_files = relationship("ImportSourceFile", back_populates="household")
+    import_lines = relationship("ImportLine", back_populates="household")
     audit_events = relationship("AuditEvent", back_populates="household")

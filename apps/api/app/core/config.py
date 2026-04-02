@@ -35,6 +35,8 @@ class AppSettings:
     api_base_url: str
     database_url: str
     redis_url: str
+    import_storage_root: str
+    import_max_upload_bytes: int
     session_secret_key: str
     session_cookie_name: str
     session_max_age_seconds: int
@@ -68,6 +70,8 @@ def get_settings() -> AppSettings:
             "postgresql+psycopg://pantry:change-me@postgres:5432/pantry",
         ),
         redis_url=os.getenv("REDIS_URL", "redis://redis:6379/0"),
+        import_storage_root=os.getenv("IMPORT_STORAGE_ROOT", "/workspace/.local/imports"),
+        import_max_upload_bytes=int(os.getenv("IMPORT_MAX_UPLOAD_BYTES", "10485760")),
         session_secret_key=os.getenv("SESSION_SECRET_KEY", "change-me-for-production"),
         session_cookie_name=os.getenv("SESSION_COOKIE_NAME", "pantry_session"),
         session_max_age_seconds=int(os.getenv("SESSION_MAX_AGE_SECONDS", "604800")),

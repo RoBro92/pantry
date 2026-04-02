@@ -53,7 +53,7 @@ services:
     env_file:
       - .env
     environment:
-      PYTHONPATH: /workspace/apps/worker
+      PYTHONPATH: /workspace/apps/api:/workspace/apps/worker
     working_dir: /workspace/apps/worker
     command: >
       /bin/sh -lc

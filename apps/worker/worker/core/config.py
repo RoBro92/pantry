@@ -25,9 +25,15 @@ class WorkerSettings:
     environment: str
     log_level: str
     app_version: str
+    database_url: str
     redis_url: str
+    import_storage_root: str
     poll_interval_seconds: int
     run_once: bool
+
+    @property
+    def safe_database_url(self) -> str:
+        return _sanitize_url(self.database_url)
 
     @property
     def safe_redis_url(self) -> str:
@@ -41,8 +47,12 @@ def get_settings() -> WorkerSettings:
         environment=os.getenv("ENVIRONMENT", "development"),
         log_level=os.getenv("LOG_LEVEL", "INFO"),
         app_version=os.getenv("APP_VERSION", "0.1.0"),
+        database_url=os.getenv(
+            "DATABASE_URL",
+            "postgresql+psycopg://pantry:change-me@postgres:5432/pantry",
+        ),
         redis_url=os.getenv("REDIS_URL", "redis://redis:6379/0"),
+        import_storage_root=os.getenv("IMPORT_STORAGE_ROOT", "/workspace/.local/imports"),
         poll_interval_seconds=int(os.getenv("WORKER_POLL_INTERVAL_SECONDS", "30")),
         run_once=os.getenv("WORKER_RUN_ONCE", "false").lower() == "true",
     )
-

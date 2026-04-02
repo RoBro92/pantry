@@ -27,3 +27,5 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     memberships = relationship("Membership", back_populates="user")
     audit_events = relationship("AuditEvent", back_populates="actor_user")
     recipe_url_imports_requested = relationship("RecipeURLImport", back_populates="requested_by_user")
+    import_jobs_requested = relationship("ImportJob", back_populates="requested_by_user")
+    import_source_files_uploaded = relationship("ImportSourceFile", back_populates="uploaded_by_user")

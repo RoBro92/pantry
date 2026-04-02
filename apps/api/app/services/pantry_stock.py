@@ -14,7 +14,7 @@ from app.models.base import utc_now
 from app.models.user import User
 from app.services.audit import record_audit_event
 from app.services.pantry_catalog import get_location_by_external_id, get_product_by_external_id
-from app.services.pantry_normalization import require_text
+from app.services.pantry_normalization import normalize_unit, require_text
 
 
 def _validate_positive_quantity(quantity: Decimal) -> Decimal:
@@ -61,6 +61,8 @@ def add_stock_lot(
     note: str | None,
     purchased_on: date | None,
     expires_on: date | None,
+    unit_override: str | None = None,
+    commit: bool = True,
 ) -> StockLot:
     product = get_product_by_external_id(db, household=household, external_id=product_external_id)
     if product is None:
@@ -72,6 +74,7 @@ def add_stock_lot(
 
     normalized_quantity = _validate_positive_quantity(quantity)
     normalized_note = require_text(note, field_name="Note") if note else None
+    normalized_unit = normalize_unit(unit_override) if unit_override else product.default_unit
     if purchased_on and expires_on and expires_on < purchased_on:
         raise ValueError("Expiry date cannot be earlier than purchase date.")
 
@@ -80,7 +83,7 @@ def add_stock_lot(
         product_id=product.id,
         location_id=location.id,
         quantity=normalized_quantity,
-        unit=product.default_unit,
+        unit=normalized_unit,
         note=normalized_note,
         purchased_on=purchased_on,
         expires_on=expires_on,
@@ -99,12 +102,15 @@ def add_stock_lot(
             "location_name": location.name,
             "location_group_name": location.location_group.name,
             "quantity": str(normalized_quantity),
-            "unit": product.default_unit,
+            "unit": normalized_unit,
         },
     )
-    db.commit()
-    db.refresh(lot)
-    return get_stock_lot_by_external_id(db, household=household, external_id=lot.external_id) or lot
+    if commit:
+        db.commit()
+        db.refresh(lot)
+        return get_stock_lot_by_external_id(db, household=household, external_id=lot.external_id) or lot
+
+    return lot
 
 
 def remove_stock_from_lot(

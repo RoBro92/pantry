@@ -5,6 +5,7 @@ from uuid import uuid4
 
 import structlog
 
+from app.services.import_processing import process_next_import_job
 from worker.core.config import get_settings
 from worker.core.logging import configure_logging
 from worker.status import build_status_snapshot
@@ -32,24 +33,31 @@ def main() -> None:
         "worker.started",
         environment=settings.environment,
         version=settings.app_version,
+        database_url=settings.safe_database_url,
         redis_url=settings.safe_redis_url,
+        import_storage_root=settings.import_storage_root,
     )
     logger.info("worker.status", **build_status_snapshot(settings))
 
     if args.once or settings.run_once:
-        logger.info("worker.exiting", reason="single_run")
+        processed = process_next_import_job()
+        logger.info("worker.exiting", reason="single_run", processed_job=processed)
         return
 
     while True:
-        time.sleep(settings.poll_interval_seconds)
+        processed = process_next_import_job()
+        if processed:
+            logger.info("worker.poll.completed", queue="imports", result="processed_job")
+            continue
+
         logger.info(
             "worker.heartbeat",
-            queue="default",
+            queue="imports",
             status="idle",
             poll_interval_seconds=settings.poll_interval_seconds,
         )
+        time.sleep(settings.poll_interval_seconds)
 
 
 if __name__ == "__main__":
     main()
-
