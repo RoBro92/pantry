@@ -7,6 +7,8 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
+from app.api.routes.ai_admin import router as ai_admin_router
+from app.api.routes.ai_households import router as ai_households_router
 from app.api.routes.admin import router as admin_router
 from app.api.routes.auth import router as auth_router
 from app.api.routes.health import router as health_router
@@ -94,7 +96,9 @@ async def add_request_context(request: Request, call_next):
 app.include_router(health_router, prefix="/api")
 app.include_router(auth_router, prefix="/api")
 app.include_router(admin_router, prefix="/api")
+app.include_router(ai_admin_router, prefix="/api")
 app.include_router(households_router, prefix="/api")
+app.include_router(ai_households_router, prefix="/api")
 app.include_router(pantry_router, prefix="/api")
 app.include_router(recipes_router, prefix="/api")
 app.include_router(imports_router, prefix="/api")
