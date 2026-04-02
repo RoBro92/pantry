@@ -34,7 +34,7 @@ export const domainEntities = [
   "ShoppingList",
   "ShoppingListItem",
   "AuditEvent",
-  "LLMProviderConfig",
+  "AIProviderConfig",
   "FeatureFlag",
   "UsageCounter"
 ] as const;

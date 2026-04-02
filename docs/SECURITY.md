@@ -19,12 +19,15 @@ Security needs to shape the architecture before feature depth arrives.
 - Keep audit events for sensitive domain actions.
 - Store import uploads outside any web-served path.
 - Validate upload size and type in the application before worker processing.
+- Reject credential-bearing provider base URLs and never return raw provider secrets after save.
+- Encrypt stored provider secrets at rest for self-hosted deployments.
 
 ## Logging Guidance
 
 - Structured system logs are for runtime diagnostics.
 - Audit events are for accountable business actions.
 - Do not store raw secrets in either.
+- Do not log prompt payloads that would expose secrets or credential-bearing URLs.
 
 ## Deferred Security Work
 

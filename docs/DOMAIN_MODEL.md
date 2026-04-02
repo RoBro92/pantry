@@ -163,9 +163,15 @@ Current implementation notes:
 - Pantry location, product, add, remove, and move actions now emit audit events.
 - Audit payloads keep operational logs distinct from business accountability records.
 
-### LLMProviderConfig
+### AIProviderConfig
 
-Household- or platform-scoped configuration for AI providers, stored and redacted carefully.
+Instance- or household-scoped configuration for AI providers, stored and redacted carefully.
+Current implementation notes:
+
+- The initial implementation stores one instance-scoped configuration and leaves room for future household overrides through the same model shape.
+- Supports `ollama` and `openai_compatible` provider types.
+- Stores base URL, default model, enabled state, provider health metadata, and encrypted secret material when needed.
+- API responses expose only redacted state such as `has_api_key`; raw provider secrets are not returned.
 
 ### FeatureFlag
 
@@ -178,6 +184,7 @@ Metering record for rate limits, plan enforcement, or SaaS usage analysis.
 ## Relationship Notes
 
 - `Household` is the primary owner of `LocationGroup`, `Location`, `Product`, `StockLot`, `Recipe`, `ShoppingList`, and import data.
+- `AIProviderConfig` currently resolves at instance scope first for v1 and is shaped so household override resolution can layer in later.
 - `Membership` mediates household access.
 - `AuditEvent` references actors and targets without becoming a substitute for business tables.
 - `FeatureFlag` and `UsageCounter` are needed early in the model so SaaS later does not require structural rewrites.

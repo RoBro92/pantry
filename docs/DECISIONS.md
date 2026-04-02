@@ -24,6 +24,8 @@ Initial architectural decisions recorded on 2026-04-02.
 | D-016 | Calculate recipe coverage in ingredient order and derive shopping gaps from the remaining pantry quantity for each mapped product. | This avoids double-counting shared pantry stock when the same product appears in multiple ingredient lines. |
 | D-017 | Persist recipe URL import capture records before implementing parsing or scraping. | This gives v1 a clean route/model/service boundary for later worker-backed URL import processing without overbuilding the parser now. |
 | D-018 | Keep the pantry import pipeline review-first, with explicit import confirmation as the only stock-write path. | This preserves human oversight, keeps hostile-upload handling isolated from inventory mutation, and lets deterministic/manual ingestion work now while richer parsers plug in later. |
+| D-019 | Start AI provider persistence at installation scope, but shape it for future household overrides. | Self-hosted v1 only needs a single configured provider, but household overrides should not require route or storage redesign later. |
+| D-020 | Keep AI suggestions advisory-only and read-only in the first AI milestone. | This preserves pantry and import safety while structured prompts, provider health handling, and UI feedback mature. |
 
 ## Deferred
 

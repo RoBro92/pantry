@@ -86,6 +86,15 @@ Current scope delivered:
 - Pantry-aware suggestion foundations that can plug into recipes and import review without hard-coding a single provider.
 - Feature-gated entrypoints for future AI-assisted parsing and matching.
 
+Status: foundation implemented.
+Current scope delivered:
+
+- Alembic migration and SQLAlchemy model for instance-scoped `AIProviderConfig`, with shape ready for future household overrides.
+- Encrypted-at-rest provider secret handling plus provider health metadata, deployment-level AI feature gating, and adapter abstractions for Ollama and OpenAI-compatible APIs.
+- Platform admin API and web foundation for saving provider configuration and running provider health checks.
+- Household AI status and read-only suggestion APIs with structured pantry and recipe context assembly plus JSON output contracts.
+- Household AI suggestions page with clear unavailable and unhealthy states and a minimal admin AI provider configuration page.
+
 ## Milestone 6: Shopping
 
 - Shopping lists and list items.

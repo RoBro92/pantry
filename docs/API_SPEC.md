@@ -18,6 +18,12 @@ This file records the initial API shape and conventions, not a completed endpoin
   - Returns user summaries for the platform admin shell.
 - `GET /api/platform-admin/households`
   - Returns household summaries for the platform admin shell.
+- `GET /api/platform-admin/ai/provider-config`
+  - Returns the instance-scoped AI provider configuration summary with secrets redacted.
+- `PUT /api/platform-admin/ai/provider-config`
+  - Creates or updates the instance-scoped AI provider configuration and emits an audit event.
+- `POST /api/platform-admin/ai/provider-config/health-check`
+  - Checks the configured provider, updates health metadata, and returns discovered models when available.
 - `GET /api/households/{household_external_id}`
   - Returns a household summary only if server-side membership or platform admin access resolves successfully.
 - `GET /api/households/{household_external_id}/pantry/overview`
@@ -56,6 +62,10 @@ This file records the initial API shape and conventions, not a completed endpoin
   - Updates a parsed import line, re-resolves deterministic matching, and records import review audit activity.
 - `POST /api/households/{household_external_id}/imports/{import_external_id}/confirm`
   - Confirms a reviewed import and creates pantry stock lots from matched lines only.
+- `GET /api/households/{household_external_id}/ai/status`
+  - Returns household AI feature availability, resolved provider metadata, and clean unconfigured or unhealthy reasons.
+- `POST /api/households/{household_external_id}/ai/suggestions`
+  - Generates read-only structured pantry-aware suggestions through the provider abstraction and never mutates pantry, recipe, or import state.
 
 ## Planned API Conventions
 
@@ -65,6 +75,7 @@ This file records the initial API shape and conventions, not a completed endpoin
 - Recipe coverage and shopping-gap calculations should stay deterministic and server-derived from pantry state.
 - Bulk import and AI flows should be asynchronous where latency or safety review makes synchronous APIs inappropriate.
 - Import endpoints must never write pantry stock before explicit confirmation of reviewed lines.
+- AI endpoints should use structured request and response contracts instead of ad hoc prompt strings or free-form markdown output.
 
 ## Auth Assumptions
 
@@ -77,4 +88,5 @@ This file records the initial API shape and conventions, not a completed endpoin
 - Edit and archive flows for pantry structure records.
 - Shopping-list persistence and consumption/replenishment workflows.
 - Recipe URL import worker execution tied into the new import-job architecture.
-- Pantry-aware suggestion and AI-assisted import review behind provider abstractions.
+- AI-assisted import review flows that reuse the provider abstraction without bypassing human confirmation.
+- Household-scoped provider overrides once product requirements justify them.
