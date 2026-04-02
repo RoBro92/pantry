@@ -21,6 +21,9 @@ Security needs to shape the architecture before feature depth arrives.
 - Validate upload size and type in the application before worker processing.
 - Reject credential-bearing provider base URLs and never return raw provider secrets after save.
 - Encrypt stored provider secrets at rest for self-hosted deployments.
+- Encrypt stored SMTP passwords at rest and never return them in plaintext after save.
+- Require authenticated, server-scoped access checks before a QR/deep-link location route reveals household data.
+- Keep platform diagnostics useful but secret-safe: no passwords, tokens, or fabricated host metrics.
 
 ## Logging Guidance
 

@@ -26,6 +26,8 @@ Initial architectural decisions recorded on 2026-04-02.
 | D-018 | Keep the pantry import pipeline review-first, with explicit import confirmation as the only stock-write path. | This preserves human oversight, keeps hostile-upload handling isolated from inventory mutation, and lets deterministic/manual ingestion work now while richer parsers plug in later. |
 | D-019 | Start AI provider persistence at installation scope, but shape it for future household overrides. | Self-hosted v1 only needs a single configured provider, but household overrides should not require route or storage redesign later. |
 | D-020 | Keep AI suggestions advisory-only and read-only in the first AI milestone. | This preserves pantry and import safety while structured prompts, provider health handling, and UI feedback mature. |
+| D-021 | Store installation-scoped public/browser URL and SMTP foundation settings in a single instance-settings record, while allowing deployment environment variables to override them. | Self-hosted installs need editable platform settings, but env overrides remain important for immutable deployments and secret injection. |
+| D-022 | Keep platform diagnostics on a real-data-only policy backed by app process data, DB queries, Redis checks, and worker heartbeats instead of guessed host metrics. | Honest self-hosted diagnostics are more trustworthy than simulated CPU, memory, or container metrics the app cannot directly observe. |
 
 ## Deferred
 

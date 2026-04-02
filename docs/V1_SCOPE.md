@@ -12,6 +12,8 @@ V1 means the first usable self-hosted release, not the final product vision.
 - Manual recipe entry, ingredient mapping, pantry coverage, and shopping-gap calculation.
 - Recipe URL import capture foundation for later parsing work.
 - Basic household dashboards and admin shell pages.
+- Platform admin diagnostics, public/browser base URL management, and SMTP readiness foundation.
+- Pantry location QR/browser deep links that still require authenticated household access.
 - Admin bootstrap CLI and password reset CLI.
 - PostgreSQL-backed API with Redis available for worker jobs and rate-limited or queued work.
 - Structured logs and audit-event foundations.
@@ -22,5 +24,5 @@ V1 means the first usable self-hosted release, not the final product vision.
 - Shopping-list persistence and workflow automation.
 - Full AI workflows.
 - SaaS billing internals.
-- Rich email or SMTP management UI.
+- Full notification, invite, or campaign email workflows.
 - Public multi-tenant cloud control plane.

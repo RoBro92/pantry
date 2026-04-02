@@ -95,20 +95,41 @@ Current scope delivered:
 - Household AI status and read-only suggestion APIs with structured pantry and recipe context assembly plus JSON output contracts.
 - Household AI suggestions page with clear unavailable and unhealthy states and a minimal admin AI provider configuration page.
 
-## Milestone 6: Shopping
+## Milestone 6: Platform Admin Diagnostics, SMTP, QR Links, And Admin Polish
+
+- Platform admin diagnostics routes and UI.
+- Honest instance health/reporting surfaces built from measurable app/runtime data only.
+- Instance-level SMTP configuration foundation with encrypted secret storage and lightweight connectivity testing.
+- Public/browser base URL setting for generated links.
+- Pantry location QR generation and authenticated location deep-link flow.
+- Admin console navigation cleanup for installation-level surfaces.
+
+Status: foundation implemented.
+Current scope delivered:
+
+- Alembic migration and SQLAlchemy model for installation-scoped public/browser URL and SMTP foundation settings.
+- Platform admin settings, SMTP, and diagnostics API routes with encrypted SMTP password storage, redacted responses, and lightweight SMTP connectivity testing.
+- Redis-backed worker heartbeat publishing plus measured diagnostics coverage for API uptime, worker state, Redis reachability, queue counts, database health/size, entity counts, AI summary, SMTP summary, and public URL summary.
+- Pantry location browser-link metadata in API responses plus an authenticated `/locations/{locationRoute}` browser route for QR deep links.
+- Next.js admin layout and section navigation for overview, users, households, AI, SMTP, diagnostics, and settings pages.
+- Inline server-rendered QR codes for pantry locations that rebuild from the current configured public/browser base URL.
+
+## Milestone 7: SaaS-Readiness Pass
+
+- Deployment-mode cleanup and first explicit feature-flag skeleton.
+- Usage/quota counter skeleton.
+- Demo-mode skeleton.
+- First real E2E suite for core user-facing flows if it still does not exist.
+- Additional self-hosted hardening where it directly supports later hosted expansion.
+
+## Milestone 8: Shopping
 
 - Shopping lists and list items.
 - Basic consumption and replenishment workflows.
 
-## Milestone 7: Hardening
+## Milestone 9: Hardening
 
-- Test coverage expansion.
+- Test coverage expansion beyond milestone-specific additions.
 - Observability improvements.
 - Security review and backup guidance.
 - Self-hosted deployment refinement.
-
-## Milestone 8: SaaS Readiness
-
-- Hosted deployment topology.
-- Plan-aware feature flags and usage counters.
-- Private operational runbooks in `private-docs/`.

@@ -24,10 +24,22 @@ This file records the initial API shape and conventions, not a completed endpoin
   - Creates or updates the instance-scoped AI provider configuration and emits an audit event.
 - `POST /api/platform-admin/ai/provider-config/health-check`
   - Checks the configured provider, updates health metadata, and returns discovered models when available.
+- `GET /api/platform-admin/settings/public-base-url`
+  - Returns the saved and effective browser/public base URL used for generated QR and browser links.
+- `PUT /api/platform-admin/settings/public-base-url`
+  - Saves the instance-level browser/public base URL and emits an audit event.
+- `GET /api/platform-admin/smtp`
+  - Returns the effective and stored SMTP readiness summary with passwords redacted to `has_password`.
+- `PUT /api/platform-admin/smtp`
+  - Creates or updates the instance-level SMTP foundation settings and emits an audit event.
+- `POST /api/platform-admin/smtp/test`
+  - Runs a lightweight SMTP connectivity test against the effective configuration and records the result without sending a productized email flow.
+- `GET /api/platform-admin/diagnostics`
+  - Returns installation diagnostics built only from directly measured app, database, Redis, worker-heartbeat, and configuration data.
 - `GET /api/households/{household_external_id}`
   - Returns a household summary only if server-side membership or platform admin access resolves successfully.
 - `GET /api/households/{household_external_id}/pantry/overview`
-  - Returns household pantry reference data, aggregated product totals derived from stock lots, filtered stock lots, and recent pantry audit activity.
+  - Returns household pantry reference data, aggregated product totals derived from stock lots, filtered stock lots, recent pantry audit activity, and location deep-link metadata for QR generation.
 - `GET /api/households/{household_external_id}/pantry/near-expiry`
   - Returns active stock lots expiring within a caller-selected window.
 - `POST /api/households/{household_external_id}/location-groups`
@@ -66,16 +78,20 @@ This file records the initial API shape and conventions, not a completed endpoin
   - Returns household AI feature availability, resolved provider metadata, and clean unconfigured or unhealthy reasons.
 - `POST /api/households/{household_external_id}/ai/suggestions`
   - Generates read-only structured pantry-aware suggestions through the provider abstraction and never mutates pantry, recipe, or import state.
+- `GET /api/locations/{location_route}`
+  - Resolves a QR-safe location route, re-checks authenticated household access server-side, and returns the deep-link target plus current location stock summary.
 
 ## Planned API Conventions
 
 - All household-scoped endpoints resolve tenant access server-side.
+- Location-route endpoints must re-check household access server-side before revealing location details.
 - Request and response payloads should use opaque external IDs for tenant-facing objects.
 - Mutation endpoints should emit audit events for domain-significant changes.
 - Recipe coverage and shopping-gap calculations should stay deterministic and server-derived from pantry state.
 - Bulk import and AI flows should be asynchronous where latency or safety review makes synchronous APIs inappropriate.
 - Import endpoints must never write pantry stock before explicit confirmation of reviewed lines.
 - AI endpoints should use structured request and response contracts instead of ad hoc prompt strings or free-form markdown output.
+- Diagnostics endpoints must return only measured application-visible data and must mark unavailable values as unavailable instead of estimating host metrics.
 
 ## Auth Assumptions
 
