@@ -14,8 +14,8 @@ export default function HomePage() {
           for Ollama and OpenAI-compatible providers.
         </p>
         <div className="hero-actions">
-          <Link href="/locations" className="primary-link">
-            Future location pages
+          <Link href="/login" className="primary-link">
+            Login
           </Link>
           <a href={`${appConfig.apiBaseUrl}/api/health`} className="secondary-link">
             API health
@@ -31,13 +31,13 @@ export default function HomePage() {
         />
         <StatusCard
           title="Web"
-          value="Scaffolded"
-          detail="App Router foundation with a dedicated place for future domain routes."
+          value="Milestone 1"
+          detail="Login, authenticated shell, and platform admin pages are now scaffolded."
         />
         <StatusCard
           title="API"
-          value="/api/health"
-          detail="FastAPI scaffold with config loading, structured logging, and request IDs."
+          value="Auth + admin"
+          detail="Session auth, admin overview endpoints, and tenant-aware household access foundations."
         />
         <StatusCard
           title="Worker"
@@ -64,9 +64,9 @@ export default function HomePage() {
           </ul>
         </article>
         <article className="panel">
-          <p className="eyebrow">Core entities</p>
+          <p className="eyebrow">Milestone 1 focus</p>
           <ul>
-            {appConfig.domainEntities.slice(0, 8).map((entity) => (
+            {appConfig.domainEntities.slice(0, 4).map((entity) => (
               <li key={entity}>{entity}</li>
             ))}
           </ul>
@@ -75,4 +75,3 @@ export default function HomePage() {
     </main>
   );
 }
-
