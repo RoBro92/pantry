@@ -55,10 +55,12 @@ Updated: 2026-04-02
 - `npm run typecheck:web`: passed.
 - `cd apps/api && pytest -q`: passed.
 - `npm run build:web`: passed.
-- `docker compose up -d --build`: pending.
-- `docker compose run --rm api alembic upgrade head`: pending.
-- `./infra/scripts/smoke-check.sh`: pending.
-- `docker compose down`: pending.
+- `docker compose up -d --build`: passed.
+- `docker compose run --rm api alembic upgrade head`: passed.
+- `./infra/scripts/smoke-check.sh`: passed.
+- `docker compose exec -T api python - <<'PY' ... PY`: passed. Seeded a dedicated recipe-smoke household, pantry location, product, and stock lot in the running stack for recipe feature validation.
+- `COOKIE_JAR=$(mktemp) ... curl ... /api/auth/login ... /api/households/{household_external_id}/recipes ... /api/households/{household_external_id}/recipes/{recipe_external_id} ... /app/households/{household_external_id}/recipes/{recipe_external_id}`: passed. Confirmed live login, recipe creation, recipe detail API coverage, and web recipe detail rendering.
+- `docker compose down`: passed.
 
 ## Blockers / Gaps
 
