@@ -133,7 +133,12 @@ def build_import_detail_response(
 
     lines = sorted(import_job.lines, key=lambda item: item.position)
     blocking_line_count = sum(1 for line in lines if line.status not in {"matched", "ignored", "confirmed"})
-    ready_to_confirm = bool(lines) and blocking_line_count == 0 and import_job.status not in {"failed", "queued", "processing"}
+    ready_to_confirm = bool(lines) and blocking_line_count == 0 and import_job.status not in {
+        "confirmed",
+        "failed",
+        "queued",
+        "processing",
+    }
 
     return ImportDetailResponse(
         household_external_id=access.household.external_id,

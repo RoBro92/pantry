@@ -44,9 +44,15 @@ export default async function HouseholdPantryPage({
         </p>
         <div className="page-actions">
           <Link
-            href={`/app/households/${overview.household_external_id}/recipes`}
+            href={`/app/households/${overview.household_external_id}/imports`}
             className="secondary-link"
           >
+            View imports
+          </Link>
+          <Link
+            href={`/app/households/${overview.household_external_id}/recipes`}
+            className="secondary-link"
+            >
             View recipes
           </Link>
         </div>

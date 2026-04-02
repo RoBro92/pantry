@@ -220,3 +220,105 @@ export type RecipeDetailResponse = {
   can_administer: boolean;
   recipe: RecipeDetail;
 };
+
+export type ImportLinkedProductSummary = {
+  external_id: string;
+  name: string;
+  default_unit: string;
+};
+
+export type ImportSourceFileSummary = {
+  external_id: string;
+  original_filename: string;
+  client_content_type: string | null;
+  detected_content_type: string | null;
+  file_extension: string | null;
+  size_bytes: number;
+  validation_status: string;
+  scan_status: string;
+  note: string | null;
+  created_at: string;
+};
+
+export type ImportCountsSummary = {
+  line_count: number;
+  matched_line_count: number;
+  needs_review_line_count: number;
+  unresolved_line_count: number;
+  ignored_line_count: number;
+  confirmed_line_count: number;
+};
+
+export type ImportJobSummary = {
+  external_id: string;
+  source_type: string;
+  status: string;
+  source_label: string;
+  note: string | null;
+  occurred_on: string | null;
+  parser_kind: string | null;
+  failure_message: string | null;
+  requested_by_display: string | null;
+  counts: ImportCountsSummary;
+  source_files: ImportSourceFileSummary[];
+  created_at: string;
+  updated_at: string;
+  processed_at: string | null;
+  confirmed_at: string | null;
+};
+
+export type ImportLineSummary = {
+  external_id: string;
+  position: number;
+  source_reference: string | null;
+  raw_label: string;
+  quantity: string;
+  unit: string;
+  barcode: string | null;
+  note: string | null;
+  purchased_on: string | null;
+  expires_on: string | null;
+  status: "matched" | "needs_review" | "unresolved" | "ignored" | "confirmed";
+  match_basis: string;
+  product: ImportLinkedProductSummary | null;
+  suggested_product: ImportLinkedProductSummary | null;
+  confirmed_stock_lot_external_id: string | null;
+  updated_at: string;
+};
+
+export type ImportDetail = {
+  external_id: string;
+  source_type: string;
+  status: string;
+  source_label: string;
+  note: string | null;
+  occurred_on: string | null;
+  parser_kind: string | null;
+  failure_message: string | null;
+  requested_by_display: string | null;
+  counts: ImportCountsSummary;
+  source_files: ImportSourceFileSummary[];
+  lines: ImportLineSummary[];
+  ready_to_confirm: boolean;
+  blocking_line_count: number;
+  created_at: string;
+  updated_at: string;
+  processed_at: string | null;
+  confirmed_at: string | null;
+};
+
+export type ImportListResponse = {
+  household_external_id: string;
+  household_name: string;
+  effective_role: string;
+  can_administer: boolean;
+  imports: ImportJobSummary[];
+};
+
+export type ImportDetailResponse = {
+  household_external_id: string;
+  household_name: string;
+  effective_role: string;
+  can_administer: boolean;
+  import_job: ImportDetail;
+};

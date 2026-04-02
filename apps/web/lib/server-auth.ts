@@ -3,6 +3,8 @@ import type {
   AdminHouseholdSummary,
   AdminOverview,
   AdminUserSummary,
+  ImportDetailResponse,
+  ImportListResponse,
   NearExpiryResponse,
   PantryOverview,
   RecipeDetailResponse,
@@ -98,5 +100,20 @@ export async function getRecipeDetail(
 ): Promise<RecipeDetailResponse> {
   return apiGet<RecipeDetailResponse>(
     `/api/households/${householdExternalId}/recipes/${recipeExternalId}`
+  );
+}
+
+export async function getImportList(
+  householdExternalId: string
+): Promise<ImportListResponse> {
+  return apiGet<ImportListResponse>(`/api/households/${householdExternalId}/imports`);
+}
+
+export async function getImportDetail(
+  householdExternalId: string,
+  importExternalId: string
+): Promise<ImportDetailResponse> {
+  return apiGet<ImportDetailResponse>(
+    `/api/households/${householdExternalId}/imports/${importExternalId}`
   );
 }

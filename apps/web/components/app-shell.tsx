@@ -24,6 +24,9 @@ export function AppShell({ session, children }: AppShellProps) {
               <div key={membership.external_id} className="nav-group">
                 <span className="nav-group-title">{membership.household_name}</span>
                 <Link href={`/app/households/${membership.household_external_id}`}>Pantry</Link>
+                <Link href={`/app/households/${membership.household_external_id}/imports`}>
+                  Imports
+                </Link>
                 <Link href={`/app/households/${membership.household_external_id}/recipes`}>
                   Recipes
                 </Link>

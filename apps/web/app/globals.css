@@ -494,13 +494,15 @@ ul {
 }
 
 .recipe-card-grid,
-.recipe-ingredient-list {
+.recipe-ingredient-list,
+.import-line-list {
   display: grid;
   gap: 1rem;
 }
 
 .recipe-card,
-.recipe-ingredient-card {
+.recipe-ingredient-card,
+.import-line-card {
   display: grid;
   gap: 1rem;
   padding-top: 1rem;
@@ -508,7 +510,8 @@ ul {
 }
 
 .recipe-card:first-child,
-.recipe-ingredient-card:first-child {
+.recipe-ingredient-card:first-child,
+.import-line-card:first-child {
   padding-top: 0;
   border-top: 0;
 }
@@ -531,6 +534,12 @@ ul {
 }
 
 .recipe-form-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.import-line-grid {
   display: grid;
   gap: 1rem;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));

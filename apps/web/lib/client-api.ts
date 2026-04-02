@@ -35,3 +35,18 @@ export async function postToApi<T>(path: string, payload: unknown): Promise<T> {
 export async function putToApi<T>(path: string, payload: unknown): Promise<T> {
   return sendToApi("PUT", path, payload);
 }
+
+export async function postFormToApi<T>(path: string, payload: FormData): Promise<T> {
+  const response = await fetch(`${appConfig.apiBaseUrl}${path}`, {
+    method: "POST",
+    credentials: "include",
+    body: payload
+  });
+
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as ApiErrorBody | null;
+    throw new Error(body?.detail ?? "Request failed.");
+  }
+
+  return (await response.json()) as T;
+}
