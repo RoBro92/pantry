@@ -207,9 +207,19 @@ ul {
   cursor: wait;
 }
 
+.ghost-button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
 .error-text {
   color: #8d2517;
   margin: 0 0 1rem;
+}
+
+.status-note {
+  margin: 0 0 1rem;
+  color: var(--accent-strong);
 }
 
 .shell-grid {
@@ -254,6 +264,14 @@ ul {
   border-radius: 12px;
   border: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.35);
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0 0 1rem;
+  color: var(--muted);
 }
 
 .inline-link {

@@ -60,6 +60,12 @@ export default async function SessionPage() {
                   >
                     Open recipes
                   </Link>
+                  <Link
+                    href={`/app/households/${membership.household_external_id}/ai`}
+                    className="secondary-link"
+                  >
+                    Open AI
+                  </Link>
                 </div>
               </article>
             ))}

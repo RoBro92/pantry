@@ -30,6 +30,9 @@ export function AppShell({ session, children }: AppShellProps) {
                 <Link href={`/app/households/${membership.household_external_id}/recipes`}>
                   Recipes
                 </Link>
+                <Link href={`/app/households/${membership.household_external_id}/ai`}>
+                  AI Suggestions
+                </Link>
               </div>
             ))}
             {session.user.platform_role === "platform_admin" ? (
@@ -37,6 +40,7 @@ export function AppShell({ session, children }: AppShellProps) {
                 <Link href="/admin">Overview</Link>
                 <Link href="/admin/users">Users</Link>
                 <Link href="/admin/households">Households</Link>
+                <Link href="/admin/ai">AI Provider</Link>
               </>
             ) : null}
           </nav>

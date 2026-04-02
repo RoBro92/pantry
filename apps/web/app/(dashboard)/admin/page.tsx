@@ -38,8 +38,12 @@ export default async function AdminOverviewPage() {
           value={overview.membership_count}
           detail="User-to-household membership assignments."
         />
+        <AdminStatCard
+          label="AI Provider"
+          value={1}
+          detail="Instance-level provider configuration and health checks now live under admin."
+        />
       </section>
     </div>
   );
 }
-

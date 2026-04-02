@@ -55,6 +55,12 @@ export default async function HouseholdPantryPage({
             >
             View recipes
           </Link>
+          <Link
+            href={`/app/households/${overview.household_external_id}/ai`}
+            className="secondary-link"
+          >
+            View AI suggestions
+          </Link>
         </div>
       </section>
 

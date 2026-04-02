@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
 import type {
+  AIFeatureStatus,
+  AIProviderConfigResponse,
   AdminHouseholdSummary,
   AdminOverview,
   AdminUserSummary,
@@ -45,6 +47,10 @@ export async function getAdminUsers(): Promise<AdminUserSummary[]> {
 
 export async function getAdminHouseholds(): Promise<AdminHouseholdSummary[]> {
   return apiGet<AdminHouseholdSummary[]>("/api/platform-admin/households");
+}
+
+export async function getAIProviderConfig(): Promise<AIProviderConfigResponse> {
+  return apiGet<AIProviderConfigResponse>("/api/platform-admin/ai/provider-config");
 }
 
 function withQuery(
@@ -116,4 +122,10 @@ export async function getImportDetail(
   return apiGet<ImportDetailResponse>(
     `/api/households/${householdExternalId}/imports/${importExternalId}`
   );
+}
+
+export async function getHouseholdAIStatus(
+  householdExternalId: string
+): Promise<AIFeatureStatus> {
+  return apiGet<AIFeatureStatus>(`/api/households/${householdExternalId}/ai/status`);
 }

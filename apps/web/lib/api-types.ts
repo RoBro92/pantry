@@ -40,6 +40,85 @@ export type AdminHouseholdSummary = {
   membership_count: number;
 };
 
+export type AIProviderConfigSummary = {
+  external_id: string;
+  scope_type: string;
+  provider_type: "ollama" | "openai_compatible";
+  base_url: string;
+  default_model: string;
+  is_enabled: boolean;
+  has_api_key: boolean;
+  health_status: string;
+  health_checked_at: string | null;
+  health_error: string | null;
+  available_model_count: number;
+  capabilities: Record<string, unknown>;
+  last_success_at: string | null;
+  updated_at: string;
+};
+
+export type AIProviderConfigResponse = {
+  feature_enabled: boolean;
+  config: AIProviderConfigSummary | null;
+};
+
+export type AIProviderHealthSummary = {
+  status: string;
+  is_healthy: boolean;
+  message: string | null;
+  models: string[];
+  capabilities: Record<string, unknown>;
+};
+
+export type AIProviderHealthResponse = {
+  feature_enabled: boolean;
+  config: AIProviderConfigSummary;
+  health: AIProviderHealthSummary;
+};
+
+export type AIFeatureStatus = {
+  feature_enabled: boolean;
+  available: boolean;
+  reason: string | null;
+  provider_type: string | null;
+  default_model: string | null;
+  config_external_id: string | null;
+  health_status: string | null;
+  health_checked_at: string | null;
+};
+
+export type AISuggestionItem = {
+  title: string;
+  summary: string;
+  rationale: string;
+  pantry_product_names: string[];
+  expiring_product_names: string[];
+  missing_product_names: string[];
+  extra_ingredient_names: string[];
+  substitution_ideas: string[];
+  caution: string | null;
+};
+
+export type AISuggestionResponse = {
+  household_external_id: string;
+  feature: AIFeatureStatus;
+  request: {
+    kind: "meal_suggestions" | "expiry_first" | "buy_a_few_extra" | "recipe_gap";
+    limit: number;
+    recipe_external_id: string | null;
+  };
+  context_snapshot: {
+    pantry_product_count: number;
+    active_lot_count: number;
+    near_expiry_lot_count: number;
+    recipe_count: number;
+    recipe_external_id: string | null;
+    recipe_title: string | null;
+  };
+  suggestions: AISuggestionItem[];
+  generated_at: string;
+};
+
 export type PantryLocationGroupSummary = {
   external_id: string;
   name: string;
