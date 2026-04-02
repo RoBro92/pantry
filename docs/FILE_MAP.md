@@ -5,7 +5,7 @@
 - `VERSION`: canonical application version.
 - `compose.yml`: local development stack.
 - `.env.example`: environment variable template.
-- `AGENTS.md`: repo-specific agent rules.
+- `AGENTS.md`: primary durable Codex operating instructions for this repository.
 - `README.md`: project overview and local setup.
 
 ## Applications
@@ -21,7 +21,7 @@
 ## Infrastructure
 
 - `infra/docker/`: Dockerfiles for web, API, and worker.
-- `infra/scripts/`: small repository utility scripts such as version helpers.
+- `infra/scripts/`: small repository utility scripts such as version helpers and repeatable smoke checks.
 
 ## Key Backend Paths
 
@@ -40,11 +40,13 @@
 
 ## Documentation
 
-- `docs/PROJECT_STATE.md`: latest implementation state and next recommended step.
+- `docs/PROJECT_STATE.md`: latest implementation state, validation results, blockers, and next recommended step.
 - `docs/MILESTONES.md`: roadmap.
 - `docs/ARCHITECTURE.md`: high-level technical shape.
 - `docs/DOMAIN_MODEL.md`: initial entity definitions.
 - `docs/SECURITY.md`: security posture and guardrails.
+- `docs/TEST_STRATEGY.md`: milestone validation policy, command order, and reporting expectations.
+- `docs/CODEX_RULES.md`: concise repo-specific Codex guidance that defers to `AGENTS.md` and `docs/TEST_STRATEGY.md`.
 
 ## Local-Only
 
