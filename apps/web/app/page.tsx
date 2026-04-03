@@ -1,21 +1,23 @@
 import Link from "next/link";
 import { StatusCard } from "../components/status-card";
 import { appConfig } from "../lib/app-config";
+import { getSetupStatus } from "../lib/server-auth";
 
-export default function HomePage() {
+export default async function HomePage() {
+  const setupStatus = await getSetupStatus();
   return (
     <main className="page-shell">
       <section className="hero">
         <p className="eyebrow">Self-hosted foundation</p>
         <h1>{appConfig.name}</h1>
         <p className="lede">
-          Multi-household pantry management with a Next.js web app, FastAPI API,
-          Python worker, PostgreSQL, Redis, and an AI abstraction layer ready
-          for Ollama and OpenAI-compatible providers.
+          Pantry tracks stock lots, recipes, reviewed imports, diagnostics, QR deep links, and
+          AI suggestions in a self-hosted stack that stays explicit about what is configured and
+          what still needs setup.
         </p>
         <div className="hero-actions">
-          <Link href="/login" className="primary-link">
-            Login
+          <Link href={setupStatus.is_initialized ? "/login" : "/setup"} className="primary-link">
+            {setupStatus.is_initialized ? "Login" : "Run setup"}
           </Link>
           <a href={`${appConfig.apiBaseUrl}/api/health`} className="secondary-link">
             API health
@@ -30,19 +32,19 @@ export default function HomePage() {
           detail="Derived from the repo VERSION file in containerized development."
         />
         <StatusCard
-          title="Web"
-          value="Milestone 1"
-          detail="Login, authenticated shell, and platform admin pages are now scaffolded."
+          title="Setup"
+          value={setupStatus.is_initialized ? "ready" : "required"}
+          detail={setupStatus.recommended_next_step}
         />
         <StatusCard
           title="API"
-          value="Auth + admin"
-          detail="Session auth, admin overview endpoints, and tenant-aware household access foundations."
+          value="Pantry + recipes + imports"
+          detail="Session auth, admin tooling, tenant-aware household access, and review-first imports."
         />
         <StatusCard
           title="Worker"
-          value="Placeholder"
-          detail="Background process scaffolded with structured logs and status output."
+          value="Imports + recipe URLs"
+          detail="Background processing for reviewed imports, recipe URL capture, and heartbeat diagnostics."
         />
       </section>
 
@@ -64,11 +66,12 @@ export default function HomePage() {
           </ul>
         </article>
         <article className="panel">
-          <p className="eyebrow">Milestone 1 focus</p>
+          <p className="eyebrow">Getting started</p>
           <ul>
-            {appConfig.domainEntities.slice(0, 4).map((entity) => (
-              <li key={entity}>{entity}</li>
-            ))}
+            <li>Create the first platform admin.</li>
+            <li>Create at least one household.</li>
+            <li>Assign user memberships before regular sign-in.</li>
+            <li>Set the public browser URL before printing QR links.</li>
           </ul>
         </article>
       </section>

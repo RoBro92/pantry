@@ -19,6 +19,7 @@ from app.api.routes.location_links import router as location_links_router
 from app.api.routes.pantry import router as pantry_router
 from app.api.routes.recipes import router as recipes_router
 from app.api.routes.settings_admin import router as settings_admin_router
+from app.api.routes.setup import router as setup_router
 from app.api.routes.smtp_admin import router as smtp_admin_router
 from app.core.config import get_settings
 from app.core.db import SessionLocal
@@ -136,6 +137,7 @@ async def add_request_context(request: Request, call_next):
 
 
 app.include_router(health_router, prefix="/api")
+app.include_router(setup_router, prefix="/api")
 app.include_router(auth_router, prefix="/api")
 app.include_router(admin_router, prefix="/api")
 app.include_router(ai_admin_router, prefix="/api")

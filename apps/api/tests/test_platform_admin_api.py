@@ -221,6 +221,91 @@ def test_platform_admin_smtp_validation_rejects_url_like_hosts(client, db_sessio
     assert "must not include a path" in response.json()["detail"] or "hostname or IP address" in response.json()["detail"]
 
 
+def test_platform_admin_can_create_users_households_and_memberships(client, db_session):
+    admin = create_platform_admin(
+        db_session,
+        email="management-admin@example.com",
+        password=PASSWORD,
+        display_name="Management Admin",
+    )
+    login(client, email="management-admin@example.com")
+
+    create_user_response = client.post(
+        "/api/platform-admin/users",
+        json={
+            "email": "managed-user@example.com",
+            "display_name": "Managed User",
+            "password": PASSWORD,
+        },
+    )
+    assert create_user_response.status_code == 201
+    created_user = create_user_response.json()
+    assert created_user["membership_count"] == 0
+
+    create_household_response = client.post(
+        "/api/platform-admin/households",
+        json={"name": "Managed Household"},
+    )
+    assert create_household_response.status_code == 201
+    created_household = create_household_response.json()
+    assert created_household["membership_count"] == 0
+
+    membership_response = client.post(
+        f"/api/platform-admin/households/{created_household['external_id']}/memberships",
+        json={
+            "user_external_id": created_user["external_id"],
+            "role": "household_admin",
+        },
+    )
+    assert membership_response.status_code == 200
+    membership_payload = membership_response.json()
+    assert membership_payload["email"] == "managed-user@example.com"
+    assert membership_payload["role"] == "household_admin"
+
+    households_response = client.get("/api/platform-admin/households")
+    assert households_response.status_code == 200
+    household_payload = households_response.json()[0]
+    assert household_payload["memberships"][0]["email"] == "managed-user@example.com"
+
+
+def test_platform_admin_management_endpoints_require_platform_admin(client, db_session):
+    member = create_user(
+        db_session,
+        email="non-admin@example.com",
+        password=PASSWORD,
+        display_name="Non Admin",
+    )
+    household = create_household(db_session, name="Member Household")
+    create_membership(db_session, user=member, household=household, role_code="household_admin")
+
+    login(client, email="non-admin@example.com")
+
+    user_response = client.post(
+        "/api/platform-admin/users",
+        json={
+            "email": "blocked@example.com",
+            "display_name": "Blocked",
+            "password": PASSWORD,
+        },
+    )
+    assert user_response.status_code == 403
+
+    household_response = client.post(
+        "/api/platform-admin/households",
+        json={"name": "Blocked Household"},
+    )
+    assert household_response.status_code == 403
+
+    membership_response = client.post(
+        f"/api/platform-admin/households/{household.external_id}/memberships",
+        json={
+            "user_external_id": member.external_id,
+            "role": "household_user",
+        },
+    )
+    assert membership_response.status_code == 403
+
+
 def test_api_requests_record_usage_counters(client, db_session):
     response = client.get("/api/health")
     assert response.status_code == 200

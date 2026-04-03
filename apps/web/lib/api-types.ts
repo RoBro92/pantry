@@ -34,10 +34,27 @@ export type AdminUserSummary = {
   membership_count: number;
 };
 
+export type AdminHouseholdMemberSummary = {
+  membership_external_id: string;
+  user_external_id: string;
+  email: string;
+  display_name: string | null;
+  role: string;
+  is_active: boolean;
+};
+
 export type AdminHouseholdSummary = {
   external_id: string;
   name: string;
   membership_count: number;
+  memberships: AdminHouseholdMemberSummary[];
+};
+
+export type SetupStatusResponse = {
+  is_initialized: boolean;
+  platform_admin_count: number;
+  can_bootstrap_platform_admin: boolean;
+  recommended_next_step: string;
 };
 
 export type PublicBaseURLSummary = {

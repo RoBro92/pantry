@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { AdminStatCard } from "../../../components/admin-stat-card";
 import { StatusCard } from "../../../components/status-card";
 import {
@@ -68,12 +69,23 @@ export default async function AdminOverviewPage() {
 
       <section className="content-grid">
         <article className="panel">
-          <p className="eyebrow">Current Scope</p>
-          <h2>Operational surfaces</h2>
+          <p className="eyebrow">Getting Started</p>
+          <h2>Make the install usable</h2>
           <p>
-            Diagnostics, AI, SMTP, and public link settings are all instance-level and remain
-            separate from tenant data. Household access checks still happen server-side.
+            Create at least one household, add users, and assign memberships before expecting
+            pantry routes to show day-to-day data.
           </p>
+          <div className="page-actions">
+            <Link href="/admin/users" className="secondary-link">
+              Create users
+            </Link>
+            <Link href="/admin/households" className="primary-link">
+              Create households
+            </Link>
+            <Link href="/admin/settings" className="secondary-link">
+              Set browser URL
+            </Link>
+          </div>
         </article>
         <article className="panel">
           <p className="eyebrow">Real Data Policy</p>

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class AdminOverviewResponse(BaseModel):
@@ -19,8 +19,32 @@ class AdminUserSummary(BaseModel):
     membership_count: int
 
 
+class AdminHouseholdMemberSummary(BaseModel):
+    membership_external_id: str
+    user_external_id: str
+    email: str
+    display_name: str | None
+    role: str
+    is_active: bool
+
+
 class AdminHouseholdSummary(BaseModel):
     external_id: str
     name: str
     membership_count: int
+    memberships: list[AdminHouseholdMemberSummary] = Field(default_factory=list)
 
+
+class CreateAdminUserRequest(BaseModel):
+    email: str
+    display_name: str | None = None
+    password: str
+
+
+class CreateAdminHouseholdRequest(BaseModel):
+    name: str
+
+
+class CreateAdminMembershipRequest(BaseModel):
+    user_external_id: str
+    role: str

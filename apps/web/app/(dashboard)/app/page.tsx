@@ -38,7 +38,27 @@ export default async function SessionPage() {
       <section className="panel">
         <p className="eyebrow">Pantry Households</p>
         {session.memberships.length === 0 ? (
-          <p>No active household memberships yet.</p>
+          session.user.platform_role === "platform_admin" ? (
+            <div className="stack">
+              <p>
+                No active household memberships yet. Create a household and assign at least one
+                membership from the installation console to start using pantry workflows.
+              </p>
+              <div className="page-actions">
+                <Link href="/admin/households" className="primary-link">
+                  Open household setup
+                </Link>
+                <Link href="/admin/users" className="secondary-link">
+                  Manage users
+                </Link>
+              </div>
+            </div>
+          ) : (
+            <p>
+              No active household memberships yet. Ask a platform admin to assign this account to a
+              household.
+            </p>
+          )
         ) : (
           <div className="household-card-grid">
             {session.memberships.map((membership) => (
