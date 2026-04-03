@@ -16,9 +16,11 @@ from app.schemas.recipes import (
     RecipeURLImportSummary,
     UpdateRecipeRequest,
 )
+from app.services.platform_features import FLAG_RECIPE_URL_IMPORTS, require_feature_enabled
 from app.services.recipe_catalog import create_recipe, create_recipe_url_import, update_recipe
 from app.services.recipe_queries import build_recipe_detail_response, build_recipe_list_response
 from app.services.tenancy import HouseholdAccess
+from app.services.usage_counters import check_usage_quota
 
 router = APIRouter(prefix="/households/{household_external_id}", tags=["recipes"])
 
@@ -29,6 +31,15 @@ def _bad_request(exc: ValueError) -> HTTPException:
 
 def _not_found(detail: str) -> HTTPException:
     return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
+
+
+def _ensure_recipe_url_imports_enabled(db: Session, *, access: HouseholdAccess) -> None:
+    require_feature_enabled(
+        db,
+        flag_key=FLAG_RECIPE_URL_IMPORTS,
+        household=access.household,
+        disabled_message="Recipe URL imports are disabled for this household.",
+    )
 
 
 @router.get("/recipes", response_model=RecipeListResponse)
@@ -106,6 +117,17 @@ def post_recipe_url_import(
     current_user: User = Depends(get_current_user),
     access: HouseholdAccess = Depends(require_household_access()),
 ):
+    try:
+        _ensure_recipe_url_imports_enabled(db, access=access)
+        check_usage_quota(
+            db,
+            counter_key="recipe_url_imports",
+            scope_type="household",
+            scope_key=access.household.external_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+
     try:
         record = create_recipe_url_import(
             db,

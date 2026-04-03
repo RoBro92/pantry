@@ -10,6 +10,7 @@ from app.schemas.ai import AISuggestionRequest
 from app.services.ai_config import upsert_instance_provider_config
 from app.services.ai_context import build_household_ai_context
 from app.services.ai_providers import AIProviderHealth, StructuredCompletionResult
+from app.services.platform_features import FLAG_AI_SUGGESTIONS, upsert_feature_flag
 from app.services.auth import (
     create_household,
     create_membership,
@@ -331,3 +332,35 @@ def test_household_ai_generation_failures_degrade_cleanly_and_update_status(
     assert payload["available"] is False
     assert payload["health_status"] == "unhealthy"
     assert "Provider request timed out." in payload["reason"]
+
+
+def test_household_ai_feature_flag_can_disable_household_access(client, db_session):
+    _, household = create_member_household(
+        db_session,
+        email="ai-flag@example.com",
+        household_name="AI Flag Household",
+    )
+    upsert_feature_flag(
+        db_session,
+        flag_key=FLAG_AI_SUGGESTIONS,
+        scope_type="household",
+        scope_key=household.external_id,
+        is_enabled=False,
+        note="Disabled for this household.",
+    )
+
+    login(client, email="ai-flag@example.com")
+
+    status_response = client.get(f"/api/households/{household.external_id}/ai/status")
+    assert status_response.status_code == 200
+    status_payload = status_response.json()
+    assert status_payload["feature_enabled"] is False
+    assert status_payload["available"] is False
+    assert "disabled" in status_payload["reason"].lower()
+
+    suggestion_response = client.post(
+        f"/api/households/{household.external_id}/ai/suggestions",
+        json={"kind": "meal_suggestions", "limit": 1},
+    )
+    assert suggestion_response.status_code == 403
+    assert "disabled" in suggestion_response.json()["detail"].lower()

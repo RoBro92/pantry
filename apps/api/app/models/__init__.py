@@ -2,6 +2,7 @@ from app.models.ai_provider_config import AIProviderConfig
 from app.models.audit_event import AuditEvent
 from app.models.barcode import Barcode
 from app.models.base import Base
+from app.models.feature_flag import FeatureFlag
 from app.models.household import Household
 from app.models.import_job import ImportJob
 from app.models.import_line import ImportLine
@@ -18,12 +19,14 @@ from app.models.recipe_url_import import RecipeURLImport
 from app.models.role import Role
 from app.models.stock_lot import StockLot
 from app.models.user import User
+from app.models.usage_counter import UsageCounter
 
 __all__ = [
     "AIProviderConfig",
     "AuditEvent",
     "Barcode",
     "Base",
+    "FeatureFlag",
     "Household",
     "ImportJob",
     "ImportLine",
@@ -40,4 +43,5 @@ __all__ = [
     "Role",
     "StockLot",
     "User",
+    "UsageCounter",
 ]

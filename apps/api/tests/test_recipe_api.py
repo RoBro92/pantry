@@ -9,6 +9,7 @@ from app.models.audit_event import AuditEvent
 from app.models.recipe import Recipe
 from app.models.recipe_url_import import RecipeURLImport
 from app.services.auth import create_household, create_membership, create_user
+from app.services.platform_features import FLAG_RECIPE_URL_IMPORTS, upsert_feature_flag
 from app.services.recipe_url_imports import process_next_recipe_url_import
 
 
@@ -345,3 +346,27 @@ def test_recipe_endpoints_enforce_household_scoping(client, db_session):
 
     assert allowed.status_code == 200
     assert denied.status_code == 404
+
+
+def test_recipe_url_import_can_be_disabled_by_feature_flag(client, db_session):
+    _, household = create_member_household(
+        db_session,
+        email="recipe-flag@example.com",
+        household_name="Recipe Flag Household",
+    )
+    upsert_feature_flag(
+        db_session,
+        flag_key=FLAG_RECIPE_URL_IMPORTS,
+        scope_type="household",
+        scope_key=household.external_id,
+        is_enabled=False,
+        note="Temporarily disabled.",
+    )
+    login(client, email="recipe-flag@example.com")
+
+    response = client.post(
+        f"/api/households/{household.external_id}/recipe-imports/url",
+        json={"url": "https://example.com/recipes/pasta"},
+    )
+    assert response.status_code == 403
+    assert "disabled" in response.json()["detail"].lower()

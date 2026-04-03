@@ -8,6 +8,7 @@ from sqlalchemy import select
 from app.models.import_job import ImportJob
 from app.models.instance_setting import InstanceSetting
 from app.models.recipe import Recipe
+from app.models.usage_counter import UsageCounter
 from app.services.ai_config import upsert_instance_provider_config
 from app.services.auth import create_household, create_membership, create_platform_admin, create_user
 from app.services.instance_settings import upsert_public_base_url, upsert_smtp_settings
@@ -218,6 +219,22 @@ def test_platform_admin_smtp_validation_rejects_url_like_hosts(client, db_sessio
     )
     assert response.status_code == 400
     assert "must not include a path" in response.json()["detail"] or "hostname or IP address" in response.json()["detail"]
+
+
+def test_api_requests_record_usage_counters(client, db_session):
+    response = client.get("/api/health")
+    assert response.status_code == 200
+
+    db_session.expire_all()
+    counter = db_session.scalar(
+        select(UsageCounter).where(
+            UsageCounter.counter_key == "http_request:self_hosted:GET:/api/health:2xx"
+        )
+    )
+    assert counter is not None
+    assert counter.scope_type == "instance"
+    assert counter.scope_key == "instance"
+    assert counter.count == 1
 
 
 def test_location_qr_links_use_configured_public_base_url_and_access_is_scoped(client, db_session):

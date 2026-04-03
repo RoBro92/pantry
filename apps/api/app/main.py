@@ -21,11 +21,48 @@ from app.api.routes.recipes import router as recipes_router
 from app.api.routes.settings_admin import router as settings_admin_router
 from app.api.routes.smtp_admin import router as smtp_admin_router
 from app.core.config import get_settings
+from app.core.db import SessionLocal
 from app.core.logging import configure_logging
+from app.services.platform_features import FLAG_USAGE_METERING, get_effective_feature_flag
+from app.services.usage_counters import increment_usage_counter
 
 settings = get_settings()
 configure_logging(service_name=settings.service_name, log_level=settings.log_level)
 logger = structlog.get_logger(__name__)
+
+
+def _record_request_usage(request: Request, *, status_code: int) -> None:
+    if not request.url.path.startswith("/api/"):
+        return
+
+    route = request.scope.get("route")
+    route_path = getattr(route, "path", request.url.path)
+    path_params = request.path_params
+    household_external_id = path_params.get("household_external_id")
+    scope_type = "household" if household_external_id else "instance"
+    scope_key = str(household_external_id or "instance")
+    status_family = f"{status_code // 100}xx"
+    counter_key = f"http_request:{settings.deployment_mode}:{request.method}:{route_path}:{status_family}"
+
+    try:
+        with SessionLocal() as db:
+            decision = get_effective_feature_flag(db, flag_key=FLAG_USAGE_METERING)
+            if not decision.enabled:
+                return
+            increment_usage_counter(
+                db,
+                counter_key=counter_key,
+                scope_type=scope_type,
+                scope_key=scope_key,
+            )
+            db.commit()
+    except Exception:
+        logger.warning(
+            "usage_counter.record_failed",
+            counter_key=counter_key,
+            scope_type=scope_type,
+            scope_key=scope_key,
+        )
 
 
 @asynccontextmanager
@@ -86,6 +123,7 @@ async def add_request_context(request: Request, call_next):
         raise
     else:
         duration_ms = round((perf_counter() - started) * 1000, 2)
+        _record_request_usage(request, status_code=response.status_code)
         logger.info(
             "http.request.completed",
             status_code=response.status_code,

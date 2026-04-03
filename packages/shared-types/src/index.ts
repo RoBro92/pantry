@@ -1,8 +1,7 @@
 export const deploymentModes = [
   "self_hosted",
   "demo",
-  "saas_free",
-  "saas_supporter"
+  "saas"
 ] as const;
 
 export type DeploymentMode = (typeof deploymentModes)[number];

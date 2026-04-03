@@ -13,6 +13,7 @@ from app.models.product_alias import ProductAlias
 from app.models.stock_lot import StockLot
 from app.services.auth import create_household, create_membership, create_user
 from app.services.import_processing import process_next_import_job
+from app.services.platform_features import FLAG_REVIEWED_IMPORTS, upsert_feature_flag
 
 
 PASSWORD = "correct horse battery"
@@ -293,3 +294,24 @@ def test_import_endpoints_enforce_household_scoping(client, db_session):
 
     assert allowed.status_code == 200
     assert denied.status_code == 404
+
+
+def test_reviewed_imports_can_be_disabled_by_feature_flag(client, db_session):
+    _, household = create_member_household(
+        db_session,
+        email="imports-flag@example.com",
+        household_name="Import Flag Household",
+    )
+    upsert_feature_flag(
+        db_session,
+        flag_key=FLAG_REVIEWED_IMPORTS,
+        scope_type="household",
+        scope_key=household.external_id,
+        is_enabled=False,
+        note="Disabled for maintenance.",
+    )
+    login(client, email="imports-flag@example.com")
+
+    response = client.get(f"/api/households/{household.external_id}/imports")
+    assert response.status_code == 403
+    assert "disabled" in response.json()["detail"].lower()

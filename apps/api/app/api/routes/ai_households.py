@@ -38,9 +38,10 @@ def post_ai_suggestions(
         )
     except ValueError as exc:
         message = str(exc)
-        status_code = (
-            status.HTTP_503_SERVICE_UNAVAILABLE
-            if "provider" in message.lower() or "no ai provider" in message.lower() or "disabled" in message.lower()
-            else status.HTTP_400_BAD_REQUEST
-        )
+        if "disabled for this household" in message.lower():
+            status_code = status.HTTP_403_FORBIDDEN
+        elif "provider" in message.lower() or "no ai provider" in message.lower() or "disabled" in message.lower():
+            status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+        else:
+            status_code = status.HTTP_400_BAD_REQUEST
         raise HTTPException(status_code=status_code, detail=message) from exc

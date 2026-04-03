@@ -10,9 +10,11 @@ from app.api.deps.tenancy import require_household_access
 from app.core.db import get_db_session
 from app.models.user import User
 from app.schemas.imports import ConfirmImportRequest, ImportDetailResponse, ImportListResponse, UpdateImportLineRequest
+from app.services.platform_features import FLAG_REVIEWED_IMPORTS, require_feature_enabled
 from app.services.import_queries import build_import_detail_response, build_import_list_response
 from app.services.import_workflow import confirm_import_job, create_import_upload, update_import_line
 from app.services.tenancy import HouseholdAccess
+from app.services.usage_counters import check_usage_quota
 
 router = APIRouter(prefix="/households/{household_external_id}", tags=["imports"])
 
@@ -25,11 +27,24 @@ def _not_found(detail: str) -> HTTPException:
     return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
 
 
+def _ensure_reviewed_imports_enabled(db: Session, *, access: HouseholdAccess) -> None:
+    require_feature_enabled(
+        db,
+        flag_key=FLAG_REVIEWED_IMPORTS,
+        household=access.household,
+        disabled_message="Reviewed imports are disabled for this household.",
+    )
+
+
 @router.get("/imports", response_model=ImportListResponse)
 def get_imports(
     db: Session = Depends(get_db_session),
     access: HouseholdAccess = Depends(require_household_access()),
 ):
+    try:
+        _ensure_reviewed_imports_enabled(db, access=access)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     return build_import_list_response(db, access=access)
 
 
@@ -39,6 +54,10 @@ def get_import_detail(
     db: Session = Depends(get_db_session),
     access: HouseholdAccess = Depends(require_household_access()),
 ):
+    try:
+        _ensure_reviewed_imports_enabled(db, access=access)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     try:
         return build_import_detail_response(db, access=access, import_external_id=import_external_id)
     except ValueError as exc:
@@ -57,6 +76,16 @@ async def post_import_upload(
     current_user: User = Depends(get_current_user),
     access: HouseholdAccess = Depends(require_household_access()),
 ):
+    try:
+        _ensure_reviewed_imports_enabled(db, access=access)
+        check_usage_quota(
+            db,
+            counter_key="reviewed_import_uploads",
+            scope_type="household",
+            scope_key=access.household.external_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     try:
         import_job = await create_import_upload(
             db,
@@ -83,6 +112,10 @@ def put_import_line(
     access: HouseholdAccess = Depends(require_household_access()),
 ):
     try:
+        _ensure_reviewed_imports_enabled(db, access=access)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    try:
         import_job = update_import_line(
             db,
             household=access.household,
@@ -106,6 +139,16 @@ def post_confirm_import(
     current_user: User = Depends(get_current_user),
     access: HouseholdAccess = Depends(require_household_access()),
 ):
+    try:
+        _ensure_reviewed_imports_enabled(db, access=access)
+        check_usage_quota(
+            db,
+            counter_key="reviewed_import_confirms",
+            scope_type="household",
+            scope_key=access.household.external_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     try:
         import_job = confirm_import_job(
             db,

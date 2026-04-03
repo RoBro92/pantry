@@ -48,11 +48,11 @@ export default function HomePage() {
 
       <section className="content-grid">
         <article className="panel">
-          <p className="eyebrow">Deployment modes</p>
+          <p className="eyebrow">Foundation</p>
           <ul>
-            {appConfig.deploymentModes.map((mode) => (
-              <li key={mode}>{mode}</li>
-            ))}
+            <li>Self-hosted first runtime</li>
+            <li>Tenant-scoped pantry workflows</li>
+            <li>Future hosted boundaries kept out of the UI</li>
           </ul>
         </article>
         <article className="panel">

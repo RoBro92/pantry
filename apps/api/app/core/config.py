@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from functools import lru_cache
 from urllib.parse import urlsplit, urlunsplit
 
+SUPPORTED_DEPLOYMENT_MODES = {"self_hosted", "demo", "saas"}
+
 
 def _parse_bool(value: str | None, default: bool) -> bool:
     if value is None:
@@ -37,6 +39,15 @@ def _sanitize_url(value: str) -> str:
     return urlunsplit((parsed.scheme, netloc, parsed.path, parsed.query, parsed.fragment))
 
 
+def _parse_deployment_mode(value: str | None) -> str:
+    mode = (value or "self_hosted").strip().lower()
+    if mode not in SUPPORTED_DEPLOYMENT_MODES:
+        raise ValueError(
+            "DEPLOYMENT_MODE must be one of self_hosted, demo, or saas."
+        )
+    return mode
+
+
 @dataclass(frozen=True)
 class AppSettings:
     service_name: str
@@ -44,6 +55,7 @@ class AppSettings:
     log_level: str
     app_version: str
     deployment_mode: str
+    demo_mode_enabled: bool
     ai_feature_enabled: bool
     web_app_url: str
     api_base_url: str
@@ -83,12 +95,19 @@ class AppSettings:
 
 @lru_cache
 def get_settings() -> AppSettings:
+    deployment_mode = _parse_deployment_mode(os.getenv("DEPLOYMENT_MODE"))
+    demo_mode_enabled = _parse_bool(
+        os.getenv("DEMO_MODE_ENABLED"),
+        deployment_mode == "demo",
+    )
+
     return AppSettings(
         service_name=os.getenv("API_SERVICE_NAME", "pantry-api"),
         environment=os.getenv("ENVIRONMENT", "development"),
         log_level=os.getenv("LOG_LEVEL", "INFO"),
         app_version=os.getenv("APP_VERSION", "0.1.0"),
-        deployment_mode=os.getenv("DEPLOYMENT_MODE", "self_hosted"),
+        deployment_mode=deployment_mode,
+        demo_mode_enabled=demo_mode_enabled,
         ai_feature_enabled=_parse_bool(os.getenv("AI_FEATURE_ENABLED"), True),
         web_app_url=os.getenv("WEB_APP_URL", "http://localhost:3000"),
         api_base_url=os.getenv("API_BASE_URL", "http://localhost:8000"),

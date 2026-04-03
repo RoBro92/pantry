@@ -22,10 +22,12 @@ from app.services.ai_config import (
     resolve_provider_config,
 )
 from app.services.ai_context import build_household_ai_context
+from app.services.platform_features import FLAG_AI_SUGGESTIONS, get_effective_feature_flag, require_feature_enabled
 from app.services.ai_prompts import build_suggestion_prompt_plan
 from app.services.ai_providers import StructuredCompletionRequest, build_ai_provider_adapter
 from app.services.audit import record_audit_event
 from app.services.tenancy import HouseholdAccess
+from app.services.usage_counters import check_usage_quota
 
 logger = structlog.get_logger(__name__)
 
@@ -39,6 +41,18 @@ def build_household_ai_feature_status(
     *,
     household: Household,
 ) -> AIFeatureStatusSummary:
+    feature_gate = get_effective_feature_flag(
+        db,
+        flag_key=FLAG_AI_SUGGESTIONS,
+        household=household,
+    )
+    if not feature_gate.enabled:
+        return AIFeatureStatusSummary(
+            feature_enabled=False,
+            available=False,
+            reason="AI suggestions are disabled for this household.",
+        )
+
     if not get_ai_feature_enabled():
         return AIFeatureStatusSummary(
             feature_enabled=False,
@@ -100,9 +114,22 @@ def generate_household_ai_suggestions(
     actor: User,
     request: AISuggestionRequest,
 ) -> AISuggestionResponse:
+    require_feature_enabled(
+        db,
+        flag_key=FLAG_AI_SUGGESTIONS,
+        household=access.household,
+        disabled_message="AI suggestions are disabled for this household.",
+    )
     feature = build_household_ai_feature_status(db, household=access.household)
     if not feature.feature_enabled:
         raise ValueError(feature.reason or "AI is disabled.")
+
+    check_usage_quota(
+        db,
+        counter_key="ai_suggestions",
+        scope_type="household",
+        scope_key=access.household.external_id,
+    )
 
     resolved = resolve_provider_config(db, household=access.household)
     if resolved is None:
