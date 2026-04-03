@@ -45,7 +45,7 @@ export function LoginForm({ nextPath = "/app" }: LoginFormProps) {
   }
 
   return (
-    <form className="panel form-panel" onSubmit={handleSubmit}>
+    <form className="panel form-panel" onSubmit={handleSubmit} data-testid="login-form">
       <p className="eyebrow">Sign In</p>
       <h1>Login</h1>
       <label className="field">

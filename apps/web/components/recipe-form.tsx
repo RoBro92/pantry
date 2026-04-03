@@ -143,7 +143,7 @@ export function RecipeForm({
   }
 
   return (
-    <form className="panel recipe-form" onSubmit={handleSubmit}>
+    <form className="panel recipe-form" onSubmit={handleSubmit} data-testid={`recipe-form-${mode}`}>
       <p className="eyebrow">Recipe Editor</p>
       <h1>{mode === "create" ? "Create recipe" : "Edit recipe"}</h1>
       <label className="field">

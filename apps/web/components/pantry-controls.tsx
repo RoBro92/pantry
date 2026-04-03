@@ -71,6 +71,7 @@ export function PantryControls({
     <section className="control-grid">
       <form
         className="panel control-card"
+        data-testid="create-group-form"
         onSubmit={(event) =>
           submitForm(
             event,
@@ -95,6 +96,7 @@ export function PantryControls({
 
       <form
         className="panel control-card"
+        data-testid="create-location-form"
         onSubmit={(event) =>
           submitForm(
             event,
@@ -137,6 +139,7 @@ export function PantryControls({
 
       <form
         className="panel control-card"
+        data-testid="create-product-form"
         onSubmit={(event) => {
           const formData = new FormData(event.currentTarget);
           return submitForm(
@@ -178,6 +181,7 @@ export function PantryControls({
 
       <form
         className="panel control-card"
+        data-testid="add-stock-form"
         onSubmit={(event) => {
           const formData = new FormData(event.currentTarget);
           const purchasedOn = String(formData.get("purchased_on") ?? "");

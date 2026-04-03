@@ -74,7 +74,7 @@ export function AdminAIConfigForm({
   }
 
   return (
-    <div className="stack">
+    <div className="stack" data-testid="admin-ai-config-page">
       <section className="panel">
         <p className="eyebrow">Instance AI Provider</p>
         <h1>Provider Configuration</h1>

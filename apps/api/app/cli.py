@@ -9,6 +9,7 @@ from alembic.config import Config
 
 from app.core.db import SessionLocal
 from app.services.auth import count_platform_admins, create_platform_admin, reset_user_password
+from app.services.e2e_seed import seed_e2e_baseline
 
 
 def _load_password(value: str | None, prompt_text: str) -> str:
@@ -50,6 +51,20 @@ def reset_password(args: argparse.Namespace) -> None:
         print(f"Reset password for {user.email} ({user.external_id})")
 
 
+def seed_e2e(args: argparse.Namespace) -> None:
+    _run_migrations()
+
+    with SessionLocal() as db:
+        manifest = seed_e2e_baseline(db)
+
+    if getattr(args, "json_output", False):
+        print(manifest.to_json())
+        return
+
+    print("Seeded deterministic E2E baseline.")
+    print(manifest.to_json())
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Pantry API operational commands")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -66,6 +81,13 @@ def build_parser() -> argparse.ArgumentParser:
     reset_parser.add_argument("--email", required=True)
     reset_parser.add_argument("--password")
     reset_parser.set_defaults(func=reset_password)
+
+    seed_parser = subparsers.add_parser(
+        "seed-e2e",
+        help="Reset application data and seed the deterministic E2E baseline.",
+    )
+    seed_parser.add_argument("--json", action="store_true", dest="json_output")
+    seed_parser.set_defaults(func=seed_e2e)
 
     return parser
 

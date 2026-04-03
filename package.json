@@ -12,7 +12,10 @@
     "dev:web": "npm run dev --workspace @pantry/web",
     "build:web": "npm run build --workspace @pantry/web",
     "typecheck:web": "npm run typecheck --workspace @pantry/web",
+    "test:e2e": "playwright test",
     "version:show": "./infra/scripts/read-version.sh"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.52.0"
   }
 }
-

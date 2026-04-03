@@ -232,7 +232,7 @@ export default async function HouseholdPantryPage({
               </thead>
               <tbody>
                 {overview.stock_lots.map((lot) => (
-                  <tr key={lot.external_id}>
+                  <tr key={lot.external_id} data-testid={`stock-lot-row-${lot.external_id}`}>
                     <td>{lot.product_name}</td>
                     <td>
                       {lot.location_group_name} / {lot.location_name}

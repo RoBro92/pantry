@@ -71,7 +71,11 @@ function ImportLineEditor({
   }
 
   return (
-    <form className="import-line-card" onSubmit={handleSave}>
+    <form
+      className="import-line-card"
+      onSubmit={handleSave}
+      data-testid={`import-line-${line.external_id}`}
+    >
       <div className="page-actions">
         <div>
           <strong>
@@ -230,7 +234,7 @@ export function ImportReviewPanel({
             .
           </p>
         ) : (
-          <form className="stack" onSubmit={handleConfirm}>
+          <form className="stack" onSubmit={handleConfirm} data-testid="confirm-import-form">
             <div className="recipe-form-grid">
               <label className="field">
                 <span>Destination location</span>

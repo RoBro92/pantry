@@ -47,7 +47,7 @@ export function ImportUploadForm({ householdExternalId }: ImportUploadFormProps)
   }
 
   return (
-    <form className="panel import-upload-form" onSubmit={handleSubmit}>
+    <form className="panel import-upload-form" onSubmit={handleSubmit} data-testid="import-upload-form">
       <p className="eyebrow">Create Import</p>
       <h2>Upload for review</h2>
       <p className="section-copy">

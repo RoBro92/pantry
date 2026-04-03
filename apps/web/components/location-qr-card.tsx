@@ -9,7 +9,7 @@ type LocationQRCodeCardProps = {
 export async function LocationQRCodeCard({ location }: LocationQRCodeCardProps) {
   if (!location.browser_url || !location.browser_path) {
     return (
-      <article className="location-link-card panel">
+      <article className="location-link-card panel" data-testid={`location-link-card-${location.external_id}`}>
         <p className="eyebrow">Location Link</p>
         <h2>
           {location.location_group_name} / {location.name}
@@ -26,7 +26,7 @@ export async function LocationQRCodeCard({ location }: LocationQRCodeCardProps) 
   });
 
   return (
-    <article className="location-link-card panel">
+    <article className="location-link-card panel" data-testid={`location-link-card-${location.external_id}`}>
       <p className="eyebrow">Location QR</p>
       <h2>
         {location.location_group_name} / {location.name}

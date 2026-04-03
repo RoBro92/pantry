@@ -28,13 +28,14 @@ export function PantryLotActions({
     event.preventDefault();
     setIsRemoving(true);
     setRemoveError(null);
+    const form = event.currentTarget;
 
     try {
-      const formData = new FormData(event.currentTarget);
+      const formData = new FormData(form);
       await postToApi(`/api/households/${householdExternalId}/stock-lots/${lotExternalId}/remove`, {
         quantity: String(formData.get("quantity") ?? "")
       });
-      event.currentTarget.reset();
+      form.reset();
       router.refresh();
     } catch (error) {
       setRemoveError(error instanceof Error ? error.message : "Request failed.");
@@ -47,16 +48,17 @@ export function PantryLotActions({
     event.preventDefault();
     setIsMoving(true);
     setMoveError(null);
+    const form = event.currentTarget;
 
     try {
-      const formData = new FormData(event.currentTarget);
+      const formData = new FormData(form);
       await postToApi(`/api/households/${householdExternalId}/stock-lots/${lotExternalId}/move`, {
         quantity: String(formData.get("quantity") ?? ""),
         destination_location_external_id: String(
           formData.get("destination_location_external_id") ?? ""
         )
       });
-      event.currentTarget.reset();
+      form.reset();
       router.refresh();
     } catch (error) {
       setMoveError(error instanceof Error ? error.message : "Request failed.");
@@ -66,8 +68,8 @@ export function PantryLotActions({
   }
 
   return (
-    <div className="lot-actions">
-      <form className="inline-form" onSubmit={handleRemove}>
+    <div className="lot-actions" data-testid={`lot-actions-${lotExternalId}`}>
+      <form className="inline-form" onSubmit={handleRemove} data-testid={`remove-lot-form-${lotExternalId}`}>
         <input
           name="quantity"
           type="number"
@@ -82,7 +84,7 @@ export function PantryLotActions({
       </form>
       {removeError ? <p className="error-text compact-error">{removeError}</p> : null}
 
-      <form className="inline-form" onSubmit={handleMove}>
+      <form className="inline-form" onSubmit={handleMove} data-testid={`move-lot-form-${lotExternalId}`}>
         <input
           name="quantity"
           type="number"

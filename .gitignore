@@ -19,5 +19,7 @@ coverage/
 *.tsbuildinfo
 .idea/
 .vscode/
+playwright-report/
+test-results/
 private-docs/
 .local/
