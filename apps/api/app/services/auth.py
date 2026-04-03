@@ -66,6 +66,8 @@ def create_user(
     display_name: str | None = None,
     platform_role_code: str | None = None,
 ) -> User:
+    if len(password) < 8:
+        raise ValueError("Password must be at least 8 characters.")
     if get_user_by_email(db, email) is not None:
         raise ValueError("A user with that email already exists.")
 
@@ -76,7 +78,7 @@ def create_user(
     user = User(
         email=normalize_email(email),
         password_hash=hash_password(password),
-        display_name=display_name.strip() if display_name else None,
+        display_name=display_name.strip() if display_name and display_name.strip() else None,
         platform_role_id=platform_role.id if platform_role else None,
     )
     db.add(user)
@@ -86,7 +88,11 @@ def create_user(
 
 
 def create_household(db: Session, *, name: str) -> Household:
-    household = Household(name=name.strip())
+    normalized_name = name.strip()
+    if not normalized_name:
+        raise ValueError("Household name is required.")
+
+    household = Household(name=normalized_name)
     db.add(household)
     db.commit()
     db.refresh(household)

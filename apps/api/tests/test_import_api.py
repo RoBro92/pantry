@@ -5,7 +5,7 @@ from decimal import Decimal
 
 from sqlalchemy import select
 
-from app.domain.roles import HOUSEHOLD_USER_ROLE
+from app.domain.roles import HOUSEHOLD_ADMIN_ROLE
 from app.models.audit_event import AuditEvent
 from app.models.import_job import ImportJob
 from app.models.product import Product
@@ -31,7 +31,7 @@ def create_member_household(db_session, *, email: str, household_name: str):
         db_session,
         user=user,
         household=household,
-        role_code=HOUSEHOLD_USER_ROLE,
+        role_code=HOUSEHOLD_ADMIN_ROLE,
     )
     return user, household
 

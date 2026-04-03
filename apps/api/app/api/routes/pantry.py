@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from app.api.deps.auth import get_current_user
 from app.api.deps.tenancy import require_household_access
 from app.core.db import get_db_session
+from app.domain.roles import HOUSEHOLD_ADMIN_ROLE
 from app.models.user import User
 from app.schemas.pantry import (
     AddStockLotRequest,
@@ -77,7 +78,7 @@ def post_location_group(
     payload: CreateLocationGroupRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(get_current_user),
-    access: HouseholdAccess = Depends(require_household_access()),
+    access: HouseholdAccess = Depends(require_household_access(allowed_roles={HOUSEHOLD_ADMIN_ROLE})),
 ):
     try:
         group = create_location_group(db, household=access.household, actor=current_user, name=payload.name)
@@ -92,7 +93,7 @@ def post_location(
     payload: CreateLocationRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(get_current_user),
-    access: HouseholdAccess = Depends(require_household_access()),
+    access: HouseholdAccess = Depends(require_household_access(allowed_roles={HOUSEHOLD_ADMIN_ROLE})),
 ):
     try:
         location = create_location(
@@ -119,7 +120,7 @@ def post_product(
     payload: CreateProductRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(get_current_user),
-    access: HouseholdAccess = Depends(require_household_access()),
+    access: HouseholdAccess = Depends(require_household_access(allowed_roles={HOUSEHOLD_ADMIN_ROLE})),
 ):
     try:
         product = create_product(

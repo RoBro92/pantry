@@ -5,7 +5,7 @@ from decimal import Decimal
 
 from sqlalchemy import select
 
-from app.domain.roles import HOUSEHOLD_USER_ROLE
+from app.domain.roles import HOUSEHOLD_ADMIN_ROLE, HOUSEHOLD_USER_ROLE
 from app.models.audit_event import AuditEvent
 from app.models.stock_lot import StockLot
 from app.services.auth import create_household, create_membership, create_user
@@ -31,6 +31,18 @@ def create_member_household(db_session, *, email: str, household_name: str):
         user=user,
         household=household,
         role_code=HOUSEHOLD_USER_ROLE,
+    )
+    return user, household
+
+
+def create_household_with_role(db_session, *, email: str, household_name: str, role_code: str):
+    user = create_user(db_session, email=email, password=PASSWORD, display_name=email.split("@")[0].title())
+    household = create_household(db_session, name=household_name)
+    create_membership(
+        db_session,
+        user=user,
+        household=household,
+        role_code=role_code,
     )
     return user, household
 
@@ -66,10 +78,11 @@ def add_stock_lot(client, household_external_id: str, **payload) -> dict:
 
 
 def test_pantry_overview_aggregates_and_supports_search_and_filters(client, db_session):
-    user, household = create_member_household(
+    user, household = create_household_with_role(
         db_session,
         email="cook@example.com",
         household_name="Cook Household",
+        role_code=HOUSEHOLD_ADMIN_ROLE,
     )
     hidden_user, hidden_household = create_member_household(
         db_session,
@@ -191,10 +204,11 @@ def test_pantry_overview_aggregates_and_supports_search_and_filters(client, db_s
 
 
 def test_product_creation_rejects_alias_name_collision(client, db_session):
-    _, household = create_member_household(
+    _, household = create_household_with_role(
         db_session,
         email="collision@example.com",
         household_name="Collision Household",
+        role_code=HOUSEHOLD_ADMIN_ROLE,
     )
     login(client, email="collision@example.com")
 
@@ -223,10 +237,11 @@ def test_product_creation_rejects_alias_name_collision(client, db_session):
 
 
 def test_move_stock_preserves_identity_on_full_move_and_splits_on_partial_move(client, db_session):
-    _, household = create_member_household(
+    _, household = create_household_with_role(
         db_session,
         email="move@example.com",
         household_name="Move Household",
+        role_code=HOUSEHOLD_ADMIN_ROLE,
     )
     login(client, email="move@example.com")
 
@@ -279,10 +294,11 @@ def test_move_stock_preserves_identity_on_full_move_and_splits_on_partial_move(c
 
 
 def test_remove_stock_depletes_lot_and_excludes_it_from_active_views(client, db_session):
-    _, household = create_member_household(
+    _, household = create_household_with_role(
         db_session,
         email="remove@example.com",
         household_name="Remove Household",
+        role_code=HOUSEHOLD_ADMIN_ROLE,
     )
     login(client, email="remove@example.com")
 
@@ -335,3 +351,56 @@ def test_pantry_endpoints_enforce_household_scoping(client, db_session):
 
     assert allowed.status_code == 200
     assert denied.status_code == 404
+
+
+def test_household_user_cannot_change_pantry_structure(client, db_session):
+    _, household = create_household_with_role(
+        db_session,
+        email="pantry-user@example.com",
+        household_name="Pantry User Household",
+        role_code=HOUSEHOLD_USER_ROLE,
+    )
+    login(client, email="pantry-user@example.com")
+
+    group_response = client.post(
+        f"/api/households/{household.external_id}/location-groups",
+        json={"name": "Kitchen"},
+    )
+    assert group_response.status_code == 404
+
+    product_response = client.post(
+        f"/api/households/{household.external_id}/products",
+        json={"name": "Pasta", "default_unit": "count", "aliases": [], "barcodes": []},
+    )
+    assert product_response.status_code == 404
+
+
+def test_household_admin_can_change_pantry_structure(client, db_session):
+    _, household = create_household_with_role(
+        db_session,
+        email="pantry-admin@example.com",
+        household_name="Pantry Admin Household",
+        role_code=HOUSEHOLD_ADMIN_ROLE,
+    )
+    login(client, email="pantry-admin@example.com")
+
+    group_response = client.post(
+        f"/api/households/{household.external_id}/location-groups",
+        json={"name": "Kitchen"},
+    )
+    assert group_response.status_code == 201
+
+    location_response = client.post(
+        f"/api/households/{household.external_id}/locations",
+        json={
+            "location_group_external_id": group_response.json()["external_id"],
+            "name": "Shelf A",
+        },
+    )
+    assert location_response.status_code == 201
+
+    product_response = client.post(
+        f"/api/households/{household.external_id}/products",
+        json={"name": "Pasta", "default_unit": "count", "aliases": [], "barcodes": []},
+    )
+    assert product_response.status_code == 201

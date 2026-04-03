@@ -5,6 +5,7 @@ from datetime import date, timedelta
 from sqlalchemy import select
 
 from app.domain.ai import AI_PROVIDER_OLLAMA
+from app.domain.roles import HOUSEHOLD_ADMIN_ROLE
 from app.models.audit_event import AuditEvent
 from app.schemas.ai import AISuggestionRequest
 from app.services.ai_config import upsert_instance_provider_config
@@ -35,7 +36,7 @@ def create_member_household(db_session, *, email: str, household_name: str):
         db_session,
         user=user,
         household=household,
-        role_code="household_user",
+        role_code=HOUSEHOLD_ADMIN_ROLE,
     )
     return user, household
 
