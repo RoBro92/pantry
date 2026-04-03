@@ -22,8 +22,11 @@ Security needs to shape the architecture before feature depth arrives.
 - Reject credential-bearing provider base URLs and never return raw provider secrets after save.
 - Encrypt stored provider secrets at rest for self-hosted deployments.
 - Encrypt stored SMTP passwords at rest and never return them in plaintext after save.
+- Reject malformed SMTP host configuration such as embedded credentials, paths, query strings, or inline ports.
 - Require authenticated, server-scoped access checks before a QR/deep-link location route reveals household data.
 - Keep platform diagnostics useful but secret-safe: no passwords, tokens, or fabricated host metrics.
+- Keep request metering and future quota foundations server-side, keyed by route templates and scoped identifiers rather than raw URLs or secret-bearing payloads.
+- Keep hosted-only operational details, runbooks, and support mechanics out of the public repo.
 
 ## Logging Guidance
 
@@ -31,9 +34,11 @@ Security needs to shape the architecture before feature depth arrives.
 - Audit events are for accountable business actions.
 - Do not store raw secrets in either.
 - Do not log prompt payloads that would expose secrets or credential-bearing URLs.
+- Do not log raw SMTP or provider connection strings if they include credentials.
 
 ## Deferred Security Work
 
 - CSRF/session hardening details.
 - File scanning and stronger quarantine/isolation details beyond the current storage and status foundation.
 - Secret rotation and backup policies for hosted environments.
+- Real quota enforcement and hosted abuse throttling policies.

@@ -21,6 +21,8 @@ Pantry needs configuration at multiple levels.
 - AI provider configuration is stored in the database at installation scope.
 - Public/browser base URL is stored in the database and used for generated browser links such as location QR codes.
 - SMTP foundation settings are stored in the database at installation scope with password redaction and encrypted-at-rest storage.
+- Feature-flag overrides can now be stored at instance or household scope.
+- Usage counters now exist as a separate metering primitive and are not stored inside settings records.
 
 ## Precedence
 

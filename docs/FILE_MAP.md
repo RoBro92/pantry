@@ -5,6 +5,8 @@
 - `VERSION`: canonical application version.
 - `compose.yml`: local development stack.
 - `.env.example`: environment variable template.
+- `package.json`: workspace scripts, including web validation and Playwright E2E entrypoints.
+- `playwright.config.ts`: Docker-backed Playwright configuration.
 - `README.md`: project overview and local setup.
 
 ## Applications
@@ -20,14 +22,16 @@
 ## Infrastructure
 
 - `infra/docker/`: Dockerfiles for web, API, and worker.
-- `infra/scripts/`: small repository utility scripts such as version helpers and repeatable smoke checks.
+- `infra/scripts/`: small repository utility scripts such as version helpers, repeatable smoke checks, E2E seed setup, and worker-once helpers.
 
 ## Key Backend Paths
 
 - `apps/api/alembic/`: migration environment and migration history.
 - `apps/api/app/models/`: SQLAlchemy identity, tenancy, pantry, recipe, import, stock-lot, and audit-event models.
 - `apps/api/app/models/ai_provider_config.py`: instance- and future household-scoped AI provider configuration model.
+- `apps/api/app/models/feature_flag.py`: server-side feature-flag overrides for instance and household scopes.
 - `apps/api/app/models/instance_setting.py`: installation-scoped public URL and SMTP foundation settings.
+- `apps/api/app/models/usage_counter.py`: request metering and future quota-analysis foundation records.
 - `apps/api/app/api/routes/`: health, auth, admin, and household routes.
 - `apps/api/app/api/routes/ai_admin.py`: platform-admin AI provider configuration and health-check routes.
 - `apps/api/app/api/routes/diagnostics_admin.py`: platform-admin diagnostics route built from measured runtime data only.
@@ -45,11 +49,14 @@
 - `apps/api/app/services/import_*.py`: safe upload storage, deterministic line matching, worker processing, review workflow, and import query builders.
 - `apps/api/app/services/ai_*.py`: AI provider config resolution, pantry-context assembly, prompt contracts, and suggestion orchestration.
 - `apps/api/app/services/instance_settings.py`: instance settings resolution with env-overrides, redaction, and encrypted SMTP secret handling.
+- `apps/api/app/services/platform_features.py`: deployment-default plus scoped feature-flag resolution and enforcement helpers.
+- `apps/api/app/services/usage_counters.py`: usage counter increments and non-enforcing quota-check skeletons.
 - `apps/api/app/services/diagnostics.py`: platform-admin diagnostics assembly for app, worker, Redis, queue, DB, and config summaries.
 - `apps/api/app/services/runtime_status.py`: Redis-backed worker heartbeat publishing and Redis health helpers.
 - `apps/api/app/services/location_links.py`: QR-safe location route and browser-link builders.
 - `apps/api/app/services/ai_providers/`: provider adapter abstractions plus Ollama and OpenAI-compatible implementations.
 - `apps/api/tests/`: focused API tests for auth, tenancy, pantry, recipe, import, AI, diagnostics, SMTP, and QR/location-link flows.
+- `tests/e2e/`: Playwright browser coverage for critical self-hosted flows against the Docker stack.
 
 ## Key Frontend Paths
 

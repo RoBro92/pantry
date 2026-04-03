@@ -7,7 +7,7 @@ This file is the concrete local validation policy for Pantry milestones. It defi
 - Run the smallest relevant validation set that still exercises every changed area.
 - Prefer unit and integration tests for logic changes.
 - Use smoke checks to confirm changed services boot and respond correctly in the local stack.
-- Run E2E only when a user-facing flow changed and the repository already contains E2E coverage for that flow.
+- Run the Docker-backed Playwright suite when a user-facing flow changed and the covered paths overlap the shipped E2E scenarios.
 - Do not mark a milestone complete without recording what was run, what passed, and what remains blocked.
 
 ## Local Validation Setup
@@ -17,6 +17,7 @@ Run these setup steps before milestone validation when needed:
 ```bash
 cp .env.example .env
 npm install
+npx playwright install chromium
 python3 -m pip install -r apps/api/requirements-dev.txt
 ```
 
@@ -63,6 +64,18 @@ npm run typecheck:web
 npm run build:web
 ```
 
+Seed deterministic E2E data in the running stack:
+
+```bash
+./infra/scripts/e2e-seed.sh
+```
+
+Run the current E2E suite:
+
+```bash
+npm run test:e2e
+```
+
 Run the repo smoke checks:
 
 ```bash
@@ -107,7 +120,21 @@ Run E2E when both conditions are true:
 - A user-facing flow changed.
 - The repository already contains E2E coverage for that flow.
 
-If no E2E coverage exists yet, state that explicitly in `docs/PROJECT_STATE.md` instead of implying the flow was fully exercised.
+Current Docker-backed Playwright coverage includes:
+
+- Login and authenticated dashboard landing.
+- Platform admin diagnostics page load.
+- Pantry create-location, add-stock, move-stock, and remove-stock flow.
+- Recipe create/detail with pantry coverage display.
+- Import upload, review, and confirm-to-pantry flow.
+- AI unconfigured and unhealthy-provider UX.
+- QR/location route auth redirect and post-login landing.
+
+The current suite must remain deterministic:
+
+- Seed data through `./infra/scripts/e2e-seed.sh`.
+- Run worker-dependent steps through the repo helper used by the tests.
+- Do not depend on external AI, SMTP, or scraping services.
 
 ## Migration And Setup Notes
 

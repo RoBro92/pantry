@@ -28,6 +28,9 @@ Initial architectural decisions recorded on 2026-04-02.
 | D-020 | Keep AI suggestions advisory-only and read-only in the first AI milestone. | This preserves pantry and import safety while structured prompts, provider health handling, and UI feedback mature. |
 | D-021 | Store installation-scoped public/browser URL and SMTP foundation settings in a single instance-settings record, while allowing deployment environment variables to override them. | Self-hosted installs need editable platform settings, but env overrides remain important for immutable deployments and secret injection. |
 | D-022 | Keep platform diagnostics on a real-data-only policy backed by app process data, DB queries, Redis checks, and worker heartbeats instead of guessed host metrics. | Honest self-hosted diagnostics are more trustworthy than simulated CPU, memory, or container metrics the app cannot directly observe. |
+| D-023 | Normalize deployment modes to `self_hosted`, `demo`, and `saas`, with `saas` remaining a placeholder boundary in the public repo. | This keeps mode handling simple in config and shared types without exposing hosted tiering in the public UI. |
+| D-024 | Introduce `FeatureFlag` and `UsageCounter` models before SaaS logic exists, but keep quota checks non-enforcing for now. | The structural primitives are needed early so future hosted work does not require invasive rewrites, while self-hosted behavior stays unchanged today. |
+| D-025 | Remove internal prompt and Codex-specific instructions from the public repository and keep them only in local `private-docs/`. | Public docs should remain user-relevant and open-source-safe, while internal workflows and private operational notes stay out of versioned public history. |
 
 ## Deferred
 

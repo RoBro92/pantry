@@ -122,12 +122,30 @@ Current scope delivered:
 - First real E2E suite for core user-facing flows if it still does not exist.
 - Additional self-hosted hardening where it directly supports later hosted expansion.
 
-## Milestone 8: Shopping
+Status: implemented.
+Current scope delivered:
+
+- Docker-backed Playwright E2E coverage for login, diagnostics, pantry, recipe, import, AI state handling, and QR/location auth flows.
+- Deterministic E2E seeding helpers plus worker-once helpers so browser tests do not depend on external services.
+- Recipe URL imports now queue worker processing, parse lightweight structured metadata, create recipes, and surface explicit failure states.
+- Import parsing now skips empty rows safely and flags invalid quantities or dates for review instead of failing unclearly.
+- AI runtime failures now degrade cleanly for users while marking provider health unhealthy, and SMTP config validation now rejects malformed host inputs early.
+- Internal prompt/Codex docs were removed from the public repo and retained only in local `private-docs/`.
+- Deployment modes now resolve as `self_hosted`, `demo`, and `saas`, with server-side feature flags and usage counters in place but no SaaS product logic or UI.
+
+## Milestone 8: Private SaaS Repo Setup
+
+- Create the private hosted-services repository and copy only the boundaries that belong there.
+- Formalize public-vs-private ownership for hosted operations, billing, support, and deployment automation.
+- Extract any shared packages or contracts needed between the public repo and the private hosted repo.
+- Keep the public repo self-hosted-first and free of SaaS-only UI or operational internals.
+
+## Milestone 9: Shopping
 
 - Shopping lists and list items.
 - Basic consumption and replenishment workflows.
 
-## Milestone 9: Hardening
+## Milestone 10: Hardening
 
 - Test coverage expansion beyond milestone-specific additions.
 - Observability improvements.

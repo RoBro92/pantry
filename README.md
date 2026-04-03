@@ -2,7 +2,7 @@
 
 Pantry is a self-hosted-first pantry management application designed for households that want reliable inventory tracking, import workflows, recipe support, and future AI-assisted features without locking the core product to a single hosting or provider model.
 
-This repository starts with the self-hosted foundation and keeps the architecture ready for later SaaS deployment modes. Milestone 1 now adds the first identity, tenancy, and admin foundations on top of that scaffold.
+This repository starts with the self-hosted foundation and keeps the architecture ready for later SaaS deployment modes. The current state includes pantry, recipe, import, AI, diagnostics, SMTP, QR/location, and Docker-backed Playwright E2E foundations without introducing hosted-only product logic.
 
 The current repository includes:
 
@@ -109,6 +109,8 @@ Important environment variables:
 - `INTERNAL_API_BASE_URL`: server-side API URL used by Next.js server components. In Docker Compose this should point to `http://api:8000`.
 - `SESSION_SECRET_KEY`: secret used to sign web sessions. Replace the placeholder before any real deployment.
 - `SESSION_HTTPS_ONLY`: set to `true` behind HTTPS.
+- `DEPLOYMENT_MODE`: validated as `self_hosted`, `demo`, or `saas`, with `saas` remaining a placeholder boundary in this public repo.
+- `DEMO_MODE_ENABLED`: optional demo-mode config flag; this milestone does not implement demo reset or disposable-data automation.
 
 ## Documentation
 

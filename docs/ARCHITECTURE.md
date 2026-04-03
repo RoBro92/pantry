@@ -26,8 +26,9 @@ Pantry is organized as a monorepo with separate runtime services:
 - Audit events are durable business records, distinct from runtime logs.
 - AI provider calls go through adapters, not through core domain services directly.
 - Installation-level SMTP, browser-link settings, and diagnostics remain API-owned concerns rather than being embedded in the web layer.
+- Deployment modes, feature flags, and usage counters are resolved and enforced in API-side services so future hosted differences do not leak into presentational UI.
 - QR/browser deep links must resolve tenant access on the server before revealing household-scoped location data.
 
 ## Future SaaS Readiness
 
-The public repo covers self-hosted and shared architecture concerns. SaaS operational details such as billing workflows, support tooling, secret rotation practices, or hosted runbooks belong in local-only `private-docs/`.
+The public repo covers self-hosted and shared architecture concerns. SaaS operational details such as billing workflows, support tooling, secret rotation practices, or hosted runbooks belong in local-only `private-docs/` or a future private SaaS repository.

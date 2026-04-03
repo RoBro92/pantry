@@ -19,6 +19,7 @@ Current key variables:
 
 - `ENVIRONMENT`
 - `DEPLOYMENT_MODE`
+- `DEMO_MODE_ENABLED`
 - `LOG_LEVEL`
 - `WEB_PORT`
 - `API_PORT`
@@ -46,6 +47,8 @@ Current key variables:
 - `WORKER_POLL_INTERVAL_SECONDS`
 
 For the local Docker Compose stack, the web service should use `INTERNAL_API_BASE_URL=http://api:8000` so server-side Next.js requests reach the API over the Compose network. `compose.yml` now defaults the web container to that value unless you override it explicitly.
+
+`DEPLOYMENT_MODE` is validated as `self_hosted`, `demo`, or `saas`. The `saas` mode is a placeholder boundary only in this public repo; it does not enable billing, hosted onboarding, or SaaS-only UI.
 
 ## Instance Settings And Precedence
 

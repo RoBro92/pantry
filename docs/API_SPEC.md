@@ -63,7 +63,7 @@ This file records the initial API shape and conventions, not a completed endpoin
 - `PUT /api/households/{household_external_id}/recipes/{recipe_external_id}`
   - Replaces recipe title, notes, and ingredient lines, recomputes deterministic links, and emits an audit event.
 - `POST /api/households/{household_external_id}/recipe-imports/url`
-  - Captures a normalized recipe URL import request as v1 foundation work and emits an audit event.
+  - Queues a normalized recipe URL import request for worker processing from structured page metadata and emits audit events for request, completion, or failure.
 - `GET /api/households/{household_external_id}/imports`
   - Returns household import history with job status, review counts, and source-file summaries.
 - `GET /api/households/{household_external_id}/imports/{import_external_id}`
@@ -92,6 +92,7 @@ This file records the initial API shape and conventions, not a completed endpoin
 - Import endpoints must never write pantry stock before explicit confirmation of reviewed lines.
 - AI endpoints should use structured request and response contracts instead of ad hoc prompt strings or free-form markdown output.
 - Diagnostics endpoints must return only measured application-visible data and must mark unavailable values as unavailable instead of estimating host metrics.
+- Feature availability checks and future quota checks must be enforced server-side rather than trusted to the web UI.
 
 ## Auth Assumptions
 
@@ -103,6 +104,6 @@ This file records the initial API shape and conventions, not a completed endpoin
 - Household create/update flows for platform admins or household admins as product requirements sharpen.
 - Edit and archive flows for pantry structure records.
 - Shopping-list persistence and consumption/replenishment workflows.
-- Recipe URL import worker execution tied into the new import-job architecture.
 - AI-assisted import review flows that reuse the provider abstraction without bypassing human confirmation.
 - Household-scoped provider overrides once product requirements justify them.
+- Private hosted-admin and billing-adjacent API surfaces in a separate SaaS repository once the public/self-hosted boundary is ready.
