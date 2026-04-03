@@ -53,7 +53,7 @@ Updated: 2026-04-03
 - `./infra/scripts/e2e-seed.sh`: passed.
 - `npm run test:e2e`: passed. `9 passed`.
 - `docker compose exec -T web sh -lc 'node -v && npm -v && npm run build --workspace @pantry/web'`: passed under `Node.js v20.20.0` / `npm 10.8.2`.
-- `docker compose down`: pending until the milestone close-out step at the end of this session.
+- `docker compose down`: passed.
 
 ## Blockers / Gaps
 
