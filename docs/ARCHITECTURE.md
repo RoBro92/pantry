@@ -26,6 +26,7 @@ Pantry is organized as a monorepo with separate runtime services:
 - Audit events are durable business records, distinct from runtime logs.
 - AI provider calls go through adapters, not through core domain services directly.
 - Installation-level SMTP, browser-link settings, and diagnostics remain API-owned concerns rather than being embedded in the web layer.
+- First-run bootstrap state and installation provisioning remain API-owned concerns, with the web app acting only as the browser client for setup and admin flows.
 - Deployment modes, feature flags, and usage counters are resolved and enforced in API-side services so future hosted differences do not leak into presentational UI.
 - QR/browser deep links must resolve tenant access on the server before revealing household-scoped location data.
 

@@ -4,6 +4,7 @@ import {
   login,
   loginThroughApi,
   reseedE2E,
+  resetToUninitialized,
   runWorkerOnce,
   type E2ESeedManifest
 } from "./helpers";
@@ -12,6 +13,26 @@ let manifest: E2ESeedManifest;
 
 test.beforeEach(() => {
   manifest = reseedE2E();
+});
+
+test("first-run setup bootstraps the initial platform admin in the browser", async ({ page }) => {
+  resetToUninitialized();
+
+  await page.goto("/login");
+
+  await expect(page).toHaveURL(/\/setup$/);
+  await expect(page.getByTestId("setup-bootstrap-form")).toBeVisible();
+
+  const form = page.getByTestId("setup-bootstrap-form");
+  await form.getByLabel("Email").fill("owner@example.com");
+  await form.getByLabel("Display name").fill("Owner");
+  await form.getByLabel("Password", { exact: true }).fill("correct horse battery");
+  await form.getByLabel("Confirm password").fill("correct horse battery");
+  await form.getByRole("button", { name: "Create platform admin" }).click();
+
+  await expect(page).toHaveURL(/\/admin$/);
+  await expect(page.getByRole("heading", { name: "Installation Console" })).toBeVisible();
+  await expect(page.getByText("Make the install usable")).toBeVisible();
 });
 
 test("login lands on the authenticated dashboard", async ({ page }) => {
@@ -208,6 +229,63 @@ test("ai flow covers unconfigured and configured-but-unavailable states", async 
 
   await page.goto(`/app/households/${manifest.household_external_id}/ai`);
   await expect(page.getByText("The configured AI provider is unhealthy.")).toBeVisible();
+});
+
+test("platform admin can create a user, create a household, and assign membership", async ({
+  page
+}) => {
+  await loginThroughApi(page, {
+    email: manifest.admin_email,
+    password: manifest.password
+  });
+
+  await page.goto("/admin/users");
+
+  const createUserForm = page.getByTestId("admin-create-user-form");
+  await createUserForm.getByLabel("Email").fill("weekday-member@example.com");
+  await createUserForm.getByLabel("Display name").fill("Weekday Member");
+  await createUserForm.getByLabel("Password", { exact: true }).fill(manifest.password);
+  await createUserForm.getByLabel("Confirm password").fill(manifest.password);
+  await createUserForm.getByRole("button", { name: "Create user" }).click();
+
+  await expect(page.getByRole("cell", { name: "weekday-member@example.com" })).toBeVisible();
+
+  await page.goto("/admin/households");
+
+  const createHouseholdForm = page.getByTestId("admin-create-household-form");
+  await createHouseholdForm.getByLabel("Household name").fill("Weekday Household");
+  await createHouseholdForm.getByRole("button", { name: "Create household" }).click();
+
+  await expect(page.getByRole("cell", { name: "Weekday Household" })).toBeVisible();
+
+  const membershipForm = page.getByTestId("admin-assign-membership-form");
+  await membershipForm
+    .locator('select[name="household_external_id"]')
+    .selectOption({ label: "Weekday Household" });
+  await membershipForm
+    .locator('select[name="user_external_id"]')
+    .selectOption({ label: "Weekday Member (weekday-member@example.com)" });
+  await membershipForm.locator('select[name="role"]').selectOption("household_user");
+  await membershipForm.getByRole("button", { name: "Assign membership" }).click();
+
+  await expect(page.getByText("Assigned weekday-member@example.com as household_user.")).toBeVisible();
+  await expect(page.getByRole("row", { name: /Weekday Household .*Weekday Member \(household_user\)/ })).toBeVisible();
+
+  await page.getByRole("button", { name: "Logout" }).click();
+
+  await login(page, {
+    email: "weekday-member@example.com",
+    password: manifest.password
+  });
+
+  await expect(page.locator(".household-card").getByText("Weekday Household")).toBeVisible();
+  await page
+    .locator(".household-card", { hasText: "Weekday Household" })
+    .getByRole("link", { name: "Open pantry" })
+    .click();
+
+  await expect(page.getByRole("heading", { name: "Weekday Household" })).toBeVisible();
+  await expect(page.getByText("Household-admin actions only")).toBeVisible();
 });
 
 test("location route redirects to login and lands on the correct location page after auth", async ({

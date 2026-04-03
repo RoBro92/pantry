@@ -3,8 +3,24 @@
 ## Local Self-Hosted Development
 
 1. Copy `.env.example` to `.env`.
-2. Set safe local placeholders for database password and any future provider credentials.
-3. Run `docker compose up --build`.
+2. Replace placeholder secrets and review ports, URLs, and session settings.
+3. Run `docker compose up -d --build`.
+4. Run `docker compose run --rm api alembic upgrade head`.
+5. Open `http://localhost:3000/setup` to create the first platform admin.
+6. Use the installation console to create a household, create or reset users, and assign memberships.
+7. Set the public/browser base URL before relying on QR/location links outside localhost.
+
+If you run web build or typecheck commands on the host instead of inside Docker, use `Node.js 20.x`
+and `npm 10.x`. The Compose web image already pins that runtime.
+
+## Practical First-Run Checklist
+
+- Confirm the web app loads on `/` and `/setup`.
+- Create exactly one initial platform admin through `/setup` or the CLI fallback.
+- Create at least one household and one non-admin user if multiple people will use the install.
+- Assign memberships before expecting `/app` household cards to appear for those users.
+- Configure the public/browser URL in `/admin/settings` before sharing location links.
+- Leave AI and SMTP disabled unless the operator has configured reachable providers.
 
 The local stack exposes:
 
@@ -45,6 +61,15 @@ Current key variables:
 - `SMTP_ENABLED`
 - `SMTP_TIMEOUT_SECONDS`
 - `WORKER_POLL_INTERVAL_SECONDS`
+
+For self-hosted operators, the most important values to review early are:
+
+- `SESSION_SECRET_KEY`
+- `SESSION_HTTPS_ONLY`
+- `INTERNAL_API_BASE_URL`
+- `PUBLIC_BROWSER_BASE_URL`
+- `DEPLOYMENT_MODE`
+- `POSTGRES_PASSWORD`
 
 For the local Docker Compose stack, the web service should use `INTERNAL_API_BASE_URL=http://api:8000` so server-side Next.js requests reach the API over the Compose network. `compose.yml` now defaults the web container to that value unless you override it explicitly.
 

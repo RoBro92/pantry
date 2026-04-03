@@ -8,7 +8,9 @@ Updated: 2026-04-03
 - `VERSION` set to `0.1.0` as the canonical application version.
 - Docker Compose stack for web, API, worker, PostgreSQL, and Redis.
 - Next.js web app with login, authenticated household flows, recipe/import/AI pages, authenticated location deep links, and platform admin pages for overview, AI, SMTP, diagnostics, and settings.
+- Next.js web app with browser-based first-run setup, clearer empty states, version visibility, installation-console user and household provisioning, and role-aware pantry controls.
 - FastAPI app with server-enforced auth, tenancy, pantry, recipe, import, AI, diagnostics, SMTP, and QR/location routes.
+- FastAPI app with one-time setup routes plus platform-admin user, household, and membership management endpoints.
 - Python worker with import processing, recipe URL import processing, structured logging, and Redis-backed heartbeat publishing.
 - SQLAlchemy models plus Alembic migrations for identity, tenancy, pantry, recipes, reviewed imports, AI provider config, instance settings, feature flags, and usage counters.
 - Docker-backed Playwright E2E coverage for critical self-hosted flows.
@@ -30,39 +32,41 @@ Updated: 2026-04-03
 
 ## Latest Change
 
-- Added the first real Playwright E2E suite with deterministic Docker-backed seeding and worker helpers.
-- Closed deferred gaps in recipe URL imports, import-line validation, AI runtime failure handling, and SMTP config validation.
-- Removed internal prompt/Codex-specific docs from the public repository and kept them only in local `private-docs/`.
-- Added validated deployment-mode support for `self_hosted`, `demo`, and `saas`, plus server-side `FeatureFlag` and `UsageCounter` foundations.
-- Removed public UI exposure of future hosted modes from the landing page while preserving SaaS-readiness primitives behind server boundaries.
-- Fixed a worker-image dependency gap discovered during milestone validation by adding `httpx` and `pydantic` to `apps/worker/requirements.txt`.
+- Implemented Milestone 8 self-hosted product hardening, setup experience, UX polish, and release-readiness work.
+- Added `/api/setup/status` and `/api/setup/bootstrap-platform-admin` plus a browser `/setup` flow for the first platform admin, with one-time server-side enforcement and immediate sign-in.
+- Added installation-console flows for platform admins to create users, create households, and assign memberships without leaving the app.
+- Tightened pantry structure permissions so only `household_admin` can create location groups, locations, and products, while day-to-day stock actions remain available to `household_user`.
+- Improved login, dashboard, pantry, import, recipe, AI, and admin UX with clearer empty states, better validation/error messages, and more explicit guidance for unconfigured or unhealthy installation features.
+- Expanded Docker-backed Playwright coverage to include first-run setup and platform-admin provisioning flows, including a UI-level check that a normal household user cannot administer pantry structure.
+- Updated public docs for the supported self-hosted setup path and recorded that host-side web build commands require Node 20 / npm 10, while the Docker web container remains the canonical validation runtime.
 
 ## Validation Results
 
-- `npm install`: passed.
-- `python3 -m pip install -r apps/api/requirements-dev.txt`: passed.
-- `npx playwright install chromium`: passed.
+- `cd apps/api && pytest tests/test_pantry_api.py tests/test_setup_api.py tests/test_platform_admin_api.py -q`: passed. `17 passed`.
+- `cd apps/api && pytest tests/test_ai_api.py tests/test_import_api.py tests/test_recipe_api.py -q`: passed. `15 passed`.
+- `cd apps/api && pytest -q`: passed. `37 passed`.
+- `npm run typecheck:web`: passed.
+- `npm run build:web`: failed on the host machine because this environment is `Node.js v25.6.1` / `npm 11.9.0`, which is outside the supported local runtime for the web toolchain.
 - `docker compose up -d --build`: passed.
 - `docker compose run --rm api alembic upgrade head`: passed.
-- `cd apps/api && pytest -q`: passed. `30 passed`.
-- `npm run typecheck:web`: passed.
-- `npm run build:web`: passed.
-- `./infra/scripts/smoke-check.sh`: initially failed because the worker image was missing `httpx` for the new recipe URL-import worker path; after updating worker dependencies and rebuilding, passed.
+- `./infra/scripts/smoke-check.sh`: passed.
 - `./infra/scripts/e2e-seed.sh`: passed.
-- `npm run test:e2e`: passed. `7 passed`.
-- `docker compose down`: passed.
+- `npm run test:e2e`: passed. `9 passed`.
+- `docker compose exec -T web sh -lc 'node -v && npm -v && npm run build --workspace @pantry/web'`: passed under `Node.js v20.20.0` / `npm 10.8.2`.
+- `docker compose down`: pending until the milestone close-out step at the end of this session.
 
 ## Blockers / Gaps
 
-- `saas` mode is still a placeholder only. There is no hosted billing, onboarding, support tooling, or SaaS-specific UI in this repository.
-- Quota checks are intentionally non-enforcing in this milestone. Usage counters exist, but no limits are being applied yet.
-- Demo mode is configuration-only. There is no demo reset, wipe, or preview-orchestration system.
-- Recipe URL import processing is intentionally lightweight and currently depends on structured metadata such as JSON-LD; heavy scraping, OCR, or browser automation is still deferred.
+- Host-side web build commands currently require `Node.js 20.x` and `npm 10.x`. The local Docker web container already uses that runtime, but unsupported host runtimes can fail before app code is evaluated.
+- Quota checks are still intentionally non-enforcing. Usage counters exist, but no user-visible limits or operator-configurable enforcement exist yet.
+- Demo mode remains configuration-only. There is no demo reset, data wipe, or showcase orchestration system.
+- Recipe URL import processing is still intentionally lightweight and depends on structured metadata such as JSON-LD rather than heavy scraping or browser automation.
 - SMTP remains a foundation-only surface. There are still no invitation, password-recovery, or notification delivery workflows.
+- Pantry structure edit/archive flows and richer household lifecycle tooling are still limited; the new provisioning UX covers first-use creation, not full long-term admin operations.
 
 ## Recommended Next Milestone
 
-Milestone 8 should set up the separate private SaaS repository and formalize the boundary between this public self-hosted codebase and hosted-only operations. That pass should focus on repository separation, shared contract extraction, and ownership rules rather than adding public-repo SaaS product behavior.
+Milestone 9 should focus on shopping and day-to-day pantry workflow completion: shopping lists, deliberate consumption/replenishment flows, and the highest-value links between pantry coverage, recipe gaps, and household purchasing.
 
 ## Useful Commands
 
@@ -78,6 +82,7 @@ npm run build:web
 ./infra/scripts/smoke-check.sh
 ./infra/scripts/e2e-seed.sh
 npm run test:e2e
+docker compose exec -T web sh -lc 'npm run build --workspace @pantry/web'
 docker compose down
 docker compose run --rm api python -m app.cli bootstrap-platform-admin --email admin@example.com
 docker compose run --rm api python -m app.cli reset-password --email admin@example.com

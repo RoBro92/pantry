@@ -23,6 +23,8 @@ python3 -m pip install -r apps/api/requirements-dev.txt
 
 If dependencies are already installed and `.env` already exists, reuse them.
 Keep `.env` aligned with `.env.example` for service-to-service validation. In particular, the web smoke checks expect `INTERNAL_API_BASE_URL=http://api:8000`.
+For host-side web validation commands, use `Node.js 20.x` with `npm 10.x`. Newer host runtimes may
+fail in Next.js internals even when the Dockerized web service is healthy.
 
 ## Validation Order
 
@@ -122,7 +124,9 @@ Run E2E when both conditions are true:
 
 Current Docker-backed Playwright coverage includes:
 
+- First-run browser setup for the initial platform admin.
 - Login and authenticated dashboard landing.
+- Platform-admin user creation, household creation, and membership assignment.
 - Platform admin diagnostics page load.
 - Pantry create-location, add-stock, move-stock, and remove-stock flow.
 - Recipe create/detail with pantry coverage display.
@@ -133,6 +137,7 @@ Current Docker-backed Playwright coverage includes:
 The current suite must remain deterministic:
 
 - Seed data through `./infra/scripts/e2e-seed.sh`.
+- Reset to an uninitialized install only through repo-owned helper scripts used by the suite.
 - Run worker-dependent steps through the repo helper used by the tests.
 - Do not depend on external AI, SMTP, or scraping services.
 

@@ -26,7 +26,7 @@ The current repository includes:
 - Uploaded files treated as hostile input
 - Structured logging and audit/event thinking from the start
 
-## Local Development
+## First-Time Self-Hosted Setup
 
 1. Copy the example environment file:
 
@@ -34,25 +34,44 @@ The current repository includes:
 cp .env.example .env
 ```
 
-2. Review the placeholder secrets and ports in `.env`.
+2. Review the placeholder secrets and ports in `.env`, especially `SESSION_SECRET_KEY`,
+   `POSTGRES_PASSWORD`, and any future provider credentials.
+
+Local host-side web commands currently expect `Node.js 20.x` with `npm 10.x`. The Docker stack
+already uses Node 20, so Docker-backed setup and E2E runs are the safest default on newer host
+machines.
 
 3. Start the local stack:
 
 ```bash
-docker compose up --build
+docker compose up -d --build
+docker compose run --rm api alembic upgrade head
 ```
 
-4. Open the services:
+4. Open `http://localhost:3000/setup` and create the first platform admin in the browser.
+
+5. In the installation console:
+
+- create at least one household
+- create or reuse the user accounts that will sign in
+- assign memberships before expecting household dashboards to show data
+- set the public browser URL before printing or sharing QR/location links
+
+6. Sign in through `http://localhost:3000/login` and start using pantry, recipe, import, AI,
+   diagnostics, and QR/location flows.
+
+## Service URLs
 
 - Web: `http://localhost:3000`
 - API health: `http://localhost:8000/api/health`
+- Setup: `http://localhost:3000/setup`
 - Login: `http://localhost:3000/login`
 - PostgreSQL: `localhost:5432`
 - Redis: `localhost:6379`
 
-## Admin Bootstrap
+## CLI Fallbacks
 
-Create the first platform admin:
+Create the first platform admin from the CLI instead of the browser:
 
 ```bash
 docker compose run --rm api python -m app.cli bootstrap-platform-admin \
@@ -89,7 +108,8 @@ VERSION          Single source of truth for the app version
 ## Useful Commands
 
 ```bash
-docker compose up --build
+docker compose up -d --build
+docker compose run --rm api alembic upgrade head
 docker compose down
 npm install
 npm run dev:web
@@ -119,5 +139,6 @@ Start with these files:
 - [docs/PROJECT_STATE.md](/Users/robinbrown/Documents/GitHub/pantry/docs/PROJECT_STATE.md)
 - [docs/FILE_MAP.md](/Users/robinbrown/Documents/GitHub/pantry/docs/FILE_MAP.md)
 - [docs/ARCHITECTURE.md](/Users/robinbrown/Documents/GitHub/pantry/docs/ARCHITECTURE.md)
+- [docs/DEPLOYMENT.md](/Users/robinbrown/Documents/GitHub/pantry/docs/DEPLOYMENT.md)
 - [docs/SECURITY.md](/Users/robinbrown/Documents/GitHub/pantry/docs/SECURITY.md)
 - [docs/MILESTONES.md](/Users/robinbrown/Documents/GitHub/pantry/docs/MILESTONES.md)

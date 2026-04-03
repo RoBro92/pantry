@@ -29,6 +29,10 @@ export function reseedE2E(): E2ESeedManifest {
   return JSON.parse(output) as E2ESeedManifest;
 }
 
+export function resetToUninitialized(): void {
+  runRepoScript("./infra/scripts/e2e-reset-uninitialized.sh");
+}
+
 export function runWorkerOnce(): void {
   runRepoScript("./infra/scripts/worker-once.sh");
 }

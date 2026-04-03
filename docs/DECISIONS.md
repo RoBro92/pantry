@@ -31,6 +31,8 @@ Initial architectural decisions recorded on 2026-04-02.
 | D-023 | Normalize deployment modes to `self_hosted`, `demo`, and `saas`, with `saas` remaining a placeholder boundary in the public repo. | This keeps mode handling simple in config and shared types without exposing hosted tiering in the public UI. |
 | D-024 | Introduce `FeatureFlag` and `UsageCounter` models before SaaS logic exists, but keep quota checks non-enforcing for now. | The structural primitives are needed early so future hosted work does not require invasive rewrites, while self-hosted behavior stays unchanged today. |
 | D-025 | Remove internal prompt and Codex-specific instructions from the public repository and keep them only in local `private-docs/`. | Public docs should remain user-relevant and open-source-safe, while internal workflows and private operational notes stay out of versioned public history. |
+| D-026 | Add a one-time browser-based setup flow for the first platform admin instead of relying only on CLI bootstrap. | A real self-hosted first-run experience needs an in-product path from fresh install to usable admin console without exposing repeated bootstrap once initialization is complete. |
+| D-027 | Restrict pantry structure creation to `household_admin` while leaving stock add/move/remove available to `household_user`. | Household structure changes are effectively tenant configuration, while routine stock handling should remain available to day-to-day household members. |
 
 ## Deferred
 

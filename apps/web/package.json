@@ -1,6 +1,10 @@
 {
   "name": "@pantry/web",
   "private": true,
+  "engines": {
+    "node": ">=20 <21",
+    "npm": ">=10 <11"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",

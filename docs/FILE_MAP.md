@@ -23,6 +23,7 @@
 
 - `infra/docker/`: Dockerfiles for web, API, and worker.
 - `infra/scripts/`: small repository utility scripts such as version helpers, repeatable smoke checks, E2E seed setup, and worker-once helpers.
+- `infra/scripts/e2e-reset-uninitialized.sh`: resets application data in the running Docker stack so Playwright can exercise first-run setup deterministically.
 
 ## Key Backend Paths
 
@@ -33,6 +34,7 @@
 - `apps/api/app/models/instance_setting.py`: installation-scoped public URL and SMTP foundation settings.
 - `apps/api/app/models/usage_counter.py`: request metering and future quota-analysis foundation records.
 - `apps/api/app/api/routes/`: health, auth, admin, and household routes.
+- `apps/api/app/api/routes/setup.py`: first-run setup status and one-time browser bootstrap routes.
 - `apps/api/app/api/routes/ai_admin.py`: platform-admin AI provider configuration and health-check routes.
 - `apps/api/app/api/routes/diagnostics_admin.py`: platform-admin diagnostics route built from measured runtime data only.
 - `apps/api/app/api/routes/settings_admin.py`: platform-admin public/browser base URL route.
@@ -49,6 +51,8 @@
 - `apps/api/app/services/import_*.py`: safe upload storage, deterministic line matching, worker processing, review workflow, and import query builders.
 - `apps/api/app/services/ai_*.py`: AI provider config resolution, pantry-context assembly, prompt contracts, and suggestion orchestration.
 - `apps/api/app/services/instance_settings.py`: instance settings resolution with env-overrides, redaction, and encrypted SMTP secret handling.
+- `apps/api/app/services/setup.py`: install-initialization summary and one-time platform-admin bootstrap service.
+- `apps/api/app/services/platform_admin.py`: installation-level user, household, and membership management services.
 - `apps/api/app/services/platform_features.py`: deployment-default plus scoped feature-flag resolution and enforcement helpers.
 - `apps/api/app/services/usage_counters.py`: usage counter increments and non-enforcing quota-check skeletons.
 - `apps/api/app/services/diagnostics.py`: platform-admin diagnostics assembly for app, worker, Redis, queue, DB, and config summaries.
@@ -61,6 +65,7 @@
 ## Key Frontend Paths
 
 - `apps/web/app/(auth)/login/page.tsx`: login page.
+- `apps/web/app/setup/page.tsx`: first-run browser setup page for the initial platform admin.
 - `apps/web/app/(dashboard)/`: authenticated shell, pantry pages, and platform admin pages.
 - `apps/web/app/(dashboard)/app/households/[householdExternalId]/page.tsx`: household pantry view with search, stock lots, near-expiry, and audit activity.
 - `apps/web/app/locations/[locationRoute]/page.tsx`: authenticated location deep-link page used by QR/browser links.
@@ -72,12 +77,15 @@
 - `apps/web/app/(dashboard)/admin/smtp/page.tsx`: platform admin SMTP configuration page.
 - `apps/web/app/(dashboard)/app/households/[householdExternalId]/ai/page.tsx`: household AI suggestions page.
 - `apps/web/components/import-upload-form.tsx`: upload form for queued reviewed imports.
+- `apps/web/components/setup-bootstrap-form.tsx`: first-run platform-admin bootstrap form.
 - `apps/web/components/import-review-panel.tsx`: line-review and confirm-to-pantry UI for an import job.
 - `apps/web/components/pantry-controls.tsx`: pantry creation and add-stock controls.
 - `apps/web/components/pantry-lot-actions.tsx`: inline remove and move stock actions.
 - `apps/web/components/location-qr-card.tsx`: server-rendered QR display for pantry locations.
 - `apps/web/components/recipe-form.tsx`: client-side manual recipe create/edit form with ingredient rows and pantry-product links.
 - `apps/web/components/admin-ai-config-form.tsx`: platform admin AI config and health-check client form.
+- `apps/web/components/admin-user-creation-form.tsx`: platform-admin user creation form.
+- `apps/web/components/admin-household-management-panel.tsx`: platform-admin household creation and membership assignment panel.
 - `apps/web/components/admin-smtp-config-form.tsx`: platform admin SMTP config and connectivity-test client form.
 - `apps/web/components/admin-settings-form.tsx`: platform admin public/browser base URL client form.
 - `apps/web/components/admin-section-nav.tsx`: shared platform-admin section navigation.

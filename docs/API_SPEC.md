@@ -12,12 +12,22 @@ This file records the initial API shape and conventions, not a completed endpoin
   - Clears the current signed session.
 - `GET /api/auth/session`
   - Returns the current authenticated user and active household memberships.
+- `GET /api/setup/status`
+  - Returns whether the install has completed first-run bootstrap and whether the one-time browser setup flow is still allowed.
+- `POST /api/setup/bootstrap-platform-admin`
+  - Creates the first platform admin exactly once for an uninitialized install and signs that user in immediately.
 - `GET /api/platform-admin/overview`
   - Returns installation-level counts for platform admins.
 - `GET /api/platform-admin/users`
   - Returns user summaries for the platform admin shell.
+- `POST /api/platform-admin/users`
+  - Creates a normal user account and emits an audit event.
 - `GET /api/platform-admin/households`
   - Returns household summaries for the platform admin shell.
+- `POST /api/platform-admin/households`
+  - Creates a household and emits an audit event.
+- `POST /api/platform-admin/households/{household_external_id}/memberships`
+  - Creates or updates a household membership for a user and emits an audit event.
 - `GET /api/platform-admin/ai/provider-config`
   - Returns the instance-scoped AI provider configuration summary with secrets redacted.
 - `PUT /api/platform-admin/ai/provider-config`
@@ -43,11 +53,11 @@ This file records the initial API shape and conventions, not a completed endpoin
 - `GET /api/households/{household_external_id}/pantry/near-expiry`
   - Returns active stock lots expiring within a caller-selected window.
 - `POST /api/households/{household_external_id}/location-groups`
-  - Creates a household location group and emits an audit event.
+  - Creates a household location group for a `household_admin` and emits an audit event.
 - `POST /api/households/{household_external_id}/locations`
-  - Creates a household location inside an existing group and emits an audit event.
+  - Creates a household location inside an existing group for a `household_admin` and emits an audit event.
 - `POST /api/households/{household_external_id}/products`
-  - Creates a product with deterministic alias and barcode normalization and emits an audit event.
+  - Creates a product with deterministic alias and barcode normalization for a `household_admin` and emits an audit event.
 - `POST /api/households/{household_external_id}/stock-lots`
   - Creates a new stock lot and emits an audit event.
 - `POST /api/households/{household_external_id}/stock-lots/{lot_external_id}/remove`
@@ -98,6 +108,7 @@ This file records the initial API shape and conventions, not a completed endpoin
 
 - The current auth foundation uses a signed cookie session rather than a database-backed session table.
 - Authorization always resolves the current user and memberships server-side before role checks or household access.
+- The browser setup flow is only available while no platform admin exists.
 
 ## Next Endpoint Areas
 

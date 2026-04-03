@@ -2,6 +2,10 @@
   "name": "pantry",
   "private": true,
   "packageManager": "npm@10",
+  "engines": {
+    "node": ">=20 <21",
+    "npm": ">=10 <11"
+  },
   "workspaces": [
     "apps/web",
     "packages/shared-types"

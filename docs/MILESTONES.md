@@ -133,12 +133,22 @@ Current scope delivered:
 - Internal prompt/Codex docs were removed from the public repo and retained only in local `private-docs/`.
 - Deployment modes now resolve as `self_hosted`, `demo`, and `saas`, with server-side feature flags and usage counters in place but no SaaS product logic or UI.
 
-## Milestone 8: Private SaaS Repo Setup
+## Milestone 8: Product Hardening, UX Polish, Setup Experience, And Release Readiness
 
-- Create the private hosted-services repository and copy only the boundaries that belong there.
-- Formalize public-vs-private ownership for hosted operations, billing, support, and deployment automation.
-- Extract any shared packages or contracts needed between the public repo and the private hosted repo.
-- Keep the public repo self-hosted-first and free of SaaS-only UI or operational internals.
+- Improve first-run and setup experience for self-hosted installs.
+- Add browser-based bootstrap for the initial platform admin.
+- Improve platform-admin usability for creating households, users, and memberships.
+- Harden validation, empty states, error handling, and release-readiness docs.
+- Tighten permission boundaries and extend E2E coverage around setup and admin provisioning.
+
+Status: implemented.
+Current scope delivered:
+
+- Browser-based `/setup` flow for the first platform admin, backed by one-time server-side enforcement.
+- Installation-console user creation, household creation, and membership assignment flows.
+- Role-aware pantry UX that hides structure-management actions from `household_user` while leaving stock handling available.
+- Better empty states, validation messaging, import/review guidance, admin navigation cues, and version visibility.
+- Expanded deterministic Playwright coverage for first-run setup and admin-managed provisioning.
 
 ## Milestone 9: Shopping
 
