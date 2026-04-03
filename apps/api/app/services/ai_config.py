@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.domain.ai import (
+    AI_HEALTH_UNHEALTHY,
     AI_HEALTH_UNKNOWN,
     AI_PROVIDER_OLLAMA,
     AI_PROVIDER_OPENAI_COMPATIBLE,
@@ -203,6 +204,21 @@ def refresh_provider_health(
     db.commit()
     db.refresh(config)
     return health
+
+
+def record_provider_runtime_failure(
+    db: Session,
+    *,
+    config: AIProviderConfig,
+    error_message: str,
+) -> AIProviderConfig:
+    config.health_status = AI_HEALTH_UNHEALTHY
+    config.health_checked_at = _utc_now()
+    config.health_error = error_message[:512]
+    db.add(config)
+    db.commit()
+    db.refresh(config)
+    return config
 
 
 def serialize_provider_config(config: AIProviderConfig | None) -> dict[str, object] | None:

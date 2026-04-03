@@ -76,6 +76,7 @@ export function AdminSMTPConfigForm({ initialConfig }: AdminSMTPConfigFormProps)
             Environment variables currently override the saved database configuration.
           </p>
         ) : null}
+        {config.config_error ? <p className="error-text">{config.config_error}</p> : null}
         {statusMessage ? <p className="status-note">{statusMessage}</p> : null}
         <div className="content-grid">
           <label className="field">

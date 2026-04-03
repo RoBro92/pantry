@@ -229,6 +229,56 @@ def test_import_worker_marks_unsupported_file_types_failed(client, db_session):
     assert failure_event is not None
 
 
+def test_import_worker_skips_empty_rows_and_flags_invalid_values_for_review(client, db_session):
+    _, household = create_member_household(
+        db_session,
+        email="import-edge@example.com",
+        household_name="Edge Imports",
+    )
+    login(client, email="import-edge@example.com")
+
+    create_product(
+        client,
+        household.external_id,
+        name="Pasta",
+        default_unit="count",
+        aliases=[],
+        barcodes=[],
+    )
+
+    upload_response = client.post(
+        f"/api/households/{household.external_id}/imports/uploads",
+        data={"source_type": "structured_import"},
+        files={
+            "file": (
+                "edge-cases.csv",
+                "name,quantity,unit,purchased_on\nPasta,0,count,2026-04-01\n,,,\n,2,,bad-date\n",
+                "text/csv",
+            )
+        },
+    )
+    assert upload_response.status_code == 201
+
+    assert process_next_import_job() is True
+
+    detail_response = client.get(
+        f"/api/households/{household.external_id}/imports/{upload_response.json()['import_job']['external_id']}"
+    )
+    assert detail_response.status_code == 200
+    payload = detail_response.json()["import_job"]
+    assert payload["status"] == "needs_review"
+    assert payload["counts"]["line_count"] == 2
+    assert payload["counts"]["needs_review_line_count"] == 2
+
+    first_line = payload["lines"][0]
+    second_line = payload["lines"][1]
+    assert first_line["quantity"] == "1.000"
+    assert "defaulted to 1.000" in first_line["note"]
+    assert second_line["raw_label"] == "row:4"
+    assert "Line label was missing" in second_line["note"]
+    assert "Purchased date was invalid" in second_line["note"]
+
+
 def test_import_endpoints_enforce_household_scoping(client, db_session):
     _, allowed_household = create_member_household(
         db_session,

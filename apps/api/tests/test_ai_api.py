@@ -112,6 +112,11 @@ class StubAIProviderAdapter:
         )
 
 
+class FailingSuggestionAdapter(StubAIProviderAdapter):
+    def generate_structured_output(self, request) -> StructuredCompletionResult:
+        raise RuntimeError("Provider request timed out.")
+
+
 def test_ai_context_assembly_uses_structured_pantry_and_recipe_data(client, db_session):
     user, household = create_member_household(
         db_session,
@@ -275,3 +280,54 @@ def test_household_ai_suggestions_use_provider_adapter_and_record_audit(
     assert "ai.suggestion.requested" in audit_actions
     assert "ai.suggestion.completed" in audit_actions
 
+
+def test_household_ai_generation_failures_degrade_cleanly_and_update_status(
+    client,
+    db_session,
+    monkeypatch,
+):
+    _, household = create_member_household(
+        db_session,
+        email="ai-failure@example.com",
+        household_name="AI Failure Household",
+    )
+    admin = create_platform_admin(
+        db_session,
+        email="ai-failure-admin@example.com",
+        password=PASSWORD,
+        display_name="AI Failure Admin",
+    )
+    upsert_instance_provider_config(
+        db_session,
+        actor=admin,
+        provider_type=AI_PROVIDER_OLLAMA,
+        base_url="http://ollama.local:11434",
+        default_model="llama3.2",
+        api_key=None,
+        is_enabled=True,
+    )
+
+    monkeypatch.setattr(
+        "app.services.ai_config.build_ai_provider_adapter",
+        lambda config: FailingSuggestionAdapter(),
+    )
+    monkeypatch.setattr(
+        "app.services.ai_suggestions.build_ai_provider_adapter",
+        lambda config: FailingSuggestionAdapter(),
+    )
+
+    login(client, email="ai-failure@example.com")
+
+    suggestion_response = client.post(
+        f"/api/households/{household.external_id}/ai/suggestions",
+        json={"kind": "meal_suggestions", "limit": 2},
+    )
+    assert suggestion_response.status_code == 503
+    assert "AI suggestion generation failed" in suggestion_response.json()["detail"]
+
+    status_response = client.get(f"/api/households/{household.external_id}/ai/status")
+    assert status_response.status_code == 200
+    payload = status_response.json()
+    assert payload["available"] is False
+    assert payload["health_status"] == "unhealthy"
+    assert "Provider request timed out." in payload["reason"]

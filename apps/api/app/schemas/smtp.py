@@ -21,6 +21,7 @@ class SMTPConfigResponse(BaseModel):
     effective_source: str
     stored: SMTPConfigValue
     configured: bool
+    config_error: str | None = None
     last_test_status: str
     last_tested_at: datetime | None
     last_test_error: str | None

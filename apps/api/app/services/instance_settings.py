@@ -60,6 +60,23 @@ def _normalize_smtp_port(value: int | None, *, security: str) -> int:
     return value
 
 
+def normalize_smtp_host(value: str | None) -> str | None:
+    normalized = _normalize_optional_text(value)
+    if normalized is None:
+        return None
+
+    parsed = urlsplit(f"//{normalized}")
+    if parsed.username or parsed.password:
+        raise ValueError("SMTP host must not include credentials.")
+    if parsed.path or parsed.query or parsed.fragment:
+        raise ValueError("SMTP host must not include a path, query string, or fragment.")
+    if not parsed.hostname:
+        raise ValueError("SMTP host must be a hostname or IP address.")
+    if parsed.port is not None:
+        raise ValueError("SMTP host must not include a port. Use the SMTP port field separately.")
+    return parsed.hostname
+
+
 def _normalize_optional_text(value: str | None) -> str | None:
     if value is None:
         return None
@@ -96,6 +113,7 @@ class SMTPResolvedConfig:
     stored_from_name: str | None
     stored_security: str | None
     stored_is_enabled: bool
+    config_error: str | None = None
 
     @property
     def has_password(self) -> bool:
@@ -203,6 +221,7 @@ def _build_smtp_config_from_db(stored: InstanceSetting | None) -> SMTPResolvedCo
         stored_from_name=stored.smtp_from_name if stored else None,
         stored_security=stored.smtp_security if stored else None,
         stored_is_enabled=stored.smtp_enabled if stored else False,
+        config_error=None,
     )
 
 
@@ -212,34 +231,67 @@ def resolve_smtp_config(db: Session) -> SMTPResolvedConfig:
     db_config = _build_smtp_config_from_db(stored)
 
     if app_settings.smtp_host:
-        security = normalize_smtp_security(app_settings.smtp_security)
-        return SMTPResolvedConfig(
-            host=_normalize_optional_text(app_settings.smtp_host),
-            port=_normalize_smtp_port(app_settings.smtp_port, security=security),
-            username=_normalize_optional_text(app_settings.smtp_username),
-            password=_normalize_optional_text(app_settings.smtp_password),
-            from_email=_require_valid_email(
-                app_settings.smtp_from_email or "",
-                field_name="SMTP from email",
+        try:
+            security = normalize_smtp_security(app_settings.smtp_security)
+            host = normalize_smtp_host(app_settings.smtp_host)
+            username = _normalize_optional_text(app_settings.smtp_username)
+            password = _normalize_optional_text(app_settings.smtp_password)
+            if username and not password:
+                raise ValueError("An SMTP password is required when an SMTP username is configured.")
+            if password and not username:
+                raise ValueError("An SMTP username is required when an SMTP password is configured.")
+            return SMTPResolvedConfig(
+                host=host,
+                port=_normalize_smtp_port(app_settings.smtp_port, security=security),
+                username=username,
+                password=password,
+                from_email=_require_valid_email(
+                    app_settings.smtp_from_email or "",
+                    field_name="SMTP from email",
+                )
+                if app_settings.smtp_from_email
+                else None,
+                from_name=_normalize_optional_text(app_settings.smtp_from_name),
+                security=security,
+                is_enabled=True if app_settings.smtp_enabled is None else app_settings.smtp_enabled,
+                source=CONFIG_SOURCE_ENVIRONMENT,
+                last_test_status=db_config.last_test_status,
+                last_tested_at=db_config.last_tested_at,
+                last_test_error=db_config.last_test_error,
+                stored_host=db_config.stored_host,
+                stored_port=db_config.stored_port,
+                stored_username=db_config.stored_username,
+                stored_has_password=db_config.stored_has_password,
+                stored_from_email=db_config.stored_from_email,
+                stored_from_name=db_config.stored_from_name,
+                stored_security=db_config.stored_security,
+                stored_is_enabled=db_config.stored_is_enabled,
+                config_error=None,
             )
-            if app_settings.smtp_from_email
-            else None,
-            from_name=_normalize_optional_text(app_settings.smtp_from_name),
-            security=security,
-            is_enabled=True if app_settings.smtp_enabled is None else app_settings.smtp_enabled,
-            source=CONFIG_SOURCE_ENVIRONMENT,
-            last_test_status=db_config.last_test_status,
-            last_tested_at=db_config.last_tested_at,
-            last_test_error=db_config.last_test_error,
-            stored_host=db_config.stored_host,
-            stored_port=db_config.stored_port,
-            stored_username=db_config.stored_username,
-            stored_has_password=db_config.stored_has_password,
-            stored_from_email=db_config.stored_from_email,
-            stored_from_name=db_config.stored_from_name,
-            stored_security=db_config.stored_security,
-            stored_is_enabled=db_config.stored_is_enabled,
-        )
+        except ValueError as exc:
+            return SMTPResolvedConfig(
+                host=_normalize_optional_text(app_settings.smtp_host),
+                port=app_settings.smtp_port,
+                username=_normalize_optional_text(app_settings.smtp_username),
+                password=_normalize_optional_text(app_settings.smtp_password),
+                from_email=_normalize_optional_text(app_settings.smtp_from_email),
+                from_name=_normalize_optional_text(app_settings.smtp_from_name),
+                security=_normalize_optional_text(app_settings.smtp_security),
+                is_enabled=False,
+                source=CONFIG_SOURCE_ENVIRONMENT,
+                last_test_status=db_config.last_test_status,
+                last_tested_at=db_config.last_tested_at,
+                last_test_error=db_config.last_test_error,
+                stored_host=db_config.stored_host,
+                stored_port=db_config.stored_port,
+                stored_username=db_config.stored_username,
+                stored_has_password=db_config.stored_has_password,
+                stored_from_email=db_config.stored_from_email,
+                stored_from_name=db_config.stored_from_name,
+                stored_security=db_config.stored_security,
+                stored_is_enabled=db_config.stored_is_enabled,
+                config_error=str(exc),
+            )
 
     return db_config
 
@@ -269,6 +321,7 @@ def build_smtp_summary(db: Session) -> dict[str, object]:
             "is_enabled": config.stored_is_enabled,
         },
         "configured": config.is_configured,
+        "config_error": config.config_error,
         "last_test_status": config.last_test_status,
         "last_tested_at": config.last_tested_at,
         "last_test_error": config.last_test_error,
@@ -289,7 +342,7 @@ def upsert_smtp_settings(
     is_enabled: bool,
 ) -> InstanceSetting:
     settings = get_or_create_instance_settings(db)
-    normalized_host = _normalize_optional_text(host)
+    normalized_host = normalize_smtp_host(host)
     normalized_username = _normalize_optional_text(username)
     normalized_password = _normalize_optional_text(password)
     normalized_from_email = _normalize_optional_text(from_email)

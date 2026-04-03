@@ -98,6 +98,7 @@ export type SMTPConfigResponse = {
   effective_source: string;
   stored: SMTPConfigValue;
   configured: boolean;
+  config_error: string | null;
   last_test_status: string;
   last_tested_at: string | null;
   last_test_error: string | null;

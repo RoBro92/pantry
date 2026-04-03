@@ -6,8 +6,10 @@ from sqlalchemy import select
 
 from app.domain.roles import HOUSEHOLD_USER_ROLE
 from app.models.audit_event import AuditEvent
+from app.models.recipe import Recipe
 from app.models.recipe_url_import import RecipeURLImport
 from app.services.auth import create_household, create_membership, create_user
+from app.services.recipe_url_imports import process_next_recipe_url_import
 
 
 PASSWORD = "correct horse battery"
@@ -257,7 +259,7 @@ def test_recipe_update_replaces_ingredients_and_records_audit_events(client, db_
     assert [event.action for event in events] == ["recipe.created", "recipe.updated"]
 
 
-def test_recipe_url_import_foundation_records_request(client, db_session):
+def test_recipe_url_import_queues_background_processing(client, db_session, monkeypatch):
     _, household = create_member_household(
         db_session,
         email="recipe-import@example.com",
@@ -271,19 +273,62 @@ def test_recipe_url_import_foundation_records_request(client, db_session):
     )
     assert response.status_code == 201
     payload = response.json()
-    assert payload["status"] == "captured"
+    assert payload["status"] == "queued"
     assert payload["normalized_url"] == "https://example.com/recipes/pasta?ref=weekly"
-    assert payload["note"] == "URL import captured for future parsing."
+    assert payload["note"] == "Queued for background recipe import."
 
     stored = db_session.scalar(select(RecipeURLImport).where(RecipeURLImport.external_id == payload["external_id"]))
     assert stored is not None
     assert stored.normalized_url == "https://example.com/recipes/pasta?ref=weekly"
+
+    monkeypatch.setattr(
+        "app.services.recipe_url_imports._fetch_recipe_html",
+        lambda url: """
+        <html>
+          <head><title>Example Pasta</title></head>
+          <body>
+            <script type=\"application/ld+json\">
+              {
+                "@context": "https://schema.org",
+                "@type": "Recipe",
+                "name": "Example Pasta",
+                "recipeIngredient": [
+                  "1 count Pasta",
+                  "2 can Tomatoes"
+                ]
+              }
+            </script>
+          </body>
+        </html>
+        """,
+    )
+
+    assert process_next_recipe_url_import() is True
+
+    db_session.expire_all()
+    refreshed = db_session.scalar(select(RecipeURLImport).where(RecipeURLImport.external_id == payload["external_id"]))
+    assert refreshed is not None
+    assert refreshed.status == "imported"
+    assert refreshed.recipe_id is not None
+
+    recipe = db_session.scalar(select(Recipe).where(Recipe.id == refreshed.recipe_id))
+    assert recipe is not None
+    assert recipe.title == "Example Pasta"
+    assert recipe.source_kind == "url_import"
+    assert recipe.source_url == "https://example.com/recipes/pasta?ref=weekly"
 
     audit_event = db_session.scalar(
         select(AuditEvent).where(AuditEvent.target_external_id == payload["external_id"])
     )
     assert audit_event is not None
     assert audit_event.action == "recipe.url_import.requested"
+
+    completed_event = db_session.scalar(
+        select(AuditEvent)
+        .where(AuditEvent.target_external_id == payload["external_id"])
+        .where(AuditEvent.action == "recipe.url_import.completed")
+    )
+    assert completed_event is not None
 
 
 def test_recipe_endpoints_enforce_household_scoping(client, db_session):

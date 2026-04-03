@@ -15,7 +15,12 @@ from app.schemas.ai import (
     AISuggestionRequest,
     AISuggestionResponse,
 )
-from app.services.ai_config import get_ai_feature_enabled, refresh_provider_health, resolve_provider_config
+from app.services.ai_config import (
+    get_ai_feature_enabled,
+    record_provider_runtime_failure,
+    refresh_provider_health,
+    resolve_provider_config,
+)
 from app.services.ai_context import build_household_ai_context
 from app.services.ai_prompts import build_suggestion_prompt_plan
 from app.services.ai_providers import StructuredCompletionRequest, build_ai_provider_adapter
@@ -63,10 +68,13 @@ def build_household_ai_feature_status(
         )
 
     if config.health_status == AI_HEALTH_UNHEALTHY:
+        reason = "The configured AI provider is unhealthy."
+        if config.health_error:
+            reason = f"{reason} {config.health_error}"
         return AIFeatureStatusSummary(
             feature_enabled=True,
             available=False,
-            reason="The configured AI provider is unhealthy.",
+            reason=reason,
             provider_type=config.provider_type,
             default_model=config.default_model,
             config_external_id=config.external_id,
@@ -153,6 +161,12 @@ def generate_household_ai_suggestions(
         )
         parsed = AIProviderSuggestionOutput.model_validate(completion.parsed_output)
     except Exception as exc:
+        error_message = f"AI suggestion generation failed: {exc}"
+        record_provider_runtime_failure(
+            db,
+            config=resolved.record,
+            error_message=error_message,
+        )
         logger.exception(
             "ai.request.failed",
             household_external_id=access.household.external_id,
@@ -173,11 +187,11 @@ def generate_household_ai_suggestions(
                 "provider_type": resolved.record.provider_type,
                 "default_model": resolved.record.default_model,
                 "kind": request.kind,
-                "error": str(exc),
+                "error": error_message,
             },
         )
         db.commit()
-        raise
+        raise ValueError(error_message) from exc
 
     duration_ms = round((perf_counter() - started) * 1000, 2)
     logger.info(

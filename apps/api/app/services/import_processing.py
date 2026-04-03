@@ -35,35 +35,90 @@ class ParsedImportLine:
     note: str | None
     purchased_on: date | None = None
     expires_on: date | None = None
+    force_status: str | None = None
 
 
-def _normalize_quantity(value: object | None) -> Decimal:
+def _normalize_quantity(value: object | None) -> tuple[Decimal, str | None, str | None]:
     if value in (None, ""):
-        return Decimal("1.000")
-    quantity = Decimal(str(value))
+        return Decimal("1.000"), None, None
+    try:
+        quantity = Decimal(str(value))
+    except Exception:
+        return Decimal("1.000"), "Quantity was invalid and defaulted to 1.000 for review.", "needs_review"
     if quantity <= Decimal("0"):
-        raise ValueError("Quantity must be greater than zero.")
-    return quantity.quantize(Decimal("0.001"))
+        return Decimal("1.000"), "Quantity must be greater than zero and was defaulted to 1.000 for review.", "needs_review"
+    return quantity.quantize(Decimal("0.001")), None, None
 
 
-def _parse_optional_date(value: object | None) -> date | None:
+def _parse_optional_date(value: object | None, *, field_name: str) -> tuple[date | None, str | None, str | None]:
     if value in (None, ""):
+        return None, None, None
+    try:
+        return date.fromisoformat(str(value)), None, None
+    except ValueError:
+        return None, f"{field_name} was invalid and was cleared for review.", "needs_review"
+
+
+def _merge_notes(*parts: str | None) -> str | None:
+    values = [part.strip() for part in parts if part and part.strip()]
+    return " ".join(values) if values else None
+
+
+def _merge_statuses(*statuses: str | None) -> str | None:
+    if "needs_review" in statuses:
+        return "needs_review"
+    return None
+
+
+def _is_empty_record(record: dict[str, object]) -> bool:
+    return not any(str(value).strip() for value in record.values() if value not in (None, ""))
+
+
+def _coerce_parsed_line(record: dict[str, object], *, source_reference: str | None) -> ParsedImportLine | None:
+    if _is_empty_record(record):
         return None
-    return date.fromisoformat(str(value))
 
-
-def _coerce_parsed_line(record: dict[str, object], *, source_reference: str | None) -> ParsedImportLine:
-    raw_label = require_text(str(record.get("name") or record.get("label") or record.get("item") or ""), field_name="Line label")
+    raw_label_value = str(record.get("name") or record.get("label") or record.get("item") or "")
+    raw_label = raw_label_value.strip() or (source_reference or "Imported line")
+    note = require_text(str(record["note"]), field_name="Line note") if record.get("note") else None
+    quantity, quantity_note, quantity_status = _normalize_quantity(record.get("quantity") or record.get("qty"))
+    purchased_on, purchased_note, purchased_status = _parse_optional_date(
+        record.get("purchased_on"),
+        field_name="Purchased date",
+    )
+    expires_on, expires_note, expires_status = _parse_optional_date(
+        record.get("expires_on"),
+        field_name="Expiry date",
+    )
+    force_status = _merge_statuses(
+        "needs_review" if not raw_label_value.strip() else None,
+        quantity_status,
+        purchased_status,
+        expires_status,
+    )
+    if purchased_on and expires_on and expires_on < purchased_on:
+        purchased_on = None
+        expires_on = None
+        force_status = _merge_statuses(force_status, "needs_review")
+        note = _merge_notes(note, "Purchase and expiry dates were inconsistent and were cleared for review.")
+    note = _merge_notes(
+        note,
+        "Line label was missing and needs review." if not raw_label_value.strip() else None,
+        quantity_note,
+        purchased_note,
+        expires_note,
+    )
     barcode = record.get("barcode")
     return ParsedImportLine(
         source_reference=source_reference,
-        raw_label=raw_label,
-        quantity=_normalize_quantity(record.get("quantity") or record.get("qty")),
+        raw_label=require_text(raw_label, field_name="Line label"),
+        quantity=quantity,
         unit=normalize_unit(str(record.get("unit") or "count")),
         barcode=normalize_barcode(str(barcode)) if barcode not in (None, "") else None,
-        note=require_text(str(record["note"]), field_name="Line note") if record.get("note") else None,
-        purchased_on=_parse_optional_date(record.get("purchased_on")),
-        expires_on=_parse_optional_date(record.get("expires_on")),
+        note=note,
+        purchased_on=purchased_on,
+        expires_on=expires_on,
+        force_status=force_status,
     )
 
 
@@ -98,7 +153,9 @@ def _parse_json_lines(payload: bytes) -> tuple[list[ParsedImportLine], str, date
 
         if not isinstance(item, dict):
             raise ValueError("Each JSON import line must be a string or object.")
-        parsed_lines.append(_coerce_parsed_line(item, source_reference=f"line:{index}"))
+        parsed_line = _coerce_parsed_line(item, source_reference=f"line:{index}")
+        if parsed_line is not None:
+            parsed_lines.append(parsed_line)
 
     return parsed_lines, parser_kind, occurred_on
 
@@ -120,20 +177,20 @@ def _parse_delimited_lines(text: str, *, delimiter: str) -> tuple[list[ParsedImp
 
     parsed_lines: list[ParsedImportLine] = []
     for index, row in enumerate(reader, start=2):
-        parsed_lines.append(
-            _coerce_parsed_line(
-                {
-                    "name": _first_matching_value(row, ["name", "label", "item", "product"]),
-                    "quantity": _first_matching_value(row, ["quantity", "qty"]),
-                    "unit": _first_matching_value(row, ["unit"]),
-                    "barcode": _first_matching_value(row, ["barcode", "ean", "upc"]),
-                    "note": _first_matching_value(row, ["note", "notes"]),
-                    "purchased_on": _first_matching_value(row, ["purchased_on"]),
-                    "expires_on": _first_matching_value(row, ["expires_on"]),
-                },
-                source_reference=f"row:{index}",
-            )
+        parsed_line = _coerce_parsed_line(
+            {
+                "name": _first_matching_value(row, ["name", "label", "item", "product"]),
+                "quantity": _first_matching_value(row, ["quantity", "qty"]),
+                "unit": _first_matching_value(row, ["unit"]),
+                "barcode": _first_matching_value(row, ["barcode", "ean", "upc"]),
+                "note": _first_matching_value(row, ["note", "notes"]),
+                "purchased_on": _first_matching_value(row, ["purchased_on"]),
+                "expires_on": _first_matching_value(row, ["expires_on"]),
+            },
+            source_reference=f"row:{index}",
         )
+        if parsed_line is not None:
+            parsed_lines.append(parsed_line)
 
     return parsed_lines, parser_kind
 
@@ -257,9 +314,11 @@ def process_next_import_job() -> bool:
                     note=parsed_line.note,
                     purchased_on=parsed_line.purchased_on,
                     expires_on=parsed_line.expires_on,
-                    status=match_result.status,
+                    status=parsed_line.force_status or match_result.status,
                     match_basis=match_result.match_basis,
                 )
+                if parsed_line.force_status == "needs_review":
+                    line.status = "needs_review"
                 import_job.lines.append(line)
                 db.add(line)
 

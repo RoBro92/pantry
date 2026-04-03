@@ -140,13 +140,39 @@ def create_recipe(
     notes: str | None,
     ingredients: Sequence[RecipeIngredientInput],
 ) -> Recipe:
+    return create_recipe_record(
+        db,
+        household=household,
+        actor=actor,
+        title=title,
+        notes=notes,
+        ingredients=ingredients,
+        source_kind="manual",
+        source_url=None,
+        audit_action="recipe.created",
+    )
+
+
+def create_recipe_record(
+    db: Session,
+    *,
+    household: Household,
+    actor: User | None,
+    title: str,
+    notes: str | None,
+    ingredients: Sequence[RecipeIngredientInput],
+    source_kind: str,
+    source_url: str | None,
+    audit_action: str,
+) -> Recipe:
     display_title = require_text(title, field_name="Recipe title")
     recipe = Recipe(
         household_id=household.id,
         title=display_title,
         normalized_title=normalize_lookup_name(display_title),
         notes=require_text(notes, field_name="Recipe notes") if notes else None,
-        source_kind="manual",
+        source_kind=require_text(source_kind, field_name="Recipe source kind"),
+        source_url=require_text(source_url, field_name="Recipe source URL") if source_url else None,
     )
     db.add(recipe)
     db.flush()
@@ -156,7 +182,7 @@ def create_recipe(
         db,
         household=household,
         actor=actor,
-        action="recipe.created",
+        action=audit_action,
         target_type="recipe",
         target_external_id=recipe.external_id,
         event_metadata={
@@ -218,8 +244,8 @@ def create_recipe_url_import(
         requested_by_user_id=actor.id,
         source_url=require_text(url, field_name="Recipe URL"),
         normalized_url=normalized_url,
-        status="captured",
-        note="URL import captured for future parsing.",
+        status="queued",
+        note="Queued for background recipe import.",
     )
     db.add(record)
     db.flush()

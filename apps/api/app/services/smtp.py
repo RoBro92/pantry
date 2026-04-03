@@ -17,6 +17,8 @@ class SMTPTestResult:
 def run_smtp_connectivity_test(db_session) -> SMTPTestResult:
     settings = get_settings()
     config = resolve_smtp_config(db_session)
+    if config.config_error:
+        raise ValueError(config.config_error)
     if not config.is_configured or not config.host or config.port is None or not config.security:
         raise ValueError("SMTP is not configured well enough to test.")
 

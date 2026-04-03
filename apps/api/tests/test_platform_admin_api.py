@@ -197,6 +197,29 @@ def test_platform_admin_smtp_save_and_test_redacts_password(client, db_session, 
     assert test_payload["config"]["last_test_status"] == "passed"
 
 
+def test_platform_admin_smtp_validation_rejects_url_like_hosts(client, db_session):
+    create_platform_admin(
+        db_session,
+        email="smtp-validation@example.com",
+        password=PASSWORD,
+        display_name="SMTP Validation Admin",
+    )
+    login(client, email="smtp-validation@example.com")
+
+    response = client.put(
+        "/api/platform-admin/smtp",
+        json={
+            "host": "smtp://smtp.example.com",
+            "port": 587,
+            "from_email": "pantry@example.com",
+            "security": "starttls",
+            "is_enabled": True,
+        },
+    )
+    assert response.status_code == 400
+    assert "must not include a path" in response.json()["detail"] or "hostname or IP address" in response.json()["detail"]
+
+
 def test_location_qr_links_use_configured_public_base_url_and_access_is_scoped(client, db_session):
     create_platform_admin(
         db_session,
