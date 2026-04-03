@@ -22,7 +22,7 @@ Updated: 2026-04-02
 - CLI commands for first-platform-admin bootstrap and password reset.
 - API tests covering login/session behavior, email normalization, tenant membership enforcement, pantry stock behavior, recipe flows, import upload/review/confirm behavior, diagnostics, SMTP redaction, and QR/location-link behavior.
 - Updated documentation covering product direction, architecture, AI integration, security, imports, observability, testing, and milestone sequencing.
-- Durable Codex operating instructions centered on `AGENTS.md`, with milestone validation policy in `docs/TEST_STRATEGY.md`.
+- Milestone validation policy documented in `docs/TEST_STRATEGY.md`, with local-only internal notes kept outside the public repo.
 - A repeatable local smoke-check helper at `infra/scripts/smoke-check.sh` for web, API, and worker baseline validation.
 
 ## Assumptions In This Pass
@@ -36,7 +36,6 @@ Updated: 2026-04-02
 
 ## Validation Workflow
 
-- `AGENTS.md` is the durable instruction source for future Codex milestone work.
 - `docs/TEST_STRATEGY.md` defines the required local validation order and exact commands.
 - Milestone work is not considered complete without recorded validation results, blockers, and next steps here.
 - Docker-backed smoke validation should start the stack when needed and shut it down afterward.

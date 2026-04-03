@@ -5,7 +5,6 @@
 - `VERSION`: canonical application version.
 - `compose.yml`: local development stack.
 - `.env.example`: environment variable template.
-- `AGENTS.md`: primary durable Codex operating instructions for this repository.
 - `README.md`: project overview and local setup.
 
 ## Applications
@@ -87,8 +86,7 @@
 - `docs/DOMAIN_MODEL.md`: initial entity definitions.
 - `docs/SECURITY.md`: security posture and guardrails.
 - `docs/TEST_STRATEGY.md`: milestone validation policy, command order, and reporting expectations.
-- `docs/CODEX_RULES.md`: concise repo-specific Codex guidance that defers to `AGENTS.md` and `docs/TEST_STRATEGY.md`.
 
 ## Local-Only
 
-- `private-docs/`: gitignored space for SaaS operations or private runbooks.
+- `private-docs/`: gitignored space for local-only planning notes, private SaaS operations material, internal prompts, and runbooks that should not ship in the public repository.

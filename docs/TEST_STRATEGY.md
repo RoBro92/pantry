@@ -1,6 +1,6 @@
 # Test Strategy
 
-This file is the concrete local validation policy for Pantry milestones. `AGENTS.md` defines the required behavior; this document defines the commands and validation order.
+This file is the concrete local validation policy for Pantry milestones. It defines the commands, ordering, and reporting expectations for local validation.
 
 ## Validation Principles
 
