@@ -177,6 +177,12 @@ export function RecipeForm({
             Add ingredient
           </button>
         </div>
+        {products.length === 0 ? (
+          <p className="section-copy">
+            No pantry products exist yet. You can still create the recipe now and rely on name-based
+            matching later, or add products from the pantry page first.
+          </p>
+        ) : null}
 
         <div className="recipe-ingredient-list">
           {ingredients.map((ingredient, index) => (

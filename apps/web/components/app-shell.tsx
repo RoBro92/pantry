@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import type { SessionResponse } from "../lib/api-types";
+import { appConfig } from "../lib/app-config";
 import { LogoutButton } from "./logout-button";
 
 type AppShellProps = {
@@ -14,9 +15,13 @@ export function AppShell({ session, children }: AppShellProps) {
       <div className="shell-grid">
         <aside className="sidebar panel">
           <p className="eyebrow">Pantry</p>
-          <h1 className="shell-title">Household Shell</h1>
+          <h1 className="shell-title">Household Console</h1>
           <p className="sidebar-copy">
             Logged in as {session.user.display_name ?? session.user.email}
+          </p>
+          <p className="sidebar-copy">
+            Version {appConfig.version} · {session.memberships.length} household
+            {session.memberships.length === 1 ? "" : "s"} visible
           </p>
           <nav className="nav-list">
             <Link href="/app">Dashboard</Link>
@@ -48,6 +53,11 @@ export function AppShell({ session, children }: AppShellProps) {
               </div>
             ) : null}
           </nav>
+          {session.memberships.length === 0 ? (
+            <p className="sidebar-copy">
+              Households appear here after a platform admin assigns memberships.
+            </p>
+          ) : null}
           <LogoutButton />
         </aside>
         <section className="shell-content">{children}</section>

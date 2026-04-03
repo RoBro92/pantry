@@ -143,6 +143,7 @@ export default async function HouseholdPantryPage({
 
       <PantryControls
         householdExternalId={overview.household_external_id}
+        canAdminister={overview.can_administer}
         locationGroups={overview.location_groups}
         locations={overview.locations}
         products={overview.catalog_products}
@@ -168,7 +169,10 @@ export default async function HouseholdPantryPage({
       <section className="panel">
         <p className="eyebrow">Aggregated Pantry View</p>
         {overview.products.length === 0 ? (
-          <p>No active pantry totals match the current filter set.</p>
+          <p>
+            No active pantry totals match the current filter set. Clear the filters, add stock, or
+            ask a household admin to create the missing locations and products.
+          </p>
         ) : (
           <div className="product-list">
             {overview.products.map((product) => (
@@ -216,7 +220,10 @@ export default async function HouseholdPantryPage({
       <section className="panel">
         <p className="eyebrow">Stock Lots</p>
         {overview.stock_lots.length === 0 ? (
-          <p>No active stock lots match the current filter set.</p>
+          <p>
+            No active stock lots match the current filter set. Add stock once the right product and
+            location exist.
+          </p>
         ) : (
           <div className="table-wrap">
             <table className="data-table">

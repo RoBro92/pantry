@@ -11,6 +11,7 @@ import { postToApi } from "../lib/client-api";
 
 type PantryControlsProps = {
   householdExternalId: string;
+  canAdminister: boolean;
   locationGroups: PantryLocationGroupSummary[];
   locations: PantryLocationSummary[];
   products: PantryCatalogProductSummary[];
@@ -18,11 +19,12 @@ type PantryControlsProps = {
 
 type FormState = {
   error: string | null;
+  success: string | null;
   pending: boolean;
 };
 
 function useFormState(): [FormState, (state: FormState) => void] {
-  return useState<FormState>({ error: null, pending: false });
+  return useState<FormState>({ error: null, success: null, pending: false });
 }
 
 function splitListInput(value: string): string[] {
@@ -34,6 +36,7 @@ function splitListInput(value: string): string[] {
 
 export function PantryControls({
   householdExternalId,
+  canAdminister,
   locationGroups,
   locations,
   products
@@ -52,16 +55,17 @@ export function PantryControls({
   ) {
     event.preventDefault();
     const form = event.currentTarget;
-    setState({ error: null, pending: true });
+    setState({ error: null, success: null, pending: true });
 
     try {
       await postToApi(path, payload);
       form.reset();
       router.refresh();
-      setState({ error: null, pending: false });
+      setState({ error: null, success: "Saved.", pending: false });
     } catch (error) {
       setState({
         error: error instanceof Error ? error.message : "Request failed.",
+        success: null,
         pending: false
       });
     }
@@ -69,115 +73,135 @@ export function PantryControls({
 
   return (
     <section className="control-grid">
-      <form
-        className="panel control-card"
-        data-testid="create-group-form"
-        onSubmit={(event) =>
-          submitForm(
-            event,
-            `/api/households/${householdExternalId}/location-groups`,
-            {
-              name: String(new FormData(event.currentTarget).get("name") ?? "")
-            },
-            setGroupState
-          )}
-      >
-        <p className="eyebrow">Locations</p>
-        <h2>Create group</h2>
-        <label className="field">
-          <span>Group name</span>
-          <input name="name" placeholder="Kitchen pantry" required />
-        </label>
-        {groupState.error ? <p className="error-text">{groupState.error}</p> : null}
-        <button type="submit" className="primary-button" disabled={groupState.pending}>
-          {groupState.pending ? "Saving..." : "Add group"}
-        </button>
-      </form>
+      {canAdminister ? (
+        <>
+          <form
+            className="panel control-card"
+            data-testid="create-group-form"
+            onSubmit={(event) =>
+              submitForm(
+                event,
+                `/api/households/${householdExternalId}/location-groups`,
+                {
+                  name: String(new FormData(event.currentTarget).get("name") ?? "")
+                },
+                setGroupState
+              )}
+          >
+            <p className="eyebrow">Locations</p>
+            <h2>Create group</h2>
+            <label className="field">
+              <span>Group name</span>
+              <input name="name" placeholder="Kitchen pantry" required />
+            </label>
+            {groupState.error ? <p className="error-text">{groupState.error}</p> : null}
+            {groupState.success ? <p className="status-note">{groupState.success}</p> : null}
+            <button type="submit" className="primary-button" disabled={groupState.pending}>
+              {groupState.pending ? "Saving..." : "Add group"}
+            </button>
+          </form>
 
-      <form
-        className="panel control-card"
-        data-testid="create-location-form"
-        onSubmit={(event) =>
-          submitForm(
-            event,
-            `/api/households/${householdExternalId}/locations`,
-            {
-              location_group_external_id: String(
-                new FormData(event.currentTarget).get("location_group_external_id") ?? ""
-              ),
-              name: String(new FormData(event.currentTarget).get("name") ?? "")
-            },
-            setLocationState
-          )}
-      >
-        <p className="eyebrow">Locations</p>
-        <h2>Create location</h2>
-        <label className="field">
-          <span>Group</span>
-          <select name="location_group_external_id" required>
-            <option value="">Select a group</option>
-            {locationGroups.map((group) => (
-              <option key={group.external_id} value={group.external_id}>
-                {group.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="field">
-          <span>Location name</span>
-          <input name="name" placeholder="Top shelf" required />
-        </label>
-        {locationState.error ? <p className="error-text">{locationState.error}</p> : null}
-        <button
-          type="submit"
-          className="primary-button"
-          disabled={locationState.pending || locationGroups.length === 0}
-        >
-          {locationState.pending ? "Saving..." : "Add location"}
-        </button>
-      </form>
+          <form
+            className="panel control-card"
+            data-testid="create-location-form"
+            onSubmit={(event) =>
+              submitForm(
+                event,
+                `/api/households/${householdExternalId}/locations`,
+                {
+                  location_group_external_id: String(
+                    new FormData(event.currentTarget).get("location_group_external_id") ?? ""
+                  ),
+                  name: String(new FormData(event.currentTarget).get("name") ?? "")
+                },
+                setLocationState
+              )}
+          >
+            <p className="eyebrow">Locations</p>
+            <h2>Create location</h2>
+            <label className="field">
+              <span>Group</span>
+              <select name="location_group_external_id" required>
+                <option value="">Select a group</option>
+                {locationGroups.map((group) => (
+                  <option key={group.external_id} value={group.external_id}>
+                    {group.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              <span>Location name</span>
+              <input name="name" placeholder="Top shelf" required />
+            </label>
+            {locationGroups.length === 0 ? (
+              <p className="section-copy">Create a location group first.</p>
+            ) : null}
+            {locationState.error ? <p className="error-text">{locationState.error}</p> : null}
+            {locationState.success ? <p className="status-note">{locationState.success}</p> : null}
+            <button
+              type="submit"
+              className="primary-button"
+              disabled={locationState.pending || locationGroups.length === 0}
+            >
+              {locationState.pending ? "Saving..." : "Add location"}
+            </button>
+          </form>
 
-      <form
-        className="panel control-card"
-        data-testid="create-product-form"
-        onSubmit={(event) => {
-          const formData = new FormData(event.currentTarget);
-          return submitForm(
-            event,
-            `/api/households/${householdExternalId}/products`,
-            {
-              name: String(formData.get("name") ?? ""),
-              default_unit: String(formData.get("default_unit") ?? ""),
-              aliases: splitListInput(String(formData.get("aliases") ?? "")),
-              barcodes: splitListInput(String(formData.get("barcodes") ?? ""))
-            },
-            setProductState
-          );
-        }}
-      >
-        <p className="eyebrow">Products</p>
-        <h2>Create product</h2>
-        <label className="field">
-          <span>Product name</span>
-          <input name="name" placeholder="Pasta" required />
-        </label>
-        <label className="field">
-          <span>Unit</span>
-          <input name="default_unit" placeholder="count" required />
-        </label>
-        <label className="field">
-          <span>Aliases</span>
-          <textarea name="aliases" rows={3} placeholder="Spaghetti, dry pasta" />
-        </label>
-        <label className="field">
-          <span>Barcodes</span>
-          <textarea name="barcodes" rows={2} placeholder="0123456789012" />
-        </label>
-        {productState.error ? <p className="error-text">{productState.error}</p> : null}
-        <button type="submit" className="primary-button" disabled={productState.pending}>
-          {productState.pending ? "Saving..." : "Add product"}
-        </button>
-      </form>
+          <form
+            className="panel control-card"
+            data-testid="create-product-form"
+            onSubmit={(event) => {
+              const formData = new FormData(event.currentTarget);
+              return submitForm(
+                event,
+                `/api/households/${householdExternalId}/products`,
+                {
+                  name: String(formData.get("name") ?? ""),
+                  default_unit: String(formData.get("default_unit") ?? ""),
+                  aliases: splitListInput(String(formData.get("aliases") ?? "")),
+                  barcodes: splitListInput(String(formData.get("barcodes") ?? ""))
+                },
+                setProductState
+              );
+            }}
+          >
+            <p className="eyebrow">Products</p>
+            <h2>Create product</h2>
+            <label className="field">
+              <span>Product name</span>
+              <input name="name" placeholder="Pasta" required />
+            </label>
+            <label className="field">
+              <span>Unit</span>
+              <input name="default_unit" placeholder="count" required />
+            </label>
+            <label className="field">
+              <span>Aliases</span>
+              <textarea name="aliases" rows={3} placeholder="Spaghetti, dry pasta" />
+            </label>
+            <label className="field">
+              <span>Barcodes</span>
+              <textarea name="barcodes" rows={2} placeholder="0123456789012" />
+            </label>
+            {productState.error ? <p className="error-text">{productState.error}</p> : null}
+            {productState.success ? <p className="status-note">{productState.success}</p> : null}
+            <button type="submit" className="primary-button" disabled={productState.pending}>
+              {productState.pending ? "Saving..." : "Add product"}
+            </button>
+          </form>
+        </>
+      ) : (
+        <article className="panel control-card">
+          <p className="eyebrow">Structure</p>
+          <h2>Household-admin actions only</h2>
+          <p className="section-copy">
+            Creating location groups, locations, and catalog products requires the
+            <code>household_admin</code> role. You can still add, move, and remove stock in the
+            locations and products that already exist.
+          </p>
+        </article>
+      )}
 
       <form
         className="panel control-card"
@@ -226,6 +250,11 @@ export function PantryControls({
             ))}
           </select>
         </label>
+        {products.length === 0 || locations.length === 0 ? (
+          <p className="section-copy">
+            Stock can be added after at least one product and one location exist for this household.
+          </p>
+        ) : null}
         <div className="split-fields">
           <label className="field">
             <span>Quantity</span>
@@ -245,6 +274,7 @@ export function PantryControls({
           <input name="note" placeholder="Market run, case discount, opened" />
         </label>
         {lotState.error ? <p className="error-text">{lotState.error}</p> : null}
+        {lotState.success ? <p className="status-note">{lotState.success}</p> : null}
         <button
           type="submit"
           className="primary-button"

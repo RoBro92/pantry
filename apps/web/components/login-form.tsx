@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 import { appConfig } from "../lib/app-config";
+import { readApiErrorMessage } from "../lib/client-api";
 
 type LoginFormProps = {
   nextPath?: string;
@@ -34,8 +35,7 @@ export function LoginForm({ nextPath = "/app" }: LoginFormProps) {
     });
 
     if (!response.ok) {
-      const body = (await response.json().catch(() => null)) as { detail?: string } | null;
-      setError(body?.detail ?? "Login failed.");
+      setError(await readApiErrorMessage(response, "Login failed."));
       setIsSubmitting(false);
       return;
     }

@@ -151,6 +151,12 @@ export default async function RecipeDetailPage({ params }: RecipeDetailPageProps
               <strong>Source</strong>
               <span>{recipe.source_kind}</span>
             </li>
+            {recipe.source_url ? (
+              <li>
+                <strong>Source URL</strong>
+                <span>{recipe.source_url}</span>
+              </li>
+            ) : null}
             <li>
               <strong>Last updated</strong>
               <span>

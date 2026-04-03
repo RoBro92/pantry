@@ -3,14 +3,44 @@
 import { appConfig } from "./app-config";
 
 type ApiErrorBody = {
-  detail?: string;
+  detail?:
+    | string
+    | Array<{
+        msg?: string;
+        loc?: Array<string | number>;
+      }>;
 };
 
-async function sendToApi<T>(
-  method: "POST" | "PUT",
-  path: string,
-  payload: unknown
-): Promise<T> {
+function formatApiErrorMessage(body: ApiErrorBody | null, fallback: string): string {
+  const detail = body?.detail;
+  if (typeof detail === "string" && detail.trim()) {
+    return detail;
+  }
+  if (Array.isArray(detail) && detail.length > 0) {
+    return detail
+      .map((item) => {
+        const message = item.msg?.trim() || "Invalid value.";
+        const location =
+          item.loc
+            ?.filter((segment) => segment !== "body")
+            .map((segment) => String(segment))
+            .join(" > ") ?? "";
+        return location ? `${location}: ${message}` : message;
+      })
+      .join(" ");
+  }
+  return fallback;
+}
+
+export async function readApiErrorMessage(
+  response: Response,
+  fallback = "Request failed."
+): Promise<string> {
+  const body = (await response.json().catch(() => null)) as ApiErrorBody | null;
+  return formatApiErrorMessage(body, fallback);
+}
+
+async function sendToApi<T>(method: "POST" | "PUT", path: string, payload: unknown): Promise<T> {
   const response = await fetch(`${appConfig.apiBaseUrl}${path}`, {
     method,
     credentials: "include",
@@ -21,8 +51,7 @@ async function sendToApi<T>(
   });
 
   if (!response.ok) {
-    const body = (await response.json().catch(() => null)) as ApiErrorBody | null;
-    throw new Error(body?.detail ?? "Request failed.");
+    throw new Error(await readApiErrorMessage(response));
   }
 
   return (await response.json()) as T;
@@ -44,8 +73,7 @@ export async function postFormToApi<T>(path: string, payload: FormData): Promise
   });
 
   if (!response.ok) {
-    const body = (await response.json().catch(() => null)) as ApiErrorBody | null;
-    throw new Error(body?.detail ?? "Request failed.");
+    throw new Error(await readApiErrorMessage(response));
   }
 
   return (await response.json()) as T;

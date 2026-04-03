@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import type {
   AIFeatureStatus,
   AISuggestionResponse,
@@ -12,6 +13,7 @@ type HouseholdAISuggestionsProps = {
   householdExternalId: string;
   householdName: string;
   initialStatus: AIFeatureStatus;
+  isPlatformAdmin: boolean;
   recipes: RecipeListItem[];
 };
 
@@ -19,6 +21,7 @@ export function HouseholdAISuggestions({
   householdExternalId,
   householdName,
   initialStatus,
+  isPlatformAdmin,
   recipes
 }: HouseholdAISuggestionsProps) {
   const [status] = useState(initialStatus);
@@ -67,13 +70,34 @@ export function HouseholdAISuggestions({
           <span className="tag subtle-tag">{status.health_status ?? "unknown"}</span>
         </div>
         {!status.available ? (
-          <p className="error-text">{status.reason ?? "AI is unavailable for this household."}</p>
+          <div className="stack">
+            <p className="error-text">
+              {status.reason ?? "AI is unavailable for this household."}
+            </p>
+            {isPlatformAdmin ? (
+              <p className="section-copy">
+                <Link href="/admin/ai" className="inline-link">
+                  Open AI configuration
+                </Link>{" "}
+                to review provider settings and run a health check.
+              </p>
+            ) : (
+              <p className="section-copy">
+                Ask a platform admin to review the installation AI provider settings.
+              </p>
+            )}
+          </div>
         ) : null}
       </section>
 
       <section className="panel">
         <p className="eyebrow">Generate Suggestions</p>
         {error ? <p className="error-text">{error}</p> : null}
+        {!status.available ? (
+          <p className="section-copy">
+            Suggestions stay disabled until the installation AI provider is configured and healthy.
+          </p>
+        ) : null}
         <div className="content-grid">
           <label className="field">
             <span>Suggestion type</span>

@@ -58,7 +58,13 @@ export default async function HouseholdImportListPage({ params }: ImportListPage
       <section className="panel">
         <p className="eyebrow">Inbox And History</p>
         {response.imports.length === 0 ? (
-          <p>No imports have been created for this household yet.</p>
+          <div className="stack">
+            <p>No imports have been created for this household yet.</p>
+            <p className="section-copy">
+              Start with a structured CSV, TSV, JSON, or text export. Review stays separate from
+              pantry stock until you explicitly confirm a cleaned-up import.
+            </p>
+          </div>
         ) : (
           <div className="recipe-card-grid">
             {response.imports.map((item) => (
@@ -82,6 +88,12 @@ export default async function HouseholdImportListPage({ params }: ImportListPage
                 </div>
                 {item.note ? <p>{item.note}</p> : null}
                 {item.failure_message ? <p className="error-text">{item.failure_message}</p> : null}
+                {item.status === "queued" || item.status === "processing" ? (
+                  <p className="section-copy">
+                    Worker processing is still in progress. Open the detail page to refresh the line
+                    review state.
+                  </p>
+                ) : null}
                 <div className="page-actions">
                   <Link
                     href={`/app/households/${response.household_external_id}/imports/${item.external_id}`}

@@ -12,7 +12,7 @@ type HouseholdAIPageProps = {
 };
 
 export default async function HouseholdAIPage({ params }: HouseholdAIPageProps) {
-  await requireSession();
+  const session = await requireSession();
   const { householdExternalId } = await params;
   const [status, recipeList] = await Promise.all([
     getHouseholdAIStatus(householdExternalId),
@@ -24,6 +24,7 @@ export default async function HouseholdAIPage({ params }: HouseholdAIPageProps) 
       householdExternalId={householdExternalId}
       householdName={recipeList.household_name}
       initialStatus={status}
+      isPlatformAdmin={session.user.platform_role === "platform_admin"}
       recipes={recipeList.recipes}
     />
   );

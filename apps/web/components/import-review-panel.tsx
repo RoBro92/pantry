@@ -44,11 +44,13 @@ function ImportLineEditor({
   const [status, setStatus] = useState(line.status);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
   async function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setPending(true);
     setError(null);
+    setSuccess(null);
 
     try {
       await putToApi<ImportDetailResponse>(
@@ -63,6 +65,7 @@ function ImportLineEditor({
           status
         }
       );
+      setSuccess("Line saved. Refreshing import state...");
       router.refresh();
     } catch (submissionError) {
       setError(submissionError instanceof Error ? submissionError.message : "Save failed.");
@@ -158,6 +161,7 @@ function ImportLineEditor({
         />
       </label>
       {error ? <p className="error-text compact-error">{error}</p> : null}
+      {success ? <p className="status-note">{success}</p> : null}
       <div className="page-actions">
         <button type="submit" className="primary-button" disabled={locked || pending}>
           {pending ? "Saving..." : "Save line"}
@@ -178,6 +182,7 @@ export function ImportReviewPanel({
   const [purchasedOn, setPurchasedOn] = useState(importJob.occurred_on ?? "");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
   const locked = importJob.status === "confirmed" || importJob.status === "failed";
 
@@ -185,6 +190,7 @@ export function ImportReviewPanel({
     event.preventDefault();
     setPending(true);
     setError(null);
+    setSuccess(null);
 
     try {
       await postToApi<ImportDetailResponse>(
@@ -194,6 +200,7 @@ export function ImportReviewPanel({
           purchased_on: purchasedOn || null
         }
       );
+      setSuccess("Import confirmed. Refreshing pantry state...");
       router.refresh();
     } catch (submissionError) {
       setError(submissionError instanceof Error ? submissionError.message : "Confirmation failed.");
@@ -205,6 +212,17 @@ export function ImportReviewPanel({
     <section className="stack">
       <article className="panel">
         <p className="eyebrow">Review Lines</p>
+        {importJob.status === "queued" || importJob.status === "processing" ? (
+          <p className="section-copy">
+            The worker is still processing this upload. Refresh this page after processing completes.
+          </p>
+        ) : null}
+        {importJob.status === "failed" ? (
+          <p className="error-text">
+            This import failed before review. Check the lifecycle details above and upload a corrected
+            source file if needed.
+          </p>
+        ) : null}
         {importJob.lines.length === 0 ? (
           <p>No import lines are available yet. Refresh after the worker finishes processing.</p>
         ) : (
@@ -266,6 +284,7 @@ export function ImportReviewPanel({
               be resolved first.
             </p>
             {error ? <p className="error-text">{error}</p> : null}
+            {success ? <p className="status-note">{success}</p> : null}
             <div className="page-actions">
               <button
                 type="submit"
