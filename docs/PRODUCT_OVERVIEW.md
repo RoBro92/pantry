@@ -1,6 +1,6 @@
 # Product Overview
 
-Pantry is a pantry management application for households that want reliable inventory tracking, location-aware storage, shopping coordination, and future recipe and AI-assisted workflows.
+Pantry is a pantry management application for households that want reliable inventory tracking, location-aware storage, and a path toward shopping, recipe, and AI-assisted workflows without locking the product to hosted-only assumptions.
 
 ## Core Product Shape
 
@@ -23,4 +23,3 @@ Pantry is a pantry management application for households that want reliable inve
 - Self-hosters running a single household instance.
 - Early adopters comfortable with Docker Compose.
 - Households that want structured inventory before advanced AI or import automation is fully built.
-

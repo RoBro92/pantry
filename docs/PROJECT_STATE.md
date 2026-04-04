@@ -1,6 +1,6 @@
 # Project State
 
-Updated: 2026-04-03
+Updated: 2026-04-04
 
 ## What Exists
 
@@ -32,41 +32,75 @@ Updated: 2026-04-03
 
 ## Latest Change
 
-- Implemented Milestone 8 self-hosted product hardening, setup experience, UX polish, and release-readiness work.
-- Added `/api/setup/status` and `/api/setup/bootstrap-platform-admin` plus a browser `/setup` flow for the first platform admin, with one-time server-side enforcement and immediate sign-in.
-- Added installation-console flows for platform admins to create users, create households, and assign memberships without leaving the app.
-- Tightened pantry structure permissions so only `household_admin` can create location groups, locations, and products, while day-to-day stock actions remain available to `household_user`.
-- Improved login, dashboard, pantry, import, recipe, AI, and admin UX with clearer empty states, better validation/error messages, and more explicit guidance for unconfigured or unhealthy installation features.
-- Expanded Docker-backed Playwright coverage to include first-run setup and platform-admin provisioning flows, including a UI-level check that a normal household user cannot administer pantry structure.
-- Updated public docs for the supported self-hosted setup path and recorded that host-side web build commands require Node 20 / npm 10, while the Docker web container remains the canonical validation runtime.
+- Reworked the roadmap so self-hosted completion, release workflow, production deployment, and later SaaS work are clearly separated.
+- Added release/version/update planning docs centered on `VERSION`, GHCR image publishing, GitHub Releases metadata, and manual operator-driven updates.
+- Recorded an explicit implementation audit covering complete, partial, missing, and intentionally deferred areas.
+- Corrected stale docs that still described the repo as if auth, SQLAlchemy, and Alembic had not been selected or implemented.
+- Added small release-aligned scaffolding so root web scripts export `NEXT_PUBLIC_APP_VERSION` from the canonical `VERSION` file.
+
+## Implementation Audit
+
+### Complete
+
+- Identity, tenancy, and session auth foundations from Milestones 0-1 are implemented and validated in code.
+- Pantry structure, stock-lot tracking, recent pantry activity, and role-aware household access from Milestone 2 are implemented.
+- Recipe CRUD, deterministic pantry matching, coverage calculation, and shopping-gap derivation from Milestone 3 are implemented.
+- Reviewed import upload, line review, worker processing, and confirm-to-pantry flow from Milestone 4 are implemented.
+- Installation-scoped AI provider configuration, health handling, and read-only household suggestion flow from Milestone 5 are implemented.
+- Diagnostics, SMTP readiness foundation, public browser URL handling, QR/location links, and admin navigation from Milestone 6 are implemented.
+- SaaS-readiness primitives from Milestone 7 are implemented as boundaries only: deployment modes, feature flags, usage counters, and E2E foundations.
+- First-run setup, admin provisioning, permission tightening, UX hardening, and expanded E2E coverage from Milestone 8 are implemented.
+- Current version visibility is already implemented in the landing page, authenticated shell, API health, and diagnostics surfaces.
+
+### Partial / Foundation-Only
+
+- Recipe URL imports exist, but processing is intentionally lightweight and depends on structured metadata rather than heavy scraping or browser automation.
+- AI is intentionally advisory-only. Provider configuration, health, and read-only suggestions exist, but broader AI-assisted workflows do not.
+- SMTP is a readiness/configuration surface with connectivity testing, not a shipped invitation or password-recovery system.
+- Deployment modes, feature flags, demo mode, and usage counters exist as server-side primitives, but quota enforcement and demo automation do not.
+- Release/version foundations exist through `VERSION`, environment injection, and current-version display, but release publication and update checks are not implemented yet.
+
+### Missing For The Planned Self-Hosted Release Path
+
+- Shopping lists, purchase tracking, and deliberate consumption/replenishment workflows.
+- GHCR publishing workflow and GitHub Releases-based release/update metadata flow.
+- Admin-visible update-available notification.
+- Production deployment profile and LXC-focused deployment guidance beyond the current local Compose baseline.
+- Broader self-hosted release packaging such as upgrade/rollback guidance and operator-facing release checklist.
+
+### Deferred Intentionally
+
+- Hosted billing, supporter logic, and SaaS tenant lifecycle implementation.
+- Hosted AI routing or any hosted-only provider behavior.
+- Demo reset/disposable-data lifecycle automation.
+- Public hosted-control-plane or support tooling.
+
+## Docs / Code Mismatches Corrected In This Pass
+
+- `docs/TECH_STACK.md` previously claimed the repo had not selected an ORM, migration tool, or auth/session approach. That was stale and is now corrected.
+- `docs/FUTURE_SCOPE.md` previously claimed there was no auth implementation yet. That was stale and is now corrected.
+- The roadmap previously placed SaaS-oriented work too early and did not track release/version/update flow, production/LXC deployment, or later UI refinement explicitly.
+- Version visibility existed in code but was under-documented. The release/version docs now track those existing surfaces clearly.
 
 ## Validation Results
 
-- `cd apps/api && pytest tests/test_pantry_api.py tests/test_setup_api.py tests/test_platform_admin_api.py -q`: passed. `17 passed`.
-- `cd apps/api && pytest tests/test_ai_api.py tests/test_import_api.py tests/test_recipe_api.py -q`: passed. `15 passed`.
-- `cd apps/api && pytest -q`: passed. `37 passed`.
-- `npm run typecheck:web`: passed.
-- `npm run build:web`: failed on the host machine because this environment is `Node.js v25.6.1` / `npm 11.9.0`, which is outside the supported local runtime for the web toolchain.
-- `docker compose up -d --build`: passed.
-- `docker compose run --rm api alembic upgrade head`: passed.
-- `./infra/scripts/smoke-check.sh`: passed.
-- `./infra/scripts/e2e-seed.sh`: passed.
-- `npm run test:e2e`: passed. `9 passed`.
-- `docker compose exec -T web sh -lc 'node -v && npm -v && npm run build --workspace @pantry/web'`: passed under `Node.js v20.20.0` / `npm 10.8.2`.
-- `docker compose down`: passed.
+- `npm run version:show`: passed.
+- `sh -lc 'export NEXT_PUBLIC_APP_VERSION=$(./infra/scripts/read-version.sh); test "$NEXT_PUBLIC_APP_VERSION" = "$(cat VERSION)" && printf %s "$NEXT_PUBLIC_APP_VERSION"'`: passed.
+
+Host-side `npm run typecheck:web` was not used as a final validation signal in this pass because `next typegen` again behaved unreliably under the local `Node.js v25.6.1` / `npm 11.9.0` environment. That behavior predates this docs pass and does not change the underlying release-planning conclusions.
+
+This pass intentionally avoided Docker-backed validation because only docs and small release/version script scaffolding changed.
 
 ## Blockers / Gaps
 
-- Host-side web build commands currently require `Node.js 20.x` and `npm 10.x`. The local Docker web container already uses that runtime, but unsupported host runtimes can fail before app code is evaluated.
-- Quota checks are still intentionally non-enforcing. Usage counters exist, but no user-visible limits or operator-configurable enforcement exist yet.
-- Demo mode remains configuration-only. There is no demo reset, data wipe, or showcase orchestration system.
-- Recipe URL import processing is still intentionally lightweight and depends on structured metadata such as JSON-LD rather than heavy scraping or browser automation.
-- SMTP remains a foundation-only surface. There are still no invitation, password-recovery, or notification delivery workflows.
-- Pantry structure edit/archive flows and richer household lifecycle tooling are still limited; the new provisioning UX covers first-use creation, not full long-term admin operations.
+- Host-side web commands remain pinned to `Node.js 20.x` and `npm 10.x`. This pass documents and reinforces that requirement, but does not change the underlying Next.js compatibility boundary.
+- Release publishing, GHCR image automation, update-available checks, and production/LXC deployment packaging are still planned work rather than implemented features.
+- Shopping and broader household lifecycle workflows remain the largest functional gap for a more complete self-hosted release.
+- SMTP, AI, recipe URL import, demo mode, and quota handling remain intentionally partial foundations as noted above.
 
 ## Recommended Next Milestone
 
-Milestone 9 should focus on shopping and day-to-day pantry workflow completion: shopping lists, deliberate consumption/replenishment flows, and the highest-value links between pantry coverage, recipe gaps, and household purchasing.
+The next implementation-focused pass should tackle release/version/update workflow and production deployment readiness together: GHCR image publishing, GitHub Releases metadata, admin update-notification foundations, and LXC-oriented deployment guidance or scaffolding.
 
 ## Useful Commands
 
