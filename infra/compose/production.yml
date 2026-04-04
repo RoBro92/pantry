@@ -1,0 +1,148 @@
+services:
+  web:
+    image: ${PANTRY_IMAGE_NAMESPACE:-ghcr.io/example}/pantry-web:${PANTRY_VERSION:-0.1.0}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_APP_VERSION: ${PANTRY_VERSION:-0.1.0}
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL}
+      INTERNAL_API_BASE_URL: ${INTERNAL_API_BASE_URL:-http://api:8000}
+    ports:
+      - "${WEB_BIND_ADDRESS:-127.0.0.1}:${WEB_PORT:-3000}:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:3000/ >/dev/null"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+  api:
+    image: ${PANTRY_IMAGE_NAMESPACE:-ghcr.io/example}/pantry-api:${PANTRY_VERSION:-0.1.0}
+    restart: unless-stopped
+    environment:
+      API_SERVICE_NAME: pantry-api
+      APP_VERSION: ${PANTRY_VERSION:-0.1.0}
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DEPLOYMENT_MODE: ${DEPLOYMENT_MODE:-self_hosted}
+      DEMO_MODE_ENABLED: ${DEMO_MODE_ENABLED:-false}
+      AI_FEATURE_ENABLED: ${AI_FEATURE_ENABLED:-true}
+      WEB_APP_URL: ${WEB_APP_URL}
+      API_BASE_URL: ${API_BASE_URL}
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      IMPORT_STORAGE_ROOT: ${IMPORT_STORAGE_ROOT:-/var/lib/pantry/imports}
+      IMPORT_MAX_UPLOAD_BYTES: ${IMPORT_MAX_UPLOAD_BYTES:-10485760}
+      SETTINGS_ENCRYPTION_KEY: ${SETTINGS_ENCRYPTION_KEY}
+      SESSION_SECRET_KEY: ${SESSION_SECRET_KEY}
+      SESSION_COOKIE_NAME: ${SESSION_COOKIE_NAME:-pantry_session}
+      SESSION_MAX_AGE_SECONDS: ${SESSION_MAX_AGE_SECONDS:-604800}
+      SESSION_HTTPS_ONLY: ${SESSION_HTTPS_ONLY:-true}
+      SESSION_SAME_SITE: ${SESSION_SAME_SITE:-lax}
+      PUBLIC_BROWSER_BASE_URL: ${PUBLIC_BROWSER_BASE_URL:-}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-}
+      OPENAI_COMPAT_BASE_URL: ${OPENAI_COMPAT_BASE_URL:-}
+      OPENAI_COMPAT_API_KEY: ${OPENAI_COMPAT_API_KEY:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-}
+      SMTP_FROM_NAME: ${SMTP_FROM_NAME:-}
+      SMTP_SECURITY: ${SMTP_SECURITY:-}
+      SMTP_ENABLED: ${SMTP_ENABLED:-}
+      SMTP_TIMEOUT_SECONDS: ${SMTP_TIMEOUT_SECONDS:-5}
+      RELEASE_CHECK_REPOSITORY: ${RELEASE_CHECK_REPOSITORY:-}
+      RELEASE_CHECK_METADATA_URL: ${RELEASE_CHECK_METADATA_URL:-}
+      RELEASE_CHECK_TIMEOUT_SECONDS: ${RELEASE_CHECK_TIMEOUT_SECONDS:-5}
+    ports:
+      - "${API_BIND_ADDRESS:-127.0.0.1}:${API_PORT:-8000}:8000"
+    volumes:
+      - ${PANTRY_IMPORTS_DATA_DIR:-/srv/pantry/imports}:${IMPORT_STORAGE_ROOT:-/var/lib/pantry/imports}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')\""]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+  worker:
+    image: ${PANTRY_IMAGE_NAMESPACE:-ghcr.io/example}/pantry-worker:${PANTRY_VERSION:-0.1.0}
+    restart: unless-stopped
+    environment:
+      WORKER_SERVICE_NAME: pantry-worker
+      APP_VERSION: ${PANTRY_VERSION:-0.1.0}
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      IMPORT_STORAGE_ROOT: ${IMPORT_STORAGE_ROOT:-/var/lib/pantry/imports}
+      WORKER_POLL_INTERVAL_SECONDS: ${WORKER_POLL_INTERVAL_SECONDS:-30}
+    volumes:
+      - ${PANTRY_IMPORTS_DATA_DIR:-/srv/pantry/imports}:${IMPORT_STORAGE_ROOT:-/var/lib/pantry/imports}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -m worker.main --status >/dev/null"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  migrate:
+    image: ${PANTRY_IMAGE_NAMESPACE:-ghcr.io/example}/pantry-api:${PANTRY_VERSION:-0.1.0}
+    profiles: ["manual"]
+    restart: "no"
+    environment:
+      APP_VERSION: ${PANTRY_VERSION:-0.1.0}
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DEPLOYMENT_MODE: ${DEPLOYMENT_MODE:-self_hosted}
+      WEB_APP_URL: ${WEB_APP_URL}
+      API_BASE_URL: ${API_BASE_URL}
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      IMPORT_STORAGE_ROOT: ${IMPORT_STORAGE_ROOT:-/var/lib/pantry/imports}
+      SETTINGS_ENCRYPTION_KEY: ${SETTINGS_ENCRYPTION_KEY}
+      SESSION_SECRET_KEY: ${SESSION_SECRET_KEY}
+    volumes:
+      - ${PANTRY_IMPORTS_DATA_DIR:-/srv/pantry/imports}:${IMPORT_STORAGE_ROOT:-/var/lib/pantry/imports}
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-pantry}
+      POSTGRES_USER: ${POSTGRES_USER:-pantry}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ${PANTRY_POSTGRES_DATA_DIR:-/srv/pantry/postgres}:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - ${PANTRY_REDIS_DATA_DIR:-/srv/pantry/redis}:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
