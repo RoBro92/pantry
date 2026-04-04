@@ -1,6 +1,8 @@
+name: pantry
+
 services:
   web:
-    image: ${PANTRY_IMAGE_NAMESPACE:-ghcr.io/example}/pantry-web:${PANTRY_VERSION:-0.1.0}
+    image: ${PANTRY_IMAGE_NAMESPACE:-ghcr.io/robro92}/pantry-web:${PANTRY_VERSION:-0.1.0}
     restart: unless-stopped
     environment:
       NODE_ENV: production
@@ -8,7 +10,7 @@ services:
       NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL}
       INTERNAL_API_BASE_URL: ${INTERNAL_API_BASE_URL:-http://api:8000}
     ports:
-      - "${WEB_BIND_ADDRESS:-127.0.0.1}:${WEB_PORT:-3000}:3000"
+      - "${WEB_BIND_ADDRESS:-0.0.0.0}:${WEB_PORT:-3000}:3000"
     depends_on:
       api:
         condition: service_healthy
@@ -19,7 +21,7 @@ services:
       retries: 5
 
   api:
-    image: ${PANTRY_IMAGE_NAMESPACE:-ghcr.io/example}/pantry-api:${PANTRY_VERSION:-0.1.0}
+    image: ${PANTRY_IMAGE_NAMESPACE:-ghcr.io/robro92}/pantry-api:${PANTRY_VERSION:-0.1.0}
     restart: unless-stopped
     environment:
       API_SERVICE_NAME: pantry-api
@@ -39,7 +41,7 @@ services:
       SESSION_SECRET_KEY: ${SESSION_SECRET_KEY}
       SESSION_COOKIE_NAME: ${SESSION_COOKIE_NAME:-pantry_session}
       SESSION_MAX_AGE_SECONDS: ${SESSION_MAX_AGE_SECONDS:-604800}
-      SESSION_HTTPS_ONLY: ${SESSION_HTTPS_ONLY:-true}
+      SESSION_HTTPS_ONLY: ${SESSION_HTTPS_ONLY:-false}
       SESSION_SAME_SITE: ${SESSION_SAME_SITE:-lax}
       PUBLIC_BROWSER_BASE_URL: ${PUBLIC_BROWSER_BASE_URL:-}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-}
@@ -54,11 +56,11 @@ services:
       SMTP_SECURITY: ${SMTP_SECURITY:-}
       SMTP_ENABLED: ${SMTP_ENABLED:-}
       SMTP_TIMEOUT_SECONDS: ${SMTP_TIMEOUT_SECONDS:-5}
-      RELEASE_CHECK_REPOSITORY: ${RELEASE_CHECK_REPOSITORY:-}
+      RELEASE_CHECK_REPOSITORY: ${RELEASE_CHECK_REPOSITORY:-RoBro92/pantry}
       RELEASE_CHECK_METADATA_URL: ${RELEASE_CHECK_METADATA_URL:-}
       RELEASE_CHECK_TIMEOUT_SECONDS: ${RELEASE_CHECK_TIMEOUT_SECONDS:-5}
     ports:
-      - "${API_BIND_ADDRESS:-127.0.0.1}:${API_PORT:-8000}:8000"
+      - "${API_BIND_ADDRESS:-0.0.0.0}:${API_PORT:-8000}:8000"
     volumes:
       - ${PANTRY_IMPORTS_DATA_DIR:-/srv/pantry/imports}:${IMPORT_STORAGE_ROOT:-/var/lib/pantry/imports}
     depends_on:
@@ -73,7 +75,7 @@ services:
       retries: 5
 
   worker:
-    image: ${PANTRY_IMAGE_NAMESPACE:-ghcr.io/example}/pantry-worker:${PANTRY_VERSION:-0.1.0}
+    image: ${PANTRY_IMAGE_NAMESPACE:-ghcr.io/robro92}/pantry-worker:${PANTRY_VERSION:-0.1.0}
     restart: unless-stopped
     environment:
       WORKER_SERVICE_NAME: pantry-worker
@@ -98,7 +100,7 @@ services:
       retries: 5
 
   migrate:
-    image: ${PANTRY_IMAGE_NAMESPACE:-ghcr.io/example}/pantry-api:${PANTRY_VERSION:-0.1.0}
+    image: ${PANTRY_IMAGE_NAMESPACE:-ghcr.io/robro92}/pantry-api:${PANTRY_VERSION:-0.1.0}
     profiles: ["manual"]
     restart: "no"
     environment:
