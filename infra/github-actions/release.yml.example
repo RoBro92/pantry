@@ -1,0 +1,46 @@
+name: release-example
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read VERSION
+        id: version
+        run: echo "value=$(cat VERSION)" >> "$GITHUB_OUTPUT"
+
+      - name: Validate main before release
+        run: |
+          echo "Replace this step with the repo's real validation workflow."
+          echo "Expected order: validate main -> bump VERSION -> tag/release -> publish images."
+
+      - name: Build and publish API image
+        run: |
+          echo docker build -f infra/docker/api.production.Dockerfile -t ghcr.io/<owner>/pantry-api:${{ steps.version.outputs.value }} .
+
+      - name: Build and publish worker image
+        run: |
+          echo docker build -f infra/docker/worker.production.Dockerfile -t ghcr.io/<owner>/pantry-worker:${{ steps.version.outputs.value }} .
+
+      - name: Build and publish web image
+        run: |
+          echo docker build \
+            -f infra/docker/web.production.Dockerfile \
+            --build-arg NEXT_PUBLIC_APP_VERSION=${{ steps.version.outputs.value }} \
+            -t ghcr.io/<owner>/pantry-web:${{ steps.version.outputs.value }} \
+            .
+
+      - name: Create GitHub release
+        run: |
+          echo "Publish GitHub Release v${{ steps.version.outputs.value }} with release notes."

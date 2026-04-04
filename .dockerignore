@@ -1,0 +1,11 @@
+.git
+.gitignore
+.next
+node_modules
+apps/web/.next
+private-docs
+tests/e2e/.auth
+*.pyc
+__pycache__
+.pytest_cache
+.DS_Store
