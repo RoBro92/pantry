@@ -5,6 +5,7 @@
 - `VERSION`: canonical application version.
 - `compose.yml`: local development stack.
 - `.env.example`: environment variable template.
+- `.dockerignore`: Docker build exclusions for release-oriented image builds.
 - `package.json`: workspace scripts, including web validation and Playwright E2E entrypoints.
 - `infra/scripts/read-version.sh`: lightweight helper that reads the canonical repo version.
 - `playwright.config.ts`: Docker-backed Playwright configuration.
@@ -23,7 +24,13 @@
 ## Infrastructure
 
 - `infra/docker/`: Dockerfiles for web, API, and worker.
+- `infra/docker/*.production.Dockerfile`: production-oriented image build targets for GHCR publishing.
+- `infra/compose/production.yml`: production Docker Compose target for pinned-image Docker-on-LXC deployment.
+- `infra/env/production.lxc.env.example`: production environment template for self-hosted operators.
+- `infra/github-actions/release.yml.example`: lightweight GitHub Actions release/publish scaffold for later activation.
 - `infra/scripts/`: small repository utility scripts such as version helpers, repeatable smoke checks, E2E seed setup, and worker-once helpers.
+- `infra/scripts/release-manifest.sh`: prints release tag and pinned image references derived from `VERSION`.
+- `infra/scripts/check-release-metadata.sh`: read-only helper for checking the latest GitHub Release metadata from the CLI.
 - `infra/scripts/e2e-reset-uninitialized.sh`: resets application data in the running Docker stack so Playwright can exercise first-run setup deterministically.
 
 ## Key Backend Paths
@@ -39,6 +46,7 @@
 - `apps/api/app/api/routes/setup.py`: first-run setup status and one-time browser bootstrap routes.
 - `apps/api/app/api/routes/ai_admin.py`: platform-admin AI provider configuration and health-check routes.
 - `apps/api/app/api/routes/diagnostics_admin.py`: platform-admin diagnostics route built from measured runtime data only.
+- `apps/api/app/api/routes/release_admin.py`: platform-admin advisory release/update-check route.
 - `apps/api/app/api/routes/settings_admin.py`: platform-admin public/browser base URL route.
 - `apps/api/app/api/routes/smtp_admin.py`: platform-admin SMTP configuration and connectivity-test routes.
 - `apps/api/app/api/routes/location_links.py`: authenticated QR/location deep-link route.
@@ -58,6 +66,7 @@
 - `apps/api/app/services/platform_features.py`: deployment-default plus scoped feature-flag resolution and enforcement helpers.
 - `apps/api/app/services/usage_counters.py`: usage counter increments and non-enforcing quota-check skeletons.
 - `apps/api/app/services/diagnostics.py`: platform-admin diagnostics assembly for app, worker, Redis, queue, DB, and config summaries.
+- `apps/api/app/services/releases.py`: GitHub Releases metadata fetch, version comparison, and advisory update-status assembly.
 - `apps/api/app/services/runtime_status.py`: Redis-backed worker heartbeat publishing and Redis health helpers.
 - `apps/api/app/services/location_links.py`: QR-safe location route and browser-link builders.
 - `apps/api/app/services/ai_providers/`: provider adapter abstractions plus Ollama and OpenAI-compatible implementations.
@@ -75,6 +84,7 @@
 - `apps/web/app/(dashboard)/app/households/[householdExternalId]/imports/`: import inbox/history and reviewed import detail pages.
 - `apps/web/app/(dashboard)/app/households/[householdExternalId]/recipes/`: recipe list, create, detail, and edit pages.
 - `apps/web/app/(dashboard)/admin/ai/page.tsx`: platform admin AI provider configuration page.
+- `apps/web/app/(dashboard)/admin/page.tsx`: installation console overview including advisory release/update state.
 - `apps/web/app/(dashboard)/admin/diagnostics/page.tsx`: platform admin diagnostics page.
 - `apps/web/app/(dashboard)/admin/settings/page.tsx`: platform admin public/browser base URL page.
 - `apps/web/app/(dashboard)/admin/smtp/page.tsx`: platform admin SMTP configuration page.
@@ -101,7 +111,7 @@
 - `docs/MILESTONES.md`: roadmap.
 - `docs/ARCHITECTURE.md`: high-level technical shape.
 - `docs/VERSIONING.md`: canonical versioning and planned release/update workflow.
-- `docs/DEPLOYMENT.md`: current self-hosted deployment guidance and planned production/LXC path.
+- `docs/DEPLOYMENT.md`: current self-hosted deployment guidance, production Docker-on-LXC foundation, and manual update workflow.
 - `docs/AI_INTEGRATION.md`: AI provider and suggestion architecture guidance plus delivered foundation notes.
 - `docs/DOMAIN_MODEL.md`: initial entity definitions.
 - `docs/SECURITY.md`: security posture and guardrails.

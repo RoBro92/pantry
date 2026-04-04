@@ -35,6 +35,7 @@ Initial architectural decisions recorded on 2026-04-02.
 | D-027 | Restrict pantry structure creation to `household_admin` while leaving stock add/move/remove available to `household_user`. | Household structure changes are effectively tenant configuration, while routine stock handling should remain available to day-to-day household members. |
 | D-028 | Keep `VERSION` as the single release/version source of truth across runtime services, published artifacts, and operator-facing version display. | This avoids version drift between docs, UI, API responses, and release artifacts. |
 | D-029 | Keep the self-hosted update path operator-driven, using GitHub Releases metadata and GHCR images rather than unattended in-app auto-updates. | Self-hosted operators should control upgrade timing and rollback decisions explicitly. |
+| D-030 | Keep release-metadata fetching and update-available logic in the API layer, and ship production deployment assets that pin image versions explicitly. | This keeps admin UI simple, avoids browser-side scraping, and preserves deliberate operator-controlled upgrades on self-hosted installs. |
 
 ## Deferred
 

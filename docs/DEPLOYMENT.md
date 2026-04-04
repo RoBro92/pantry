@@ -61,6 +61,9 @@ Current key variables:
 - `SMTP_ENABLED`
 - `SMTP_TIMEOUT_SECONDS`
 - `WORKER_POLL_INTERVAL_SECONDS`
+- `RELEASE_CHECK_REPOSITORY`
+- `RELEASE_CHECK_METADATA_URL`
+- `RELEASE_CHECK_TIMEOUT_SECONDS`
 
 For self-hosted operators, the most important values to review early are:
 
@@ -70,6 +73,7 @@ For self-hosted operators, the most important values to review early are:
 - `PUBLIC_BROWSER_BASE_URL`
 - `DEPLOYMENT_MODE`
 - `POSTGRES_PASSWORD`
+- `PANTRY_VERSION` in the production env file when using pinned GHCR images
 
 For the local Docker Compose stack, the web service should use `INTERNAL_API_BASE_URL=http://api:8000` so server-side Next.js requests reach the API over the Compose network. `compose.yml` now defaults the web container to that value unless you override it explicitly.
 
@@ -101,29 +105,107 @@ The intended self-hosted production path is:
 5. Let Pantry compare its current version against release metadata and show an update-available notice to platform admins.
 6. Let the operator update deployment manifests manually and roll forward or back deliberately.
 
-This repository does not implement the full update-check system yet. The current codebase only exposes the running version in the UI, API health output, and diagnostics.
+This repository does not implement automated publishing or unattended updates. It now implements the first advisory update-check layer plus production deployment assets for manual operator-controlled upgrades.
+This repository now includes the first production and update foundations for that path:
 
-## Planned Production/LXC Target
+- admin-visible advisory update checks powered by GitHub Releases metadata
+- production Dockerfiles for web, API, and worker image publishing
+- `infra/compose/production.yml` for pinned-image Docker deployment on an LXC host
+- `infra/env/production.lxc.env.example` as the production environment template
+- helper scripts for release manifests and manual metadata checks
 
-The intended production target after the release milestone is a Docker-based deployment on the user's LXC cluster, with:
+## Production Docker On LXC
 
-- reverse proxy and TLS handled outside Pantry
-- persistent PostgreSQL storage
-- persistent import storage outside ephemeral container filesystems
-- Redis for worker coordination
-- image tags pinned to released GHCR versions rather than local source builds
-- operator-managed secrets, backups, and upgrade windows
+The recommended production path is Docker inside an operator-managed LXC, with Pantry staying application-only:
 
-## LXC Readiness Checklist
+- reverse proxy and TLS stay outside the Pantry containers
+- PostgreSQL, Redis, and import storage stay on persistent host-backed paths
+- published GHCR images are pinned explicitly by `PANTRY_VERSION`
+- migrations run as an explicit manual step through the `migrate` service
+- application updates remain operator-triggered and reversible
 
-Before calling Pantry production-ready for LXC-hosted deployment, the repo still needs:
+### Production Files Added In This Pass
 
-- versioned GHCR image publishing
-- GitHub Releases-based update metadata
-- a documented production Compose or equivalent deployment profile
-- backup and restore guidance for PostgreSQL and import storage
-- explicit upgrade and rollback instructions for operators
-- clearer production environment variable examples
+- `infra/compose/production.yml`
+- `infra/env/production.lxc.env.example`
+- `infra/docker/web.production.Dockerfile`
+- `infra/docker/api.production.Dockerfile`
+- `infra/docker/worker.production.Dockerfile`
+
+### First Production Bring-Up
+
+1. Copy `infra/env/production.lxc.env.example` to an operator-managed env file such as `.env.production`.
+2. Replace every placeholder secret and domain value.
+3. Create the host directories referenced by:
+   - `PANTRY_POSTGRES_DATA_DIR`
+   - `PANTRY_REDIS_DATA_DIR`
+   - `PANTRY_IMPORTS_DATA_DIR`
+4. Validate the rendered stack:
+
+```bash
+docker compose --env-file .env.production -f infra/compose/production.yml config
+```
+
+5. Pull the pinned images:
+
+```bash
+docker compose --env-file .env.production -f infra/compose/production.yml pull
+```
+
+6. Run migrations explicitly:
+
+```bash
+docker compose --env-file .env.production -f infra/compose/production.yml --profile manual run --rm migrate
+```
+
+7. Start the stack:
+
+```bash
+docker compose --env-file .env.production -f infra/compose/production.yml up -d
+```
+
+8. Verify `/`, `/login`, and `/api/health`, then sign in as a platform admin and check `/admin/diagnostics`.
+
+## Persistent Volume Expectations
+
+- PostgreSQL data must persist outside the container lifecycle.
+- Redis persistence is enabled in the production compose profile and should use a host-backed directory.
+- Reviewed-import source files and derived import artifacts must persist in `PANTRY_IMPORTS_DATA_DIR`.
+- Operators should back up PostgreSQL and import storage together before upgrading.
+
+## Manual Operator Update Workflow
+
+Pantry intentionally keeps updates manual.
+
+1. Check the available release in `/admin`, `/admin/diagnostics`, or with `./infra/scripts/check-release-metadata.sh owner/repo`.
+2. Review release notes.
+3. Back up PostgreSQL data and import storage.
+4. Update `PANTRY_VERSION` in the production env file.
+5. Pull the new pinned images:
+
+```bash
+docker compose --env-file .env.production -f infra/compose/production.yml pull
+```
+
+6. Run migrations:
+
+```bash
+docker compose --env-file .env.production -f infra/compose/production.yml --profile manual run --rm migrate
+```
+
+7. Restart the stack:
+
+```bash
+docker compose --env-file .env.production -f infra/compose/production.yml up -d
+```
+
+8. Verify:
+   - `GET /api/health`
+   - platform admin diagnostics
+   - worker heartbeat visibility
+   - login and basic pantry navigation
+
+If a release must be rolled back, restore the prior backup set and set `PANTRY_VERSION` back to the earlier pinned image tag before bringing the stack up again.
 
 ## Intentionally Not Implemented Yet
 

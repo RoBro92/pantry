@@ -11,6 +11,7 @@ The current repository includes:
 - `apps/worker`: Python background worker
 - `packages/shared-types`: minimal shared TypeScript constants and types
 - `compose.yml`: local development stack with web, API, worker, PostgreSQL, and Redis
+- `infra/compose/production.yml`: pinned-image production stack for Docker on an LXC host
 - `docs/`: product, architecture, security, and roadmap documentation
 - `private-docs/`: local-only space for private operational or SaaS notes
 
@@ -29,8 +30,9 @@ The current repository includes:
 ## Release Posture
 
 - `VERSION` is the canonical application version.
-- The current version is already exposed in the landing page, authenticated app shell, API health response, and admin diagnostics view.
-- The recommended next release milestone is a GitHub Releases and GHCR-based self-hosted workflow, with manual operator updates rather than an auto-updater.
+- The running version is exposed in the landing page, authenticated app shell, admin overview, admin diagnostics, API health, worker heartbeat, and structured service logs.
+- Platform admins now get a read-only GitHub Releases-based update check showing the current version, latest published version, and release-notes link when configured.
+- Production deployment now has a self-hosted-first Docker-on-LXC foundation built around pinned GHCR image tags and manual operator updates rather than any auto-updater.
 - See [docs/VERSIONING.md](/Users/robinbrown/Documents/GitHub/pantry/docs/VERSIONING.md) and [docs/DEPLOYMENT.md](/Users/robinbrown/Documents/GitHub/pantry/docs/DEPLOYMENT.md) for the release and deployment plan.
 
 ## First-Time Self-Hosted Setup
@@ -104,7 +106,8 @@ apps/
   worker/        Python background worker
 docs/            Product, architecture, and engineering docs
 infra/
-  docker/        Dockerfiles for local development
+  compose/       Production-oriented Compose assets
+  docker/        Development and production Dockerfiles
   scripts/       Small repository utility scripts
 packages/
   shared-types/  Shared TypeScript constants and types
@@ -136,8 +139,24 @@ Important environment variables:
 - `INTERNAL_API_BASE_URL`: server-side API URL used by Next.js server components. In Docker Compose this should point to `http://api:8000`.
 - `SESSION_SECRET_KEY`: secret used to sign web sessions. Replace the placeholder before any real deployment.
 - `SESSION_HTTPS_ONLY`: set to `true` behind HTTPS.
+- `RELEASE_CHECK_REPOSITORY`: optional `owner/repo` GitHub Releases source used for advisory update checks.
+- `RELEASE_CHECK_METADATA_URL`: optional override for the latest-release metadata endpoint.
 - `DEPLOYMENT_MODE`: validated as `self_hosted`, `demo`, or `saas`, with `saas` remaining a placeholder boundary in this public repo.
 - `DEMO_MODE_ENABLED`: optional demo-mode config flag; this milestone does not implement demo reset or disposable-data automation.
+
+## Production Foundation
+
+For a pinned-image self-hosted deployment on Docker inside LXC, start with:
+
+```bash
+cp infra/env/production.lxc.env.example .env.production
+docker compose --env-file .env.production -f infra/compose/production.yml config
+docker compose --env-file .env.production -f infra/compose/production.yml pull
+docker compose --env-file .env.production -f infra/compose/production.yml --profile manual run --rm migrate
+docker compose --env-file .env.production -f infra/compose/production.yml up -d
+```
+
+Operators stay in control of upgrades: update `PANTRY_VERSION`, pull the new images, run migrations manually, restart the stack, and verify health. Pantry does not self-update.
 
 ## Documentation
 

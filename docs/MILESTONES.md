@@ -175,7 +175,13 @@ Status: planned.
 - Add admin-visible update-available foundations on top of current version display.
 - Keep changelog mechanics lightweight until the product stabilizes further.
 
-Status: planned.
+Status: foundation implemented.
+Current scope delivered:
+
+- `VERSION` now remains the only canonical application version, with API and worker defaulting to the repo `VERSION` file and the web no longer hardcoding a real release fallback.
+- Version visibility is now consistent across landing, authenticated shell, admin overview, admin diagnostics, API health, worker heartbeat, and structured service logs.
+- Platform admins now get an advisory GitHub Releases-based update check with current version, latest version, update-available state, and release-notes URL when metadata is configured and reachable.
+- Release scaffolding now includes production Dockerfiles, release helper scripts, and a lightweight GitHub Actions example for later GHCR and GitHub Release automation.
 
 ## Milestone 12: Production Deployment And LXC Readiness
 
@@ -184,7 +190,13 @@ Status: planned.
 - Document persistent volumes, backups, reverse proxy/TLS, secret handling, and rollout/rollback expectations.
 - Prepare the repository for pinned-image deployment from GHCR rather than local source builds.
 
-Status: planned.
+Status: foundation implemented.
+Current scope delivered:
+
+- Added `infra/compose/production.yml` for pinned-image deployment with restart policies, health checks, persistent host-backed volume expectations, and an explicit migration service.
+- Added `infra/env/production.lxc.env.example` to document production configuration, version pinning, update metadata settings, and operator-managed secrets.
+- Documented the manual operator update path: check releases, update `PANTRY_VERSION`, pull images, run migrations, restart the stack, and verify health.
+- Kept the deployment model self-hosted-first and operator-controlled, with no unattended updates and no SaaS-only assumptions.
 
 ## Milestone 13: Final Self-Hosted Release Candidate
 

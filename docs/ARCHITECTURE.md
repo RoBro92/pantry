@@ -38,6 +38,7 @@ The public repo covers self-hosted and shared architecture concerns. SaaS operat
 ## Release And Update Boundaries
 
 - `VERSION` remains the canonical application version in the repository.
-- Runtime services should receive version data through environment variables derived from `VERSION`, not duplicated handwritten constants.
+- Runtime services should receive version data through environment variables derived from `VERSION`, with API and worker falling back to reading the repo `VERSION` file directly when needed.
 - Container image publishing and GitHub Release publication are external delivery concerns, not runtime business logic.
-- Self-hosted update notifications should be informational and operator-driven; deployment automation and unattended upgrades are out of scope for now.
+- Self-hosted update notifications are API-owned, informational, and operator-driven; deployment automation and unattended upgrades are out of scope for now.
+- Production deployment assets should pin released images explicitly and run migrations as a deliberate operator action rather than an automatic startup side effect.
