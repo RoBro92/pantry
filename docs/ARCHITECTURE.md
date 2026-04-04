@@ -27,9 +27,17 @@ Pantry is organized as a monorepo with separate runtime services:
 - AI provider calls go through adapters, not through core domain services directly.
 - Installation-level SMTP, browser-link settings, and diagnostics remain API-owned concerns rather than being embedded in the web layer.
 - First-run bootstrap state and installation provisioning remain API-owned concerns, with the web app acting only as the browser client for setup and admin flows.
+- Release metadata and future update-available checks should remain API- or server-owned concerns so self-hosted admin UI does not depend on browser-side release scraping or secret-bearing requests.
 - Deployment modes, feature flags, and usage counters are resolved and enforced in API-side services so future hosted differences do not leak into presentational UI.
 - QR/browser deep links must resolve tenant access on the server before revealing household-scoped location data.
 
 ## Future SaaS Readiness
 
 The public repo covers self-hosted and shared architecture concerns. SaaS operational details such as billing workflows, support tooling, secret rotation practices, or hosted runbooks belong in local-only `private-docs/` or a future private SaaS repository.
+
+## Release And Update Boundaries
+
+- `VERSION` remains the canonical application version in the repository.
+- Runtime services should receive version data through environment variables derived from `VERSION`, not duplicated handwritten constants.
+- Container image publishing and GitHub Release publication are external delivery concerns, not runtime business logic.
+- Self-hosted update notifications should be informational and operator-driven; deployment automation and unattended upgrades are out of scope for now.

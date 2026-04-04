@@ -33,6 +33,8 @@ Initial architectural decisions recorded on 2026-04-02.
 | D-025 | Remove internal prompt and Codex-specific instructions from the public repository and keep them only in local `private-docs/`. | Public docs should remain user-relevant and open-source-safe, while internal workflows and private operational notes stay out of versioned public history. |
 | D-026 | Add a one-time browser-based setup flow for the first platform admin instead of relying only on CLI bootstrap. | A real self-hosted first-run experience needs an in-product path from fresh install to usable admin console without exposing repeated bootstrap once initialization is complete. |
 | D-027 | Restrict pantry structure creation to `household_admin` while leaving stock add/move/remove available to `household_user`. | Household structure changes are effectively tenant configuration, while routine stock handling should remain available to day-to-day household members. |
+| D-028 | Keep `VERSION` as the single release/version source of truth across runtime services, published artifacts, and operator-facing version display. | This avoids version drift between docs, UI, API responses, and release artifacts. |
+| D-029 | Keep the self-hosted update path operator-driven, using GitHub Releases metadata and GHCR images rather than unattended in-app auto-updates. | Self-hosted operators should control upgrade timing and rollback decisions explicitly. |
 
 ## Deferred
 

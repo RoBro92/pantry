@@ -6,6 +6,7 @@
 - `compose.yml`: local development stack.
 - `.env.example`: environment variable template.
 - `package.json`: workspace scripts, including web validation and Playwright E2E entrypoints.
+- `infra/scripts/read-version.sh`: lightweight helper that reads the canonical repo version.
 - `playwright.config.ts`: Docker-backed Playwright configuration.
 - `README.md`: project overview and local setup.
 
@@ -34,6 +35,7 @@
 - `apps/api/app/models/instance_setting.py`: installation-scoped public URL and SMTP foundation settings.
 - `apps/api/app/models/usage_counter.py`: request metering and future quota-analysis foundation records.
 - `apps/api/app/api/routes/`: health, auth, admin, and household routes.
+- `apps/api/app/api/routes/health.py`: health endpoint exposing status, environment, request ID, and application version.
 - `apps/api/app/api/routes/setup.py`: first-run setup status and one-time browser bootstrap routes.
 - `apps/api/app/api/routes/ai_admin.py`: platform-admin AI provider configuration and health-check routes.
 - `apps/api/app/api/routes/diagnostics_admin.py`: platform-admin diagnostics route built from measured runtime data only.
@@ -67,6 +69,7 @@
 - `apps/web/app/(auth)/login/page.tsx`: login page.
 - `apps/web/app/setup/page.tsx`: first-run browser setup page for the initial platform admin.
 - `apps/web/app/(dashboard)/`: authenticated shell, pantry pages, and platform admin pages.
+- `apps/web/lib/app-config.ts`: frontend runtime configuration including exposed app version.
 - `apps/web/app/(dashboard)/app/households/[householdExternalId]/page.tsx`: household pantry view with search, stock lots, near-expiry, and audit activity.
 - `apps/web/app/locations/[locationRoute]/page.tsx`: authenticated location deep-link page used by QR/browser links.
 - `apps/web/app/(dashboard)/app/households/[householdExternalId]/imports/`: import inbox/history and reviewed import detail pages.
@@ -97,6 +100,8 @@
 - `docs/PROJECT_STATE.md`: latest implementation state, validation results, blockers, and next recommended step.
 - `docs/MILESTONES.md`: roadmap.
 - `docs/ARCHITECTURE.md`: high-level technical shape.
+- `docs/VERSIONING.md`: canonical versioning and planned release/update workflow.
+- `docs/DEPLOYMENT.md`: current self-hosted deployment guidance and planned production/LXC path.
 - `docs/AI_INTEGRATION.md`: AI provider and suggestion architecture guidance plus delivered foundation notes.
 - `docs/DOMAIN_MODEL.md`: initial entity definitions.
 - `docs/SECURITY.md`: security posture and guardrails.

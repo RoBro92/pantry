@@ -26,6 +26,12 @@ Keep `.env` aligned with `.env.example` for service-to-service validation. In pa
 For host-side web validation commands, use `Node.js 20.x` with `npm 10.x`. Newer host runtimes may
 fail in Next.js internals even when the Dockerized web service is healthy.
 
+For docs-only or very small release/version scaffolding changes, proportionate validation may be limited to:
+
+- `npm run version:show`
+- the smallest relevant web command if package or runtime-version scripts changed
+- targeted re-reading of generated or referenced docs/config files
+
 ## Validation Order
 
 Use this order unless a narrower changed-area workflow is obviously sufficient:

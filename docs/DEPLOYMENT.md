@@ -89,3 +89,45 @@ For the local Docker Compose stack, the web service should use `INTERNAL_API_BAS
 - Application containers do not terminate TLS.
 - Reverse proxy and certificates are external.
 - Private hosted-operations runbooks must remain outside the public repo.
+
+## Production Release Path
+
+The intended self-hosted production path is:
+
+1. Validate `main`.
+2. Bump `VERSION`.
+3. Publish a GitHub Release and matching version tags.
+4. Publish versioned container images to GHCR.
+5. Let Pantry compare its current version against release metadata and show an update-available notice to platform admins.
+6. Let the operator update deployment manifests manually and roll forward or back deliberately.
+
+This repository does not implement the full update-check system yet. The current codebase only exposes the running version in the UI, API health output, and diagnostics.
+
+## Planned Production/LXC Target
+
+The intended production target after the release milestone is a Docker-based deployment on the user's LXC cluster, with:
+
+- reverse proxy and TLS handled outside Pantry
+- persistent PostgreSQL storage
+- persistent import storage outside ephemeral container filesystems
+- Redis for worker coordination
+- image tags pinned to released GHCR versions rather than local source builds
+- operator-managed secrets, backups, and upgrade windows
+
+## LXC Readiness Checklist
+
+Before calling Pantry production-ready for LXC-hosted deployment, the repo still needs:
+
+- versioned GHCR image publishing
+- GitHub Releases-based update metadata
+- a documented production Compose or equivalent deployment profile
+- backup and restore guidance for PostgreSQL and import storage
+- explicit upgrade and rollback instructions for operators
+- clearer production environment variable examples
+
+## Intentionally Not Implemented Yet
+
+- unattended auto-updates
+- release-channel switching inside the app
+- hosted control-plane deployment tooling
+- public production runbooks for any future SaaS environment

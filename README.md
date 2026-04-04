@@ -26,6 +26,13 @@ The current repository includes:
 - Uploaded files treated as hostile input
 - Structured logging and audit/event thinking from the start
 
+## Release Posture
+
+- `VERSION` is the canonical application version.
+- The current version is already exposed in the landing page, authenticated app shell, API health response, and admin diagnostics view.
+- The recommended next release milestone is a GitHub Releases and GHCR-based self-hosted workflow, with manual operator updates rather than an auto-updater.
+- See [docs/VERSIONING.md](/Users/robinbrown/Documents/GitHub/pantry/docs/VERSIONING.md) and [docs/DEPLOYMENT.md](/Users/robinbrown/Documents/GitHub/pantry/docs/DEPLOYMENT.md) for the release and deployment plan.
+
 ## First-Time Self-Hosted Setup
 
 1. Copy the example environment file:
@@ -140,5 +147,6 @@ Start with these files:
 - [docs/FILE_MAP.md](/Users/robinbrown/Documents/GitHub/pantry/docs/FILE_MAP.md)
 - [docs/ARCHITECTURE.md](/Users/robinbrown/Documents/GitHub/pantry/docs/ARCHITECTURE.md)
 - [docs/DEPLOYMENT.md](/Users/robinbrown/Documents/GitHub/pantry/docs/DEPLOYMENT.md)
+- [docs/VERSIONING.md](/Users/robinbrown/Documents/GitHub/pantry/docs/VERSIONING.md)
 - [docs/SECURITY.md](/Users/robinbrown/Documents/GitHub/pantry/docs/SECURITY.md)
 - [docs/MILESTONES.md](/Users/robinbrown/Documents/GitHub/pantry/docs/MILESTONES.md)
