@@ -3,12 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CURRENT_VERSION="$(tr -d '[:space:]' < "${ROOT_DIR}/VERSION")"
-REPOSITORY="${1:-${RELEASE_CHECK_REPOSITORY:-}}"
-
-if [[ -z "${REPOSITORY}" ]]; then
-  printf 'Usage: %s <owner/repo>\n' "${0##*/}" >&2
-  exit 1
-fi
+REPOSITORY="${1:-${RELEASE_CHECK_REPOSITORY:-RoBro92/pantry}}"
 
 METADATA_URL="https://api.github.com/repos/${REPOSITORY}/releases/latest"
 
