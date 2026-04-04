@@ -150,14 +150,61 @@ Current scope delivered:
 - Better empty states, validation messaging, import/review guidance, admin navigation cues, and version visibility.
 - Expanded deterministic Playwright coverage for first-run setup and admin-managed provisioning.
 
-## Milestone 9: Shopping
+## Milestone 9: Shopping And Daily Household Workflows
 
 - Shopping lists and list items.
-- Basic consumption and replenishment workflows.
+- Recipe-gap capture into shopping.
+- Deliberate consumption and replenishment workflows that connect pantry state to day-to-day use.
+- Clear household UX for what to buy, what was bought, and what should be consumed.
 
-## Milestone 10: Hardening
+Status: planned.
 
-- Test coverage expansion beyond milestone-specific additions.
-- Observability improvements.
-- Security review and backup guidance.
-- Self-hosted deployment refinement.
+## Milestone 10: UI, Accessibility, And Interaction Refinement
+
+- Improve layout consistency, feedback states, readability, and interaction polish across pantry, imports, recipes, AI, and admin flows.
+- Address usability friction that remains after the initial hardening pass.
+- Improve mobile fit, empty-state clarity, and accessibility semantics without changing the core architecture.
+
+Status: planned.
+
+## Milestone 11: Release, Versioning, And Update Workflow
+
+- Formalize `VERSION` as the release source of truth across web, API, worker, and published artifacts.
+- Publish versioned container images to GitHub Container Registry.
+- Publish GitHub Releases and use release metadata as the update source for self-hosted operators.
+- Add admin-visible update-available foundations on top of current version display.
+- Keep changelog mechanics lightweight until the product stabilizes further.
+
+Status: planned.
+
+## Milestone 12: Production Deployment And LXC Readiness
+
+- Add production-oriented deployment guidance beyond local Compose.
+- Define the recommended self-hosted production path for Docker on LXC-hosted infrastructure.
+- Document persistent volumes, backups, reverse proxy/TLS, secret handling, and rollout/rollback expectations.
+- Prepare the repository for pinned-image deployment from GHCR rather than local source builds.
+
+Status: planned.
+
+## Milestone 13: Final Self-Hosted Release Candidate
+
+- Consolidate remaining self-hosted blockers after shopping, UX refinement, release workflow, and deployment work land.
+- Close the highest-value polish, observability, backup, and upgrade gaps for a stable self-hosted release.
+- Produce a clear release checklist for the first broader public self-hosted version.
+
+Status: planned.
+
+## Milestone 14: Private Hosted Boundary Preparation
+
+- Create or align the private hosted-services repository only after the public self-hosted product is release-ready.
+- Formalize which contracts, docs, and packages remain shared versus private.
+- Keep the public repo self-hosted-first and free of hosted billing, support, or control-plane internals.
+
+Status: planned.
+
+## Milestone 15: SaaS Implementation
+
+- Build hosted-only product logic only after the self-hosted release path is stable and the public/private boundary is clear.
+- Hosted tenant lifecycle, billing, support tooling, and SaaS operations belong here rather than in earlier self-hosted milestones.
+
+Status: planned.
