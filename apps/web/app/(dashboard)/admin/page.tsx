@@ -5,15 +5,45 @@ import {
   getAIProviderConfig,
   getAdminOverview,
   getPublicBaseURL,
+  getReleaseStatus,
   getSMTPConfig
 } from "../../../lib/server-auth";
 
+function formatDateTime(value: string | null) {
+  if (!value) {
+    return "Unavailable";
+  }
+  return new Date(value).toLocaleString("en-GB", {
+    dateStyle: "medium",
+    timeStyle: "short"
+  });
+}
+
+function formatReleaseStatusValue(status: Awaited<ReturnType<typeof getReleaseStatus>>["status"]) {
+  switch (status) {
+    case "update_available":
+      return "update available";
+    case "up_to_date":
+      return "up to date";
+    case "ahead_of_latest_release":
+      return "ahead";
+    case "comparison_unavailable":
+      return "unknown";
+    case "unavailable":
+      return "unavailable";
+    case "not_configured":
+      return "not configured";
+  }
+  return status;
+}
+
 export default async function AdminOverviewPage() {
-  const [overview, aiConfig, smtpConfig, publicBaseUrl] = await Promise.all([
+  const [overview, aiConfig, smtpConfig, publicBaseUrl, releaseStatus] = await Promise.all([
     getAdminOverview(),
     getAIProviderConfig(),
     getSMTPConfig(),
-    getPublicBaseURL()
+    getPublicBaseURL(),
+    getReleaseStatus()
   ]);
 
   return (
@@ -65,6 +95,15 @@ export default async function AdminOverviewPage() {
           value={publicBaseUrl.effective_source}
           detail={`Location QR links currently use ${publicBaseUrl.effective_value}.`}
         />
+        <StatusCard
+          title="Update Check"
+          value={formatReleaseStatusValue(releaseStatus.status)}
+          detail={
+            releaseStatus.latest_version
+              ? `Current ${releaseStatus.current_version} · latest ${releaseStatus.latest_version}`
+              : releaseStatus.message ?? "Release metadata is unavailable."
+          }
+        />
       </section>
 
       <section className="content-grid">
@@ -86,6 +125,39 @@ export default async function AdminOverviewPage() {
               Set browser URL
             </Link>
           </div>
+        </article>
+        <article className="panel">
+          <p className="eyebrow">Release And Updates</p>
+          <h2>Operator-controlled updates</h2>
+          <ul className="detail-list">
+            <li>
+              <strong>Current version</strong>
+              <span>{releaseStatus.current_version}</span>
+            </li>
+            <li>
+              <strong>Latest release</strong>
+              <span>{releaseStatus.latest_version ?? "Unavailable"}</span>
+            </li>
+            <li>
+              <strong>Status</strong>
+              <span>{formatReleaseStatusValue(releaseStatus.status)}</span>
+            </li>
+            <li>
+              <strong>Checked</strong>
+              <span>{formatDateTime(releaseStatus.checked_at)}</span>
+            </li>
+          </ul>
+          <p>
+            Pantry only checks published release metadata. Operators still choose when to pull
+            images, run migrations, and restart the stack.
+          </p>
+          {releaseStatus.release_notes_url ? (
+            <div className="page-actions">
+              <a href={releaseStatus.release_notes_url} className="secondary-link">
+                Release notes
+              </a>
+            </div>
+          ) : null}
         </article>
         <article className="panel">
           <p className="eyebrow">Real Data Policy</p>

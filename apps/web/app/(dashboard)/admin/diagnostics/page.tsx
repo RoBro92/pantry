@@ -13,6 +13,25 @@ function formatDateTime(value: string | null) {
 
 export default async function AdminDiagnosticsPage() {
   const diagnostics = await getDiagnostics();
+  const updateCheck = diagnostics.release_check;
+
+  function formatUpdateStatus() {
+    switch (updateCheck.status) {
+      case "update_available":
+        return "update available";
+      case "up_to_date":
+        return "up to date";
+      case "ahead_of_latest_release":
+        return "ahead";
+      case "comparison_unavailable":
+        return "unknown";
+      case "unavailable":
+        return "unavailable";
+      case "not_configured":
+        return "not configured";
+    }
+    return updateCheck.status;
+  }
 
   return (
     <div className="stack">
@@ -66,6 +85,15 @@ export default async function AdminDiagnosticsPage() {
             diagnostics.smtp.configured
               ? `Configured via ${diagnostics.smtp.effective_source}`
               : "Not configured yet."
+          }
+        />
+        <StatusCard
+          title="Update Check"
+          value={formatUpdateStatus()}
+          detail={
+            updateCheck.latest_version
+              ? `Current ${updateCheck.current_version} · latest ${updateCheck.latest_version}`
+              : updateCheck.message ?? "Release metadata unavailable."
           }
         />
       </section>
@@ -126,7 +154,11 @@ export default async function AdminDiagnosticsPage() {
             </li>
             <li>
               <strong>Worker poll interval</strong>
-              <span>{diagnostics.worker.poll_interval_seconds ?? "Unavailable"}s</span>
+              <span>
+                {diagnostics.worker.poll_interval_seconds !== null
+                  ? `${diagnostics.worker.poll_interval_seconds}s`
+                  : "Unavailable"}
+              </span>
             </li>
           </ul>
         </article>
@@ -159,6 +191,38 @@ export default async function AdminDiagnosticsPage() {
               <span>{formatDateTime(diagnostics.generated_at)}</span>
             </li>
           </ul>
+        </article>
+
+        <article className="panel">
+          <p className="eyebrow">Release Update Status</p>
+          <ul className="detail-list">
+            <li>
+              <strong>Current version</strong>
+              <span>{updateCheck.current_version}</span>
+            </li>
+            <li>
+              <strong>Latest version</strong>
+              <span>{updateCheck.latest_version ?? "Unavailable"}</span>
+            </li>
+            <li>
+              <strong>Release tag</strong>
+              <span>{updateCheck.release_tag ?? "Unavailable"}</span>
+            </li>
+            <li>
+              <strong>Repository</strong>
+              <span>{updateCheck.repository ?? "Not configured"}</span>
+            </li>
+            <li>
+              <strong>Checked</strong>
+              <span>{formatDateTime(updateCheck.checked_at)}</span>
+            </li>
+          </ul>
+          <p>{updateCheck.message ?? "Release metadata check completed."}</p>
+          {updateCheck.release_notes_url ? (
+            <p>
+              <a href={updateCheck.release_notes_url}>Release notes</a>
+            </p>
+          ) : null}
         </article>
       </section>
 

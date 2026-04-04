@@ -193,9 +193,32 @@ export type DiagnosticsResponse = {
     default_model: string | null;
     last_success_at: string | null;
   };
+  release_check: ReleaseCheckResponse;
   smtp: SMTPConfigResponse;
   public_base_url: PublicBaseURLSummary;
   limitations: string[];
+};
+
+export type ReleaseCheckResponse = {
+  configured: boolean;
+  source_type: string | null;
+  repository: string | null;
+  current_version: string;
+  latest_version: string | null;
+  release_tag: string | null;
+  release_name: string | null;
+  release_notes_url: string | null;
+  published_at: string | null;
+  checked_at: string;
+  status:
+    | "not_configured"
+    | "unavailable"
+    | "comparison_unavailable"
+    | "update_available"
+    | "ahead_of_latest_release"
+    | "up_to_date";
+  update_available: boolean | null;
+  message: string | null;
 };
 
 export type AIFeatureStatus = {

@@ -29,7 +29,7 @@ export default async function HomePage() {
         <StatusCard
           title="Version"
           value={appConfig.version}
-          detail="Derived from the repo VERSION file in containerized development."
+          detail="Derived from the canonical VERSION source used across Pantry services."
         />
         <StatusCard
           title="Setup"

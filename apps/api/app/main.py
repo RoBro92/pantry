@@ -17,6 +17,7 @@ from app.api.routes.households import router as households_router
 from app.api.routes.imports import router as imports_router
 from app.api.routes.location_links import router as location_links_router
 from app.api.routes.pantry import router as pantry_router
+from app.api.routes.release_admin import router as release_admin_router
 from app.api.routes.recipes import router as recipes_router
 from app.api.routes.settings_admin import router as settings_admin_router
 from app.api.routes.setup import router as setup_router
@@ -28,7 +29,11 @@ from app.services.platform_features import FLAG_USAGE_METERING, get_effective_fe
 from app.services.usage_counters import increment_usage_counter
 
 settings = get_settings()
-configure_logging(service_name=settings.service_name, log_level=settings.log_level)
+configure_logging(
+    service_name=settings.service_name,
+    log_level=settings.log_level,
+    app_version=settings.app_version,
+)
 logger = structlog.get_logger(__name__)
 
 
@@ -111,6 +116,7 @@ async def add_request_context(request: Request, call_next):
     structlog.contextvars.clear_contextvars()
     structlog.contextvars.bind_contextvars(
         service=settings.service_name,
+        version=settings.app_version,
         request_id=request_id,
         method=request.method,
         path=request.url.path,
@@ -142,6 +148,7 @@ app.include_router(auth_router, prefix="/api")
 app.include_router(admin_router, prefix="/api")
 app.include_router(ai_admin_router, prefix="/api")
 app.include_router(diagnostics_admin_router, prefix="/api")
+app.include_router(release_admin_router, prefix="/api")
 app.include_router(settings_admin_router, prefix="/api")
 app.include_router(smtp_admin_router, prefix="/api")
 app.include_router(households_router, prefix="/api")

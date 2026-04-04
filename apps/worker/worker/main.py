@@ -21,7 +21,11 @@ def main() -> None:
     args = parser.parse_args()
 
     settings = get_settings()
-    configure_logging(service_name=settings.service_name, log_level=settings.log_level)
+    configure_logging(
+        service_name=settings.service_name,
+        log_level=settings.log_level,
+        app_version=settings.app_version,
+    )
     logger = structlog.get_logger(__name__)
     started_at = datetime.now(timezone.utc)
 
@@ -31,7 +35,11 @@ def main() -> None:
 
     run_id = str(uuid4())
     structlog.contextvars.clear_contextvars()
-    structlog.contextvars.bind_contextvars(service=settings.service_name, run_id=run_id)
+    structlog.contextvars.bind_contextvars(
+        service=settings.service_name,
+        version=settings.app_version,
+        run_id=run_id,
+    )
 
     logger.info(
         "worker.started",

@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from functools import lru_cache
 from urllib.parse import urlsplit, urlunsplit
 
+from app.core.version import read_repo_version
+
 SUPPORTED_DEPLOYMENT_MODES = {"self_hosted", "demo", "saas"}
 
 
@@ -79,6 +81,9 @@ class AppSettings:
     smtp_security: str | None
     smtp_enabled: bool | None
     smtp_timeout_seconds: int
+    release_check_repository: str | None
+    release_check_metadata_url: str | None
+    release_check_timeout_seconds: int
 
     @property
     def cors_origins(self) -> list[str]:
@@ -91,6 +96,10 @@ class AppSettings:
     @property
     def safe_redis_url(self) -> str:
         return _sanitize_url(self.redis_url)
+
+    @property
+    def release_check_enabled(self) -> bool:
+        return bool(self.release_check_repository or self.release_check_metadata_url)
 
 
 @lru_cache
@@ -105,7 +114,7 @@ def get_settings() -> AppSettings:
         service_name=os.getenv("API_SERVICE_NAME", "pantry-api"),
         environment=os.getenv("ENVIRONMENT", "development"),
         log_level=os.getenv("LOG_LEVEL", "INFO"),
-        app_version=os.getenv("APP_VERSION", "0.1.0"),
+        app_version=os.getenv("APP_VERSION", read_repo_version()),
         deployment_mode=deployment_mode,
         demo_mode_enabled=demo_mode_enabled,
         ai_feature_enabled=_parse_bool(os.getenv("AI_FEATURE_ENABLED"), True),
@@ -134,4 +143,7 @@ def get_settings() -> AppSettings:
         smtp_security=os.getenv("SMTP_SECURITY") or None,
         smtp_enabled=_parse_optional_bool(os.getenv("SMTP_ENABLED")),
         smtp_timeout_seconds=int(os.getenv("SMTP_TIMEOUT_SECONDS", "5")),
+        release_check_repository=os.getenv("RELEASE_CHECK_REPOSITORY") or None,
+        release_check_metadata_url=os.getenv("RELEASE_CHECK_METADATA_URL") or None,
+        release_check_timeout_seconds=int(os.getenv("RELEASE_CHECK_TIMEOUT_SECONDS", "5")),
     )

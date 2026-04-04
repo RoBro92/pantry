@@ -4,6 +4,7 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
+from app.schemas.releases import ReleaseCheckResponse
 from app.schemas.settings import PublicBaseURLSummary
 from app.schemas.smtp import SMTPConfigResponse
 
@@ -89,6 +90,7 @@ class DiagnosticsResponse(BaseModel):
     database: DatabaseDiagnosticsSummary
     counts: EntityCountsSummary
     ai_provider: AIProviderDiagnosticsSummary
+    release_check: ReleaseCheckResponse
     smtp: SMTPConfigResponse
     public_base_url: PublicBaseURLSummary
     limitations: list[str]

@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from functools import lru_cache
 from urllib.parse import urlsplit, urlunsplit
 
+from worker.core.version import read_repo_version
+
 
 def _sanitize_url(value: str) -> str:
     if not value:
@@ -46,7 +48,7 @@ def get_settings() -> WorkerSettings:
         service_name=os.getenv("WORKER_SERVICE_NAME", "pantry-worker"),
         environment=os.getenv("ENVIRONMENT", "development"),
         log_level=os.getenv("LOG_LEVEL", "INFO"),
-        app_version=os.getenv("APP_VERSION", "0.1.0"),
+        app_version=os.getenv("APP_VERSION", read_repo_version()),
         database_url=os.getenv(
             "DATABASE_URL",
             "postgresql+psycopg://pantry:change-me@postgres:5432/pantry",

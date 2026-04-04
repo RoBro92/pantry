@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime, timezone
 from decimal import Decimal
 
 from sqlalchemy import select
 
+from app.core.config import get_settings
 from app.models.import_job import ImportJob
 from app.models.instance_setting import InstanceSetting
 from app.models.recipe import Recipe
@@ -15,6 +17,7 @@ from app.services.instance_settings import upsert_public_base_url, upsert_smtp_s
 from app.services.pantry_catalog import create_location, create_location_group, create_product
 from app.services.pantry_normalization import normalize_lookup_name
 from app.services.pantry_stock import add_stock_lot
+from app.services.releases import ReleaseMetadata
 from app.services.runtime_status import RedisHealthSnapshot
 from app.services.smtp import SMTPTestResult
 
@@ -131,6 +134,23 @@ def test_platform_admin_diagnostics_report_uses_measured_data(client, db_session
             "last_seen_at": datetime.now(timezone.utc),
         },
     )
+    release_settings = replace(
+        get_settings(),
+        app_version="0.1.0",
+        release_check_repository="example/pantry",
+        release_check_metadata_url=None,
+    )
+    monkeypatch.setattr("app.services.releases.get_settings", lambda: release_settings)
+    monkeypatch.setattr(
+        "app.services.releases.fetch_latest_release_metadata",
+        lambda _: ReleaseMetadata(
+            tag_name="v0.1.1",
+            version="0.1.1",
+            name="Pantry v0.1.1",
+            html_url="https://github.com/example/pantry/releases/tag/v0.1.1",
+            published_at=datetime.now(timezone.utc),
+        ),
+    )
 
     login(client, email="admin@example.com")
     response = client.get("/api/platform-admin/diagnostics")
@@ -148,6 +168,8 @@ def test_platform_admin_diagnostics_report_uses_measured_data(client, db_session
     assert payload["redis"]["status"] == "ok"
     assert payload["queue"]["queued_import_jobs"] == 1
     assert payload["smtp"]["configured"] is True
+    assert payload["release_check"]["status"] == "update_available"
+    assert payload["release_check"]["latest_version"] == "0.1.1"
     assert payload["smtp"]["effective"]["has_password"] is True
     assert "password" not in payload["smtp"]["effective"]
     assert "password" not in payload["smtp"]["stored"]

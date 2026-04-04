@@ -55,6 +55,7 @@ test("platform admin diagnostics page loads against the docker stack", async ({ 
 
   await expect(page.getByRole("heading", { name: "Measured Runtime State" })).toBeVisible();
   await expect(page.getByText("Deployment mode self_hosted")).toBeVisible();
+  await expect(page.getByText("Update Check")).toBeVisible();
   await expect(page.getByText("Queue And Worker")).toBeVisible();
 });
 

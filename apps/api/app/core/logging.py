@@ -4,7 +4,7 @@ import sys
 import structlog
 
 
-def configure_logging(service_name: str, log_level: str) -> None:
+def configure_logging(service_name: str, log_level: str, *, app_version: str) -> None:
     logging.basicConfig(
         format="%(message)s",
         level=getattr(logging, log_level.upper(), logging.INFO),
@@ -26,5 +26,4 @@ def configure_logging(service_name: str, log_level: str) -> None:
     )
 
     structlog.contextvars.clear_contextvars()
-    structlog.contextvars.bind_contextvars(service=service_name)
-
+    structlog.contextvars.bind_contextvars(service=service_name, version=app_version)

@@ -16,6 +16,7 @@ from app.models.stock_lot import StockLot
 from app.models.user import User
 from app.services.ai_config import get_instance_provider_config, serialize_provider_config
 from app.services.instance_settings import build_public_base_url_summary, build_smtp_summary
+from app.services.releases import build_release_check_summary
 from app.services.runtime_status import check_redis_health, read_worker_heartbeat
 
 API_PROCESS_STARTED_AT = datetime.now(timezone.utc)
@@ -200,6 +201,7 @@ def build_diagnostics_report(db: Session) -> dict[str, object]:
         "database": _database_diagnostics(db),
         "counts": _counts_summary(db),
         "ai_provider": _ai_summary(db),
+        "release_check": build_release_check_summary(),
         "smtp": build_smtp_summary(db),
         "public_base_url": public_base_url,
         "limitations": [

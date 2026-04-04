@@ -12,6 +12,7 @@ import type {
   NearExpiryResponse,
   PantryOverview,
   PublicBaseURLSummary,
+  ReleaseCheckResponse,
   RecipeDetailResponse,
   RecipeListResponse,
   SMTPConfigResponse,
@@ -72,6 +73,10 @@ export async function getPublicBaseURL(): Promise<PublicBaseURLSummary> {
 
 export async function getDiagnostics(): Promise<DiagnosticsResponse> {
   return apiGet<DiagnosticsResponse>("/api/platform-admin/diagnostics");
+}
+
+export async function getReleaseStatus(): Promise<ReleaseCheckResponse> {
+  return apiGet<ReleaseCheckResponse>("/api/platform-admin/release-status");
 }
 
 function withQuery(
