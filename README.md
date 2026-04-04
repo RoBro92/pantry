@@ -1,19 +1,28 @@
 # Pantry
 
-Pantry is a self-hosted-first pantry management application designed for households that want reliable inventory tracking, import workflows, recipe support, and future AI-assisted features without locking the core product to a single hosting or provider model.
+Pantry is a self-hosted-first pantry management application for households that want reliable inventory tracking, reviewed imports, recipe support, and future AI-assisted features without giving up operator control.
 
-This repository starts with the self-hosted foundation and keeps the architecture ready for later SaaS deployment modes. The current state includes pantry, recipe, import, AI, diagnostics, SMTP, QR/location, and Docker-backed Playwright E2E foundations without introducing hosted-only product logic.
+This repository keeps the public deployment story conventional:
 
-The current repository includes:
+- published images come from GHCR
+- deployment assets and helper scripts stay in this GitHub repository
+- installs and updates are explicit operator actions
+- Pantry does not self-update and does not require local image builds
+
+## Repository Includes
 
 - `apps/web`: Next.js frontend
 - `apps/api`: FastAPI backend with SQLAlchemy, Alembic, session auth, and admin CLI
 - `apps/worker`: Python background worker
-- `packages/shared-types`: minimal shared TypeScript constants and types
-- `compose.yml`: local development stack with web, API, worker, PostgreSQL, and Redis
-- `infra/compose/production.yml`: pinned-image production stack for Docker on an LXC host
-- `docs/`: product, architecture, security, and roadmap documentation
-- `private-docs/`: local-only space for private operational or SaaS notes
+- `packages/shared-types`: shared TypeScript constants and types
+- `compose.yml`: local development stack
+- `infra/compose/pantry.yml`: public self-hosted stack for versioned GHCR images
+- `infra/env/pantry.env.example`: public self-hosted env template
+- `infra/scripts/install-pantry.sh`: fresh Debian LXC installer
+- `infra/scripts/update-pantry.sh`: explicit operator-run update helper
+- `infra/scripts/healthcheck-pantry.sh`: self-hosted install health verifier
+- `docs/`: product, architecture, and operational documentation
+- `private-docs/`: local-only space for private notes
 
 ## Product Direction
 
@@ -31,59 +40,122 @@ The current repository includes:
 
 - `VERSION` is the canonical application version.
 - The running version is exposed in the landing page, authenticated app shell, admin overview, admin diagnostics, API health, worker heartbeat, and structured service logs.
-- Platform admins now get a read-only GitHub Releases-based update check showing the current version, latest published version, and release-notes link when configured.
-- Production deployment now has a self-hosted-first Docker-on-LXC foundation built around pinned GHCR image tags and manual operator updates rather than any auto-updater.
-- See [docs/VERSIONING.md](/Users/robinbrown/Documents/GitHub/pantry/docs/VERSIONING.md) and [docs/DEPLOYMENT.md](/Users/robinbrown/Documents/GitHub/pantry/docs/DEPLOYMENT.md) for the release and deployment plan.
+- Platform admins get a read-only GitHub Releases-based update check showing the current version, latest published version, and release-notes link when configured.
+- Maintainers validate `main`, bump `VERSION`, tag `vX.Y.Z`, and let GitHub Actions publish versioned GHCR images and create or update the GitHub Release.
+- Operators remain in control of updates by pulling a chosen version, running migrations, and restarting the stack manually.
 
-## First-Time Self-Hosted Setup
+See [docs/VERSIONING.md](/Users/robinbrown/Documents/GitHub/pantry/docs/VERSIONING.md) and [docs/DEPLOYMENT.md](/Users/robinbrown/Documents/GitHub/pantry/docs/DEPLOYMENT.md).
 
-1. Copy the example environment file:
+## Public Self-Hosted Install
+
+### Scripted Install
+
+For a fresh Debian LXC:
 
 ```bash
-cp .env.example .env
+curl -fsSL https://raw.githubusercontent.com/RoBro92/pantry/main/infra/scripts/install-pantry.sh -o /tmp/install-pantry.sh
+chmod +x /tmp/install-pantry.sh
+sudo /tmp/install-pantry.sh
 ```
 
-2. Review the placeholder secrets and ports in `.env`, especially `SESSION_SECRET_KEY`,
-   `POSTGRES_PASSWORD`, and any future provider credentials.
+The installer:
 
-Local host-side web commands currently expect `Node.js 20.x` with `npm 10.x`. The Docker stack
-already uses Node 20, so Docker-backed setup and E2E runs are the safest default on newer host
-machines.
+- checks Debian and supported architecture
+- checks GitHub and GHCR network access
+- installs Docker Engine and the Docker Compose plugin if needed
+- creates the Pantry install directory
+- downloads or copies `pantry.yml` and `pantry.env.example`
+- creates `.env`, generates secrets, and writes the selected URLs and ports
+- pulls GHCR images, runs migrations, starts the stack, and runs a health check
+- leaves `update-pantry.sh` and `healthcheck-pantry.sh` in the install directory
 
-3. Start the local stack:
+### Manual Install
+
+1. Pick a release version and create an install directory.
 
 ```bash
-docker compose up -d --build
-docker compose run --rm api alembic upgrade head
+export PANTRY_VERSION=0.1.0
+mkdir -p /opt/pantry
+cd /opt/pantry
 ```
 
-4. Open `http://localhost:3000/setup` and create the first platform admin in the browser.
-
-5. In the installation console:
-
-- create at least one household
-- create or reuse the user accounts that will sign in
-- assign memberships before expecting household dashboards to show data
-- set the public browser URL before printing or sharing QR/location links
-
-6. Sign in through `http://localhost:3000/login` and start using pantry, recipe, import, AI,
-   diagnostics, and QR/location flows.
-
-## Service URLs
-
-- Web: `http://localhost:3000`
-- API health: `http://localhost:8000/api/health`
-- Setup: `http://localhost:3000/setup`
-- Login: `http://localhost:3000/login`
-- PostgreSQL: `localhost:5432`
-- Redis: `localhost:6379`
-
-## CLI Fallbacks
-
-Create the first platform admin from the CLI instead of the browser:
+2. Download the public deployment assets for that tag.
 
 ```bash
-docker compose run --rm api python -m app.cli bootstrap-platform-admin \
+curl -fsSLO "https://raw.githubusercontent.com/RoBro92/pantry/v${PANTRY_VERSION}/infra/compose/pantry.yml"
+curl -fsSLo pantry.env.example "https://raw.githubusercontent.com/RoBro92/pantry/v${PANTRY_VERSION}/infra/env/pantry.env.example"
+cp pantry.env.example .env
+```
+
+3. Edit `.env` and set at least:
+
+- `PANTRY_VERSION`
+- `PANTRY_IMAGE_NAMESPACE=ghcr.io/robro92`
+- `WEB_APP_URL`
+- `API_BASE_URL`
+- `NEXT_PUBLIC_API_BASE_URL`
+- `PUBLIC_BROWSER_BASE_URL`
+- `POSTGRES_PASSWORD`
+- `SETTINGS_ENCRYPTION_KEY`
+- `SESSION_SECRET_KEY`
+
+4. Pull, migrate, and start:
+
+```bash
+docker compose --env-file .env -f pantry.yml config
+docker compose --env-file .env -f pantry.yml pull
+docker compose --env-file .env -f pantry.yml up -d postgres redis
+docker compose --env-file .env -f pantry.yml --profile manual run --rm migrate
+docker compose --env-file .env -f pantry.yml up -d
+```
+
+5. Verify `http://YOUR_HOST:8000/api/health` and finish setup at `http://YOUR_HOST:3000/setup`.
+
+## Public Update Flow
+
+Pantry updates stay manual and explicit.
+
+### Scripted Update
+
+From the install directory:
+
+```bash
+./update-pantry.sh
+```
+
+Or pin a specific version:
+
+```bash
+./update-pantry.sh --version 0.1.0
+```
+
+By default the update script refreshes `pantry.yml` and `pantry.env.example`, updates `PANTRY_VERSION`, pulls the versioned GHCR images, runs migrations, restarts services, and verifies health.
+
+### Manual Update
+
+1. Back up PostgreSQL data and import storage.
+2. Download the updated `pantry.yml` and `pantry.env.example` from the target tag.
+3. Review `.env` against the new example.
+4. Update `PANTRY_VERSION`.
+5. Pull, migrate, restart, and verify:
+
+```bash
+docker compose --env-file .env -f pantry.yml pull
+docker compose --env-file .env -f pantry.yml --profile manual run --rm migrate
+docker compose --env-file .env -f pantry.yml up -d --remove-orphans
+curl -fsS http://YOUR_HOST:8000/api/health
+```
+
+## Reset And Admin Commands
+
+Preferred first-run path:
+
+- open `/setup` in the browser
+
+CLI fallback:
+
+```bash
+docker compose --env-file .env -f pantry.yml run --rm api python -m app.cli bootstrap-platform-admin \
   --email admin@example.com \
   --display-name "Pantry Admin"
 ```
@@ -91,11 +163,39 @@ docker compose run --rm api python -m app.cli bootstrap-platform-admin \
 Reset an existing user password:
 
 ```bash
-docker compose run --rm api python -m app.cli reset-password \
+docker compose --env-file .env -f pantry.yml run --rm api python -m app.cli reset-password \
   --email admin@example.com
 ```
 
-Both commands will prompt for a password if one is not supplied as a flag.
+Health check:
+
+```bash
+./healthcheck-pantry.sh --install-dir /opt/pantry
+```
+
+## Local Development
+
+1. Copy `.env.example` to `.env`.
+2. Review placeholder secrets and ports.
+3. Start the local stack:
+
+```bash
+docker compose up -d --build
+docker compose run --rm api alembic upgrade head
+```
+
+4. Open `http://localhost:3000/setup`.
+
+If you run web build or typecheck commands on the host instead of inside Docker, use `Node.js 20.x` and `npm 10.x`. The Docker web image already pins that runtime.
+
+Local service URLs:
+
+- Web: `http://localhost:3000`
+- API health: `http://localhost:8000/api/health`
+- Setup: `http://localhost:3000/setup`
+- Login: `http://localhost:3000/login`
+- PostgreSQL: `localhost:5432`
+- Redis: `localhost:6379`
 
 ## Repository Layout
 
@@ -106,9 +206,10 @@ apps/
   worker/        Python background worker
 docs/            Product, architecture, and engineering docs
 infra/
-  compose/       Production-oriented Compose assets
+  compose/       Public self-hosted Compose assets
   docker/        Development and production Dockerfiles
-  scripts/       Small repository utility scripts
+  env/           Public self-hosted env examples
+  scripts/       Operator and maintainer scripts
 packages/
   shared-types/  Shared TypeScript constants and types
 private-docs/    Local-only, gitignored operational notes
@@ -124,6 +225,7 @@ docker compose down
 npm install
 npm run dev:web
 cd apps/api && python3 -m pytest
+./infra/scripts/validate-release.sh
 ```
 
 For local API tests outside Docker:
@@ -135,28 +237,14 @@ cd apps/api && pytest
 
 Important environment variables:
 
-- `NEXT_PUBLIC_API_BASE_URL`: browser-facing API URL for frontend requests.
-- `INTERNAL_API_BASE_URL`: server-side API URL used by Next.js server components. In Docker Compose this should point to `http://api:8000`.
-- `SESSION_SECRET_KEY`: secret used to sign web sessions. Replace the placeholder before any real deployment.
-- `SESSION_HTTPS_ONLY`: set to `true` behind HTTPS.
-- `RELEASE_CHECK_REPOSITORY`: optional `owner/repo` GitHub Releases source used for advisory update checks.
-- `RELEASE_CHECK_METADATA_URL`: optional override for the latest-release metadata endpoint.
-- `DEPLOYMENT_MODE`: validated as `self_hosted`, `demo`, or `saas`, with `saas` remaining a placeholder boundary in this public repo.
-- `DEMO_MODE_ENABLED`: optional demo-mode config flag; this milestone does not implement demo reset or disposable-data automation.
-
-## Production Foundation
-
-For a pinned-image self-hosted deployment on Docker inside LXC, start with:
-
-```bash
-cp infra/env/production.lxc.env.example .env.production
-docker compose --env-file .env.production -f infra/compose/production.yml config
-docker compose --env-file .env.production -f infra/compose/production.yml pull
-docker compose --env-file .env.production -f infra/compose/production.yml --profile manual run --rm migrate
-docker compose --env-file .env.production -f infra/compose/production.yml up -d
-```
-
-Operators stay in control of upgrades: update `PANTRY_VERSION`, pull the new images, run migrations manually, restart the stack, and verify health. Pantry does not self-update.
+- `NEXT_PUBLIC_API_BASE_URL`
+- `INTERNAL_API_BASE_URL`
+- `SESSION_SECRET_KEY`
+- `SESSION_HTTPS_ONLY`
+- `RELEASE_CHECK_REPOSITORY`
+- `RELEASE_CHECK_METADATA_URL`
+- `DEPLOYMENT_MODE`
+- `DEMO_MODE_ENABLED`
 
 ## Documentation
 

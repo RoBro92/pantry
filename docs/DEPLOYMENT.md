@@ -1,215 +1,208 @@
 # Deployment
 
-## Local Self-Hosted Development
+## Supported Public Path
 
-1. Copy `.env.example` to `.env`.
-2. Replace placeholder secrets and review ports, URLs, and session settings.
-3. Run `docker compose up -d --build`.
-4. Run `docker compose run --rm api alembic upgrade head`.
-5. Open `http://localhost:3000/setup` to create the first platform admin.
-6. Use the installation console to create a household, create or reset users, and assign memberships.
-7. Set the public/browser base URL before relying on QR/location links outside localhost.
+The supported public self-hosted path is:
 
-If you run web build or typecheck commands on the host instead of inside Docker, use `Node.js 20.x`
-and `npm 10.x`. The Compose web image already pins that runtime.
+- Docker Engine plus the Docker Compose plugin
+- published GHCR images
+- repo-hosted deployment assets and helper scripts
+- explicit operator-run installs and updates
 
-## Practical First-Run Checklist
+Pantry does not self-update, does not require local image builds, and does not ship hosted control-plane logic in this public repo.
 
-- Confirm the web app loads on `/` and `/setup`.
-- Create exactly one initial platform admin through `/setup` or the CLI fallback.
-- Create at least one household and one non-admin user if multiple people will use the install.
-- Assign memberships before expecting `/app` household cards to appear for those users.
-- Configure the public/browser URL in `/admin/settings` before sharing location links.
-- Leave AI and SMTP disabled unless the operator has configured reachable providers.
+Canonical public deployment files:
 
-The local stack exposes:
+- `infra/compose/pantry.yml`
+- `infra/env/pantry.env.example`
+- `infra/scripts/install-pantry.sh`
+- `infra/scripts/update-pantry.sh`
+- `infra/scripts/healthcheck-pantry.sh`
 
-- Web on port `3000`
-- API on port `8000`
-- PostgreSQL on port `5432`
-- Redis on port `6379`
+## Scripted Install On A Fresh Debian LXC
 
-## Environment Variables
+1. Run the installer as root:
 
-Current key variables:
+```bash
+curl -fsSL https://raw.githubusercontent.com/RoBro92/pantry/main/infra/scripts/install-pantry.sh -o /tmp/install-pantry.sh
+chmod +x /tmp/install-pantry.sh
+sudo /tmp/install-pantry.sh
+```
 
-- `ENVIRONMENT`
-- `DEPLOYMENT_MODE`
-- `DEMO_MODE_ENABLED`
-- `LOG_LEVEL`
-- `WEB_PORT`
-- `API_PORT`
-- `POSTGRES_DB`
-- `POSTGRES_USER`
-- `POSTGRES_PASSWORD`
-- `DATABASE_URL`
-- `REDIS_URL`
+2. The installer will prompt for:
+
+- Pantry version
+- browser host or IP
+- web port
+- API port
+- whether the install should use HTTPS URLs
+
+3. The installer then:
+
+- verifies Debian and a supported `amd64` or `arm64` architecture
+- verifies GitHub and GHCR connectivity
+- installs Docker Engine and the Docker Compose plugin if needed
+- creates the install directory and persistent data directories
+- places `pantry.yml`, `pantry.env.example`, `.env`, `update-pantry.sh`, and `healthcheck-pantry.sh` in the install directory
+- generates `POSTGRES_PASSWORD`, `SETTINGS_ENCRYPTION_KEY`, and `SESSION_SECRET_KEY`
+- pulls the pinned GHCR images
+- runs migrations
+- starts the stack
+- verifies web, API, setup state, and worker status
+
+4. Finish first-run setup in the browser at `/setup` or with the admin CLI fallback.
+
+## Manual Install
+
+### 1. Download the public assets for the target release
+
+```bash
+export PANTRY_VERSION=0.1.0
+mkdir -p /opt/pantry
+cd /opt/pantry
+curl -fsSLO "https://raw.githubusercontent.com/RoBro92/pantry/v${PANTRY_VERSION}/infra/compose/pantry.yml"
+curl -fsSLo pantry.env.example "https://raw.githubusercontent.com/RoBro92/pantry/v${PANTRY_VERSION}/infra/env/pantry.env.example"
+cp pantry.env.example .env
+```
+
+### 2. Edit `.env`
+
+Set at least:
+
+- `PANTRY_VERSION`
+- `PANTRY_IMAGE_NAMESPACE=ghcr.io/robro92`
 - `WEB_APP_URL`
-- `PUBLIC_BROWSER_BASE_URL`
+- `API_BASE_URL`
 - `NEXT_PUBLIC_API_BASE_URL`
-- `INTERNAL_API_BASE_URL`
-- `OLLAMA_BASE_URL`
-- `OPENAI_COMPAT_BASE_URL`
-- `OPENAI_COMPAT_API_KEY`
-- `SMTP_HOST`
-- `SMTP_PORT`
-- `SMTP_USERNAME`
-- `SMTP_PASSWORD`
-- `SMTP_FROM_EMAIL`
-- `SMTP_FROM_NAME`
-- `SMTP_SECURITY`
-- `SMTP_ENABLED`
-- `SMTP_TIMEOUT_SECONDS`
-- `WORKER_POLL_INTERVAL_SECONDS`
-- `RELEASE_CHECK_REPOSITORY`
-- `RELEASE_CHECK_METADATA_URL`
-- `RELEASE_CHECK_TIMEOUT_SECONDS`
-
-For self-hosted operators, the most important values to review early are:
-
-- `SESSION_SECRET_KEY`
-- `SESSION_HTTPS_ONLY`
-- `INTERNAL_API_BASE_URL`
 - `PUBLIC_BROWSER_BASE_URL`
-- `DEPLOYMENT_MODE`
 - `POSTGRES_PASSWORD`
-- `PANTRY_VERSION` in the production env file when using pinned GHCR images
+- `SETTINGS_ENCRYPTION_KEY`
+- `SESSION_SECRET_KEY`
+- `PANTRY_POSTGRES_DATA_DIR`
+- `PANTRY_REDIS_DATA_DIR`
+- `PANTRY_IMPORTS_DATA_DIR`
 
-For the local Docker Compose stack, the web service should use `INTERNAL_API_BASE_URL=http://api:8000` so server-side Next.js requests reach the API over the Compose network. `compose.yml` now defaults the web container to that value unless you override it explicitly.
+The public example defaults to direct access on ports `3000` and `8000`. If you later move Pantry behind a reverse proxy, update the public URLs and cookie settings deliberately.
 
-`DEPLOYMENT_MODE` is validated as `self_hosted`, `demo`, or `saas`. The `saas` mode is a placeholder boundary only in this public repo; it does not enable billing, hosted onboarding, or SaaS-only UI.
-
-## Instance Settings And Precedence
-
-- The application now supports an installation-scoped public/browser base URL used for generated browser links and pantry location QR codes.
-- The application also supports installation-scoped SMTP foundation settings for future password recovery and notification work.
-- If `PUBLIC_BROWSER_BASE_URL` is set, it overrides the saved database value.
-- If `SMTP_HOST` is set, the effective SMTP config is taken from `SMTP_*` environment variables instead of the saved database value.
-- If no public/browser URL override or saved value exists, generated browser links fall back to `WEB_APP_URL`.
-- SMTP passwords saved through the admin UI are encrypted at rest and redacted on readback; environment-provided SMTP passwords are never stored in the database.
-
-## Hosting Boundary
-
-- Application containers do not terminate TLS.
-- Reverse proxy and certificates are external.
-- Private hosted-operations runbooks must remain outside the public repo.
-
-## Production Release Path
-
-The intended self-hosted production path is:
-
-1. Validate `main`.
-2. Bump `VERSION`.
-3. Publish a GitHub Release and matching version tags.
-4. Publish versioned container images to GHCR.
-5. Let Pantry compare its current version against release metadata and show an update-available notice to platform admins.
-6. Let the operator update deployment manifests manually and roll forward or back deliberately.
-
-This repository does not implement automated publishing or unattended updates. It now implements the first advisory update-check layer plus production deployment assets for manual operator-controlled upgrades.
-This repository now includes the first production and update foundations for that path:
-
-- admin-visible advisory update checks powered by GitHub Releases metadata
-- production Dockerfiles for web, API, and worker image publishing
-- `infra/compose/production.yml` for pinned-image Docker deployment on an LXC host
-- `infra/env/production.lxc.env.example` as the production environment template
-- helper scripts for release manifests and manual metadata checks
-
-## Production Docker On LXC
-
-The recommended production path is Docker inside an operator-managed LXC, with Pantry staying application-only:
-
-- reverse proxy and TLS stay outside the Pantry containers
-- PostgreSQL, Redis, and import storage stay on persistent host-backed paths
-- published GHCR images are pinned explicitly by `PANTRY_VERSION`
-- migrations run as an explicit manual step through the `migrate` service
-- application updates remain operator-triggered and reversible
-
-### Production Files Added In This Pass
-
-- `infra/compose/production.yml`
-- `infra/env/production.lxc.env.example`
-- `infra/docker/web.production.Dockerfile`
-- `infra/docker/api.production.Dockerfile`
-- `infra/docker/worker.production.Dockerfile`
-
-### First Production Bring-Up
-
-1. Copy `infra/env/production.lxc.env.example` to an operator-managed env file such as `.env.production`.
-2. Replace every placeholder secret and domain value.
-3. Create the host directories referenced by:
-   - `PANTRY_POSTGRES_DATA_DIR`
-   - `PANTRY_REDIS_DATA_DIR`
-   - `PANTRY_IMPORTS_DATA_DIR`
-4. Validate the rendered stack:
+### 3. Validate, pull, migrate, and start
 
 ```bash
-docker compose --env-file .env.production -f infra/compose/production.yml config
+docker compose --env-file .env -f pantry.yml config
+docker compose --env-file .env -f pantry.yml pull
+docker compose --env-file .env -f pantry.yml up -d postgres redis
+docker compose --env-file .env -f pantry.yml --profile manual run --rm migrate
+docker compose --env-file .env -f pantry.yml up -d
 ```
 
-5. Pull the pinned images:
+### 4. Verify health and complete setup
 
 ```bash
-docker compose --env-file .env.production -f infra/compose/production.yml pull
+curl -fsS http://YOUR_HOST:8000/api/health
+docker compose --env-file .env -f pantry.yml exec -T worker python -m worker.main --status
 ```
 
-6. Run migrations explicitly:
+Then open:
+
+- `http://YOUR_HOST:3000/`
+- `http://YOUR_HOST:3000/setup`
+- `http://YOUR_HOST:3000/login`
+- `http://YOUR_HOST:8000/api/health`
+
+## Update Flow
+
+Pantry updates are manual and explicit.
+
+### Scripted Update
+
+From the install directory:
 
 ```bash
-docker compose --env-file .env.production -f infra/compose/production.yml --profile manual run --rm migrate
+./update-pantry.sh
 ```
 
-7. Start the stack:
+To target a specific release:
 
 ```bash
-docker compose --env-file .env.production -f infra/compose/production.yml up -d
+./update-pantry.sh --version 0.1.0
 ```
 
-8. Verify `/`, `/login`, and `/api/health`, then sign in as a platform admin and check `/admin/diagnostics`.
+Default scripted update behavior:
 
-## Persistent Volume Expectations
+- refresh `pantry.yml` and `pantry.env.example` from the tagged GitHub repo content
+- update `PANTRY_VERSION` in `.env`
+- pull the matching GHCR images
+- run migrations
+- restart services
+- run the health check
 
-- PostgreSQL data must persist outside the container lifecycle.
-- Redis persistence is enabled in the production compose profile and should use a host-backed directory.
-- Reviewed-import source files and derived import artifacts must persist in `PANTRY_IMPORTS_DATA_DIR`.
-- Operators should back up PostgreSQL and import storage together before upgrading.
+If you intentionally maintain a custom `pantry.yml`, run:
 
-## Manual Operator Update Workflow
+```bash
+./update-pantry.sh --skip-assets
+```
 
-Pantry intentionally keeps updates manual.
+### Manual Update
 
-1. Check the available release in `/admin`, `/admin/diagnostics`, or with `./infra/scripts/check-release-metadata.sh owner/repo`.
-2. Review release notes.
+1. Check the latest release in `/admin`, `/admin/diagnostics`, or with `./infra/scripts/check-release-metadata.sh`.
+2. Review the GitHub Release notes.
 3. Back up PostgreSQL data and import storage.
-4. Update `PANTRY_VERSION` in the production env file.
-5. Pull the new pinned images:
+4. Download the new `pantry.yml` and `pantry.env.example` from the target tag.
+5. Review `.env` against the updated example.
+6. Update `PANTRY_VERSION`.
+7. Pull, migrate, restart, and verify:
 
 ```bash
-docker compose --env-file .env.production -f infra/compose/production.yml pull
+docker compose --env-file .env -f pantry.yml pull
+docker compose --env-file .env -f pantry.yml --profile manual run --rm migrate
+docker compose --env-file .env -f pantry.yml up -d --remove-orphans
+curl -fsS http://YOUR_HOST:8000/api/health
 ```
 
-6. Run migrations:
+## Health Check And Admin Commands
+
+Run the bundled health check at any time:
 
 ```bash
-docker compose --env-file .env.production -f infra/compose/production.yml --profile manual run --rm migrate
+./healthcheck-pantry.sh --install-dir /opt/pantry
 ```
 
-7. Restart the stack:
+Preferred first admin path:
+
+- open `/setup` in the browser
+
+CLI fallback:
 
 ```bash
-docker compose --env-file .env.production -f infra/compose/production.yml up -d
+docker compose --env-file .env -f pantry.yml run --rm api python -m app.cli bootstrap-platform-admin \
+  --email admin@example.com \
+  --display-name "Pantry Admin"
 ```
 
-8. Verify:
-   - `GET /api/health`
-   - platform admin diagnostics
-   - worker heartbeat visibility
-   - login and basic pantry navigation
+Password reset:
 
-If a release must be rolled back, restore the prior backup set and set `PANTRY_VERSION` back to the earlier pinned image tag before bringing the stack up again.
+```bash
+docker compose --env-file .env -f pantry.yml run --rm api python -m app.cli reset-password \
+  --email admin@example.com
+```
 
-## Intentionally Not Implemented Yet
+## Persistent Data And Backups
 
-- unattended auto-updates
-- release-channel switching inside the app
-- hosted control-plane deployment tooling
-- public production runbooks for any future SaaS environment
+- PostgreSQL data must live on a persistent host path.
+- Redis persistence is enabled in `pantry.yml` and should also use a persistent host path.
+- Reviewed import files and derived import artifacts live in `PANTRY_IMPORTS_DATA_DIR`.
+- Back up PostgreSQL and import storage together before every upgrade.
+
+## Reverse Proxy And TLS Boundary
+
+- Pantry containers do not terminate TLS.
+- Reverse proxy and certificates stay outside the app stack.
+- If you move from direct access to HTTPS behind a reverse proxy, update `WEB_APP_URL`, `API_BASE_URL`, `NEXT_PUBLIC_API_BASE_URL`, `PUBLIC_BROWSER_BASE_URL`, and `SESSION_HTTPS_ONLY=true`.
+
+## Local Development
+
+For local source-based development, keep using:
+
+- `compose.yml`
+- `.env.example`
+- `docker compose up -d --build`
+- `docker compose run --rm api alembic upgrade head`

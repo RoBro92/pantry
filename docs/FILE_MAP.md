@@ -4,12 +4,12 @@
 
 - `VERSION`: canonical application version.
 - `compose.yml`: local development stack.
-- `.env.example`: environment variable template.
+- `.env.example`: local development environment template.
 - `.dockerignore`: Docker build exclusions for release-oriented image builds.
 - `package.json`: workspace scripts, including web validation and Playwright E2E entrypoints.
-- `infra/scripts/read-version.sh`: lightweight helper that reads the canonical repo version.
 - `playwright.config.ts`: Docker-backed Playwright configuration.
-- `README.md`: project overview and local setup.
+- `README.md`: project overview plus public and local install guidance.
+- `.github/workflows/release.yml`: tag-driven GHCR publish and GitHub Release workflow.
 
 ## Applications
 
@@ -25,13 +25,22 @@
 
 - `infra/docker/`: Dockerfiles for web, API, and worker.
 - `infra/docker/*.production.Dockerfile`: production-oriented image build targets for GHCR publishing.
-- `infra/compose/production.yml`: production Docker Compose target for pinned-image Docker-on-LXC deployment.
-- `infra/env/production.lxc.env.example`: production environment template for self-hosted operators.
-- `infra/github-actions/release.yml.example`: lightweight GitHub Actions release/publish scaffold for later activation.
-- `infra/scripts/`: small repository utility scripts such as version helpers, repeatable smoke checks, E2E seed setup, and worker-once helpers.
+- `infra/compose/pantry.yml`: public self-hosted Docker Compose target for pinned-image deployment.
+- `infra/env/pantry.env.example`: public self-hosted environment template.
+- `infra/scripts/install-pantry.sh`: fresh Debian LXC installer for the public self-hosted layout.
+- `infra/scripts/update-pantry.sh`: explicit operator-run updater for the public self-hosted layout.
+- `infra/scripts/healthcheck-pantry.sh`: health verifier for a running public self-hosted install.
+- `infra/scripts/validate-release.sh`: maintainer release validation helper.
+- `infra/scripts/bump-version.sh`: maintainer helper that updates `VERSION`.
+- `infra/scripts/tag-release.sh`: maintainer helper that creates the annotated `vX.Y.Z` tag.
 - `infra/scripts/release-manifest.sh`: prints release tag and pinned image references derived from `VERSION`.
 - `infra/scripts/check-release-metadata.sh`: read-only helper for checking the latest GitHub Release metadata from the CLI.
+- `infra/scripts/read-version.sh`: lightweight helper that reads the canonical repo version.
 - `infra/scripts/e2e-reset-uninitialized.sh`: resets application data in the running Docker stack so Playwright can exercise first-run setup deterministically.
+- `infra/scripts/e2e-seed.sh`: seeds deterministic E2E data in the running Docker stack.
+- `infra/scripts/smoke-check.sh`: baseline Docker-backed smoke checks for local development validation.
+- `infra/scripts/worker-once.sh`: helper for deterministic worker execution during tests.
+- `infra/scripts/lib/pantry-selfhost.sh`: shared shell helpers used by the public self-hosted operator scripts.
 
 ## Key Backend Paths
 
@@ -46,10 +55,10 @@
 - `apps/api/app/api/routes/setup.py`: first-run setup status and one-time browser bootstrap routes.
 - `apps/api/app/api/routes/ai_admin.py`: platform-admin AI provider configuration and health-check routes.
 - `apps/api/app/api/routes/diagnostics_admin.py`: platform-admin diagnostics route built from measured runtime data only.
-- `apps/api/app/api/routes/release_admin.py`: platform-admin advisory release/update-check route.
+- `apps/api/app/api/routes/release_admin.py`: platform-admin advisory release and update-check route.
 - `apps/api/app/api/routes/settings_admin.py`: platform-admin public/browser base URL route.
 - `apps/api/app/api/routes/smtp_admin.py`: platform-admin SMTP configuration and connectivity-test routes.
-- `apps/api/app/api/routes/location_links.py`: authenticated QR/location deep-link route.
+- `apps/api/app/api/routes/location_links.py`: authenticated QR and location deep-link route.
 - `apps/api/app/api/routes/ai_households.py`: household AI status and read-only suggestion routes.
 - `apps/api/app/api/deps/`: auth and tenancy dependencies.
 - `apps/api/app/api/routes/pantry.py`: household-scoped pantry routes for locations, products, stock lots, and pantry views.
@@ -80,11 +89,11 @@
 - `apps/web/app/(dashboard)/`: authenticated shell, pantry pages, and platform admin pages.
 - `apps/web/lib/app-config.ts`: frontend runtime configuration including exposed app version.
 - `apps/web/app/(dashboard)/app/households/[householdExternalId]/page.tsx`: household pantry view with search, stock lots, near-expiry, and audit activity.
-- `apps/web/app/locations/[locationRoute]/page.tsx`: authenticated location deep-link page used by QR/browser links.
+- `apps/web/app/locations/[locationRoute]/page.tsx`: authenticated location deep-link page used by QR and browser links.
 - `apps/web/app/(dashboard)/app/households/[householdExternalId]/imports/`: import inbox/history and reviewed import detail pages.
 - `apps/web/app/(dashboard)/app/households/[householdExternalId]/recipes/`: recipe list, create, detail, and edit pages.
 - `apps/web/app/(dashboard)/admin/ai/page.tsx`: platform admin AI provider configuration page.
-- `apps/web/app/(dashboard)/admin/page.tsx`: installation console overview including advisory release/update state.
+- `apps/web/app/(dashboard)/admin/page.tsx`: installation console overview including advisory release and update state.
 - `apps/web/app/(dashboard)/admin/diagnostics/page.tsx`: platform admin diagnostics page.
 - `apps/web/app/(dashboard)/admin/settings/page.tsx`: platform admin public/browser base URL page.
 - `apps/web/app/(dashboard)/admin/smtp/page.tsx`: platform admin SMTP configuration page.
@@ -95,7 +104,7 @@
 - `apps/web/components/pantry-controls.tsx`: pantry creation and add-stock controls.
 - `apps/web/components/pantry-lot-actions.tsx`: inline remove and move stock actions.
 - `apps/web/components/location-qr-card.tsx`: server-rendered QR display for pantry locations.
-- `apps/web/components/recipe-form.tsx`: client-side manual recipe create/edit form with ingredient rows and pantry-product links.
+- `apps/web/components/recipe-form.tsx`: client-side manual recipe create and edit form with ingredient rows and pantry-product links.
 - `apps/web/components/admin-ai-config-form.tsx`: platform admin AI config and health-check client form.
 - `apps/web/components/admin-user-creation-form.tsx`: platform-admin user creation form.
 - `apps/web/components/admin-household-management-panel.tsx`: platform-admin household creation and membership assignment panel.
@@ -110,8 +119,8 @@
 - `docs/PROJECT_STATE.md`: latest implementation state, validation results, blockers, and next recommended step.
 - `docs/MILESTONES.md`: roadmap.
 - `docs/ARCHITECTURE.md`: high-level technical shape.
-- `docs/VERSIONING.md`: canonical versioning and planned release/update workflow.
-- `docs/DEPLOYMENT.md`: current self-hosted deployment guidance, production Docker-on-LXC foundation, and manual update workflow.
+- `docs/VERSIONING.md`: canonical versioning and the release workflow.
+- `docs/DEPLOYMENT.md`: public self-hosted install, update, healthcheck, and operator command guidance.
 - `docs/AI_INTEGRATION.md`: AI provider and suggestion architecture guidance plus delivered foundation notes.
 - `docs/DOMAIN_MODEL.md`: initial entity definitions.
 - `docs/SECURITY.md`: security posture and guardrails.
