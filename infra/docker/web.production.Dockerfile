@@ -23,13 +23,11 @@ ENV NODE_ENV=production
 
 WORKDIR /app
 
-COPY --from=builder /app/package.json /app/package.json
-COPY --from=builder /app/package-lock.json /app/package-lock.json
-COPY --from=builder /app/apps/web /app/apps/web
-COPY --from=builder /app/packages/shared-types /app/packages/shared-types
-COPY --from=builder /app/node_modules /app/node_modules
+COPY --from=builder /app/apps/web/.next/standalone ./
+COPY --from=builder /app/apps/web/.next/static ./apps/web/.next/static
+COPY --from=builder /app/apps/web/public ./apps/web/public
 COPY --from=builder /app/VERSION /app/VERSION
 
 EXPOSE 3000
 
-CMD ["npm", "run", "start", "--workspace", "@pantry/web", "--", "--hostname", "0.0.0.0", "--port", "3000"]
+CMD ["node", "apps/web/server.js"]
