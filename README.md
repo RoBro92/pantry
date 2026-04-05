@@ -1,56 +1,23 @@
 # Pantry
 
-Pantry is a self-hosted-first pantry management application for households that want reliable inventory tracking, reviewed imports, recipe support, and future AI-assisted features without giving up operator control.
+Pantry is a self-hosted household pantry manager for tracking what you have, where it is stored, what is running low, and what needs review before it becomes inventory.
 
-This repository keeps the public deployment story conventional:
+It ships as a multi-service Docker application with a web UI, API, worker, PostgreSQL, and Redis. Released images are published to GHCR, while install and update assets stay in this repository.
 
-- published images come from GHCR
-- deployment assets and helper scripts stay in this GitHub repository
-- installs and updates are explicit operator actions
-- Pantry does not self-update and does not require local image builds
+## What Pantry Includes Today
 
-## Repository Includes
+- Household pantry locations and stock-lot tracking
+- Recipe storage with pantry coverage and shopping-gap summaries
+- Reviewed import flows for supported file types before stock is created
+- Platform admin setup, user management, household management, and diagnostics
+- Optional AI provider configuration for read-only suggestions
+- Versioned Docker deployment assets and explicit operator-run updates
 
-- `apps/web`: Next.js frontend
-- `apps/api`: FastAPI backend with SQLAlchemy, Alembic, session auth, and admin CLI
-- `apps/worker`: Python background worker
-- `packages/shared-types`: shared TypeScript constants and types
-- `compose.yml`: local development stack
-- `infra/compose/pantry.yml`: public self-hosted stack for versioned GHCR images
-- `infra/env/pantry.env.example`: public self-hosted env template
-- `infra/scripts/install-pantry.sh`: fresh Debian LXC installer
-- `infra/scripts/update-pantry.sh`: explicit operator-run update helper
-- `infra/scripts/healthcheck-pantry.sh`: self-hosted install health verifier
-- `docs/`: product, architecture, and operational documentation
-- `private-docs/`: local-only space for private notes
-
-## Product Direction
-
-- Self-hosted first, SaaS-ready later
-- Multi-household from the start
-- Roles: `platform_admin`, `household_admin`, `household_user`
-- Session-based web login with secure password hashing
-- Opaque external IDs for tenant-facing identity and household records
-- AI provider abstraction from day one
-- Initial provider targets: Ollama and OpenAI-compatible APIs
-- Uploaded files treated as hostile input
-- Structured logging and audit/event thinking from the start
-
-## Release Posture
-
-- `VERSION` is the canonical application version.
-- The running version is exposed in the landing page, authenticated app shell, admin overview, admin diagnostics, API health, worker heartbeat, and structured service logs.
-- Platform admins get a read-only GitHub Releases-based update check showing the current version, latest published version, and release-notes link when configured.
-- Maintainers validate `main`, bump `VERSION`, tag `vX.Y.Z`, and let GitHub Actions publish versioned GHCR images and create or update the GitHub Release.
-- Operators remain in control of updates by pulling a chosen version, running migrations, and restarting the stack manually.
-
-See [docs/VERSIONING.md](/Users/robinbrown/Documents/GitHub/pantry/docs/VERSIONING.md) and [docs/DEPLOYMENT.md](/Users/robinbrown/Documents/GitHub/pantry/docs/DEPLOYMENT.md).
-
-## Public Self-Hosted Install
+## Quick Start
 
 ### Scripted Install
 
-For a fresh Debian LXC:
+For a fresh Debian LXC or Debian host:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/RoBro92/pantry/main/infra/scripts/install-pantry.sh -o /tmp/install-pantry.sh
@@ -58,48 +25,20 @@ chmod +x /tmp/install-pantry.sh
 sudo /tmp/install-pantry.sh
 ```
 
-The installer:
-
-- checks Debian and supported architecture
-- checks GitHub and GHCR network access
-- installs Docker Engine and the Docker Compose plugin if needed
-- creates the Pantry install directory
-- downloads or copies `pantry.yml` and `pantry.env.example`
-- creates `.env`, generates secrets, and writes the selected URLs and ports
-- pulls GHCR images, runs migrations, starts the stack, and runs a health check
-- leaves `update-pantry.sh` and `healthcheck-pantry.sh` in the install directory
+The installer downloads the public deployment assets, creates `.env`, generates required secrets, pulls the selected release images, runs migrations, starts the stack, and leaves `update-pantry.sh` and `healthcheck-pantry.sh` in the install directory.
 
 ### Manual Install
-
-1. Pick a release version and create an install directory.
 
 ```bash
 export PANTRY_VERSION=0.1.0
 mkdir -p /opt/pantry
 cd /opt/pantry
-```
-
-2. Download the public deployment assets for that tag.
-
-```bash
 curl -fsSLO "https://raw.githubusercontent.com/RoBro92/pantry/v${PANTRY_VERSION}/infra/compose/pantry.yml"
 curl -fsSLo pantry.env.example "https://raw.githubusercontent.com/RoBro92/pantry/v${PANTRY_VERSION}/infra/env/pantry.env.example"
 cp pantry.env.example .env
 ```
 
-3. Edit `.env` and set at least:
-
-- `PANTRY_VERSION`
-- `PANTRY_IMAGE_NAMESPACE=ghcr.io/robro92`
-- `WEB_APP_URL`
-- `API_BASE_URL`
-- `NEXT_PUBLIC_API_BASE_URL`
-- `PUBLIC_BROWSER_BASE_URL`
-- `POSTGRES_PASSWORD`
-- `SETTINGS_ENCRYPTION_KEY`
-- `SESSION_SECRET_KEY`
-
-4. Pull, migrate, and start:
+Edit `.env`, then validate and start:
 
 ```bash
 docker compose --env-file .env -f pantry.yml config
@@ -109,50 +48,39 @@ docker compose --env-file .env -f pantry.yml --profile manual run --rm migrate
 docker compose --env-file .env -f pantry.yml up -d
 ```
 
-5. Verify `http://YOUR_HOST:8000/api/health` and finish setup at `http://YOUR_HOST:3000/setup`.
+Finish first-run setup at `http://YOUR_HOST:3000/setup`.
 
-## Public Update Flow
+Full deployment instructions: [docs/DEPLOYMENT.md](/Users/robinbrown/Documents/GitHub/pantry/docs/DEPLOYMENT.md)
 
-Pantry updates stay manual and explicit.
+## Updating
 
-### Scripted Update
+Pantry does not self-update. Updates are explicit operator actions.
 
-From the install directory:
+Scripted update from the install directory:
 
 ```bash
 ./update-pantry.sh
 ```
 
-Or pin a specific version:
+Or pin a specific release:
 
 ```bash
 ./update-pantry.sh --version 0.1.0
 ```
 
-By default the update script refreshes `pantry.yml` and `pantry.env.example`, updates `PANTRY_VERSION`, pulls the versioned GHCR images, runs migrations, restarts services, and verifies health.
+Manual updates follow the same pattern: back up data, download the target release assets, review `.env`, update `PANTRY_VERSION`, pull images, run migrations, restart, and verify health.
 
-### Manual Update
+Versioning details: [docs/VERSIONING.md](/Users/robinbrown/Documents/GitHub/pantry/docs/VERSIONING.md)
 
-1. Back up PostgreSQL data and import storage.
-2. Download the updated `pantry.yml` and `pantry.env.example` from the target tag.
-3. Review `.env` against the new example.
-4. Update `PANTRY_VERSION`.
-5. Pull, migrate, restart, and verify:
+## Basic Usage
 
-```bash
-docker compose --env-file .env -f pantry.yml pull
-docker compose --env-file .env -f pantry.yml --profile manual run --rm migrate
-docker compose --env-file .env -f pantry.yml up -d --remove-orphans
-curl -fsS http://YOUR_HOST:8000/api/health
-```
+1. Open `/setup` on a new install and create the first platform admin.
+2. Create users and households from the admin console.
+3. Open a household and add locations, products, and stock.
+4. Add recipes or upload reviewed imports.
+5. Use diagnostics and health checks before and after upgrades.
 
-## Reset And Admin Commands
-
-Preferred first-run path:
-
-- open `/setup` in the browser
-
-CLI fallback:
+CLI fallback for first admin creation:
 
 ```bash
 docker compose --env-file .env -f pantry.yml run --rm api python -m app.cli bootstrap-platform-admin \
@@ -160,100 +88,42 @@ docker compose --env-file .env -f pantry.yml run --rm api python -m app.cli boot
   --display-name "Pantry Admin"
 ```
 
-Reset an existing user password:
+Password reset:
 
 ```bash
 docker compose --env-file .env -f pantry.yml run --rm api python -m app.cli reset-password \
   --email admin@example.com
 ```
 
-Health check:
+## Troubleshooting
+
+- API health: `http://YOUR_HOST:8000/api/health`
+- Setup page: `http://YOUR_HOST:3000/setup`
+- Login page: `http://YOUR_HOST:3000/login`
+- Install health check: `./healthcheck-pantry.sh --install-dir /opt/pantry`
+- Local development stack: `docker compose up -d --build`
+
+If `docker compose ... config` fails, fix `.env` first. If containers start but the app is unavailable, check `docker compose ps`, API health, and the worker status reported by the bundled health check.
+
+## Important Files
+
+- [infra/compose/pantry.yml](/Users/robinbrown/Documents/GitHub/pantry/infra/compose/pantry.yml): released self-hosted Compose stack
+- [infra/env/pantry.env.example](/Users/robinbrown/Documents/GitHub/pantry/infra/env/pantry.env.example): self-hosted environment template
+- [infra/scripts/install-pantry.sh](/Users/robinbrown/Documents/GitHub/pantry/infra/scripts/install-pantry.sh): fresh install helper
+- [infra/scripts/update-pantry.sh](/Users/robinbrown/Documents/GitHub/pantry/infra/scripts/update-pantry.sh): update helper
+- [infra/scripts/healthcheck-pantry.sh](/Users/robinbrown/Documents/GitHub/pantry/infra/scripts/healthcheck-pantry.sh): post-install and post-update verifier
+- [compose.yml](/Users/robinbrown/Documents/GitHub/pantry/compose.yml): local source-based development stack
+
+## Development
+
+For local source-based development:
 
 ```bash
-./healthcheck-pantry.sh --install-dir /opt/pantry
-```
-
-## Local Development
-
-1. Copy `.env.example` to `.env`.
-2. Review placeholder secrets and ports.
-3. Start the local stack:
-
-```bash
+cp .env.example .env
 docker compose up -d --build
 docker compose run --rm api alembic upgrade head
 ```
 
-4. Open `http://localhost:3000/setup`.
+Use `Node.js 20.x` and `npm 10.x` for host-side web commands.
 
-If you run web build or typecheck commands on the host instead of inside Docker, use `Node.js 20.x` and `npm 10.x`. The Docker web image already pins that runtime.
-
-Local service URLs:
-
-- Web: `http://localhost:3000`
-- API health: `http://localhost:8000/api/health`
-- Setup: `http://localhost:3000/setup`
-- Login: `http://localhost:3000/login`
-- PostgreSQL: `localhost:5432`
-- Redis: `localhost:6379`
-
-## Repository Layout
-
-```text
-apps/
-  api/           FastAPI service
-  web/           Next.js frontend
-  worker/        Python background worker
-docs/            Product, architecture, and engineering docs
-infra/
-  compose/       Public self-hosted Compose assets
-  docker/        Development and production Dockerfiles
-  env/           Public self-hosted env examples
-  scripts/       Operator and maintainer scripts
-packages/
-  shared-types/  Shared TypeScript constants and types
-private-docs/    Local-only, gitignored operational notes
-VERSION          Single source of truth for the app version
-```
-
-## Useful Commands
-
-```bash
-docker compose up -d --build
-docker compose run --rm api alembic upgrade head
-docker compose down
-npm install
-npm run dev:web
-cd apps/api && python3 -m pytest
-./infra/scripts/validate-release.sh
-```
-
-For local API tests outside Docker:
-
-```bash
-python3 -m pip install -r apps/api/requirements-dev.txt
-cd apps/api && pytest
-```
-
-Important environment variables:
-
-- `NEXT_PUBLIC_API_BASE_URL`
-- `INTERNAL_API_BASE_URL`
-- `SESSION_SECRET_KEY`
-- `SESSION_HTTPS_ONLY`
-- `RELEASE_CHECK_REPOSITORY`
-- `RELEASE_CHECK_METADATA_URL`
-- `DEPLOYMENT_MODE`
-- `DEMO_MODE_ENABLED`
-
-## Documentation
-
-Start with these files:
-
-- [docs/PROJECT_STATE.md](/Users/robinbrown/Documents/GitHub/pantry/docs/PROJECT_STATE.md)
-- [docs/FILE_MAP.md](/Users/robinbrown/Documents/GitHub/pantry/docs/FILE_MAP.md)
-- [docs/ARCHITECTURE.md](/Users/robinbrown/Documents/GitHub/pantry/docs/ARCHITECTURE.md)
-- [docs/DEPLOYMENT.md](/Users/robinbrown/Documents/GitHub/pantry/docs/DEPLOYMENT.md)
-- [docs/VERSIONING.md](/Users/robinbrown/Documents/GitHub/pantry/docs/VERSIONING.md)
-- [docs/SECURITY.md](/Users/robinbrown/Documents/GitHub/pantry/docs/SECURITY.md)
-- [docs/MILESTONES.md](/Users/robinbrown/Documents/GitHub/pantry/docs/MILESTONES.md)
+Contributor notes: [docs/CONTRIBUTING.md](/Users/robinbrown/Documents/GitHub/pantry/docs/CONTRIBUTING.md)
