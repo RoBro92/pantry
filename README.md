@@ -84,14 +84,6 @@ Key options include:
 
 ---
 
-## Documentation
-
-- docs/DEPLOYMENT.md  
-- docs/VERSIONING.md  
-- docs/SECURITY.md  
-
----
-
 ## Troubleshooting
 
 View logs:  

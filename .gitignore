@@ -24,4 +24,5 @@ test-results/
 
 # Local-only internal notes and operational material.
 private-docs/
+docs/
 .local/
