@@ -2,108 +2,109 @@
 
 Pantry is a self-hosted household inventory and meal management application designed to track food, reduce waste, and streamline day-to-day kitchen workflows.
 
+---
+
 ## Features
 
-- Pantry inventory with locations, stock lots, and expiry tracking
-- Recipe management with pantry coverage insights
-- Import and review flow for adding items
-- QR code location access (e.g. fridge, cupboard)
-- Admin diagnostics and system health visibility
-- Optional AI-powered suggestions (advisory only)
-- Fully self-hosted using Docker
+- Pantry inventory with locations, stock lots, and expiry tracking  
+- Recipe management with pantry coverage insights  
+- Import and review flow for adding items  
+- QR code location access (e.g. fridge, cupboard)  
+- Admin diagnostics and system health visibility  
+- Optional AI-powered suggestions (advisory only)  
+- Fully self-hosted using Docker  
+
+---
 
 ## Quick Start (Recommended)
 
 Run the install script:
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/RoBro92/pantry/main/infra/scripts/install-pantry.sh | bash
-```
+curl -fsSL https://raw.githubusercontent.com/<your-username>/pantry/main/infra/scripts/install-pantry.sh | bash
 
 This will:
-- install Docker and dependencies
-- download the latest Pantry release
-- configure the environment
-- start the application
+- Install Docker and required dependencies  
+- Download the latest Pantry release  
+- Configure the environment  
+- Start the application  
+
+---
 
 ## Manual Installation
 
-```bash
-git clone https://github.com/RoBro92/pantry.git
-cd pantry
+git clone https://github.com/<your-username>/pantry.git  
+cd pantry  
 
-cp infra/env/pantry.env.example .env
+cp infra/env/pantry.env.example .env  
 
-docker compose -f infra/compose/pantry.yml up -d
-docker compose exec api alembic upgrade head
-```
+docker compose -f infra/compose/pantry.yml up -d  
+docker compose exec api alembic upgrade head  
+
+---
 
 ## Accessing Pantry
 
 After installation, open:
 
-```text
-http://<your-server-ip>:3000
-```
+http://<your-server-ip>:3000  
 
-(Port may vary based on your configuration.)
+(Port may vary depending on your configuration.)
+
+---
 
 ## Updating Pantry
 
-```bash
-./infra/scripts/update-pantry.sh
-```
+./infra/scripts/update-pantry.sh  
 
 This will:
-- pull the latest release image
-- restart containers
-- apply any required migrations
+- Pull the latest release image  
+- Restart containers  
+- Apply any required migrations  
+
+---
 
 ## Versioning
 
-- The running version is defined by the VERSION file
-- Visible in the admin UI and diagnostics
-- Update checks are advisory only (no automatic updates)
+- The running version is defined by the VERSION file  
+- Visible in the admin UI and diagnostics  
+- Update checks are advisory only (no automatic updates)  
+
+---
 
 ## Configuration
 
 Edit:
 
-```text
-infra/env/pantry.env.example
-```
+infra/env/pantry.env.example  
 
 Key options include:
-- base URL (used for QR codes)
-- database settings
-- optional AI provider configuration
+- Base URL (used for QR codes)  
+- Database configuration  
+- Optional AI provider settings  
+
+---
 
 ## Documentation
 
-- [docs/DEPLOYMENT.md](/Users/robinbrown/Documents/GitHub/pantry/docs/DEPLOYMENT.md)
-- [docs/VERSIONING.md](/Users/robinbrown/Documents/GitHub/pantry/docs/VERSIONING.md)
-- [docs/SECURITY.md](/Users/robinbrown/Documents/GitHub/pantry/docs/SECURITY.md)
+- docs/DEPLOYMENT.md  
+- docs/VERSIONING.md  
+- docs/SECURITY.md  
+
+---
 
 ## Troubleshooting
 
-View logs:
+View logs:  
+docker compose logs -f  
 
-```bash
-docker compose logs -f
-```
+Restart services:  
+docker compose restart  
 
-Restart services:
+Run health check:  
+./infra/scripts/healthcheck-pantry.sh  
 
-```bash
-docker compose restart
-```
-
-Health check:
-
-```bash
-./infra/scripts/healthcheck-pantry.sh
-```
+---
 
 ## License
 
-Keep existing license.
+See the LICENSE file for details.
