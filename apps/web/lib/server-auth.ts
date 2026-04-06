@@ -17,7 +17,8 @@ import type {
   RecipeListResponse,
   SMTPConfigResponse,
   SessionResponse,
-  SetupStatusResponse
+  SetupStatusResponse,
+  SetupWizardStateResponse
 } from "./api-types";
 import { apiGet, apiGetIfOk } from "./server-api";
 
@@ -27,6 +28,10 @@ export async function getSession(): Promise<SessionResponse | null> {
 
 export async function getSetupStatus(): Promise<SetupStatusResponse> {
   return apiGet<SetupStatusResponse>("/api/setup/status");
+}
+
+export async function getSetupWizardState(): Promise<SetupWizardStateResponse> {
+  return apiGet<SetupWizardStateResponse>("/api/setup/wizard");
 }
 
 export async function requireSession(): Promise<SessionResponse> {

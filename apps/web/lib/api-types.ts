@@ -55,6 +55,78 @@ export type SetupStatusResponse = {
   platform_admin_count: number;
   can_bootstrap_platform_admin: boolean;
   recommended_next_step: string;
+  stage: "not_started" | "in_progress" | "completed";
+  has_staged_progress: boolean;
+  completed_at: string | null;
+  steps: Array<{
+    key:
+      | "welcome"
+      | "users"
+      | "household"
+      | "public_url"
+      | "dietary"
+      | "ai"
+      | "smtp"
+      | "review";
+    title: string;
+    required: boolean;
+    is_complete: boolean;
+  }>;
+};
+
+export type SetupWizardUserSummary = {
+  stage_id: string;
+  login: string;
+  display_name: string | null;
+  password_saved: boolean;
+  is_platform_admin: boolean;
+};
+
+export type SetupWizardAssignmentSummary = {
+  stage_user_id: string;
+  role: "household_admin" | "household_user";
+};
+
+export type SetupWizardDietaryUserSummary = {
+  stage_user_id: string;
+  preferences: string[];
+};
+
+export type SetupWizardAIConfigSummary = {
+  provider_type: "ollama" | "openai_compatible" | null;
+  base_url: string | null;
+  default_model: string | null;
+  is_enabled: boolean;
+  has_api_key: boolean;
+};
+
+export type SetupWizardSMTPConfigSummary = {
+  host: string | null;
+  port: number | null;
+  username: string | null;
+  has_password: boolean;
+  from_email: string | null;
+  from_name: string | null;
+  security: string | null;
+  is_enabled: boolean;
+};
+
+export type SetupWizardStateResponse = {
+  status: SetupStatusResponse;
+  welcome_acknowledged: boolean;
+  admin_user: SetupWizardUserSummary;
+  initial_users: SetupWizardUserSummary[];
+  household_name: string | null;
+  location_group_name: string | null;
+  storage_locations: string[];
+  household_assignments: SetupWizardAssignmentSummary[];
+  public_base_url: string | null;
+  household_dietary_preferences: string[];
+  user_dietary_preferences: SetupWizardDietaryUserSummary[];
+  ai_config: SetupWizardAIConfigSummary;
+  smtp_config: SetupWizardSMTPConfigSummary;
+  can_complete: boolean;
+  missing_requirements: string[];
 };
 
 export type PublicBaseURLSummary = {

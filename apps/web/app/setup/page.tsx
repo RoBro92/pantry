@@ -1,44 +1,44 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
-import { SetupBootstrapForm } from "../../components/setup-bootstrap-form";
-import { getSession, getSetupStatus } from "../../lib/server-auth";
+import { SetupWizard } from "../../components/setup-wizard";
+import { getSession, getSetupStatus, getSetupWizardState } from "../../lib/server-auth";
 
-export default async function SetupPage() {
-  const [session, setupStatus] = await Promise.all([getSession(), getSetupStatus()]);
+type SetupPageProps = {
+  searchParams: Promise<{
+    step?: string;
+  }>;
+};
+
+export default async function SetupPage({ searchParams }: SetupPageProps) {
+  const params = await searchParams;
+  const requestedStep = params.step;
+  const [session, setupStatus, wizardState] = await Promise.all([
+    getSession(),
+    getSetupStatus(),
+    getSetupWizardState()
+  ]);
 
   if (setupStatus.is_initialized) {
     redirect(session ? "/admin" : "/login");
   }
 
+  const allowedSteps = new Set(wizardState.status.steps.map((step) => step.key));
+  const initialStep = allowedSteps.has(requestedStep as never)
+    ? (requestedStep as typeof wizardState.status.steps[number]["key"])
+    : "welcome";
+
   return (
-    <main className="page-shell">
-      <section className="hero compact-hero">
-        <p className="eyebrow">Self-hosted setup</p>
-        <h1>Finish first-run setup</h1>
-        <p className="lede">
-          Create the initial platform admin, then use the installation console to create a
-          household and assign memberships.
-        </p>
-      </section>
-      <div className="auth-grid">
-        <SetupBootstrapForm />
-        <section className="panel">
-          <p className="eyebrow">What happens next</p>
-          <ol>
-            <li>Create the first platform admin here.</li>
-            <li>Create a household in the admin console.</li>
-            <li>Assign one or more users to that household.</li>
-            <li>Start using pantry, recipe, import, and QR flows.</li>
-          </ol>
-          <p className="section-copy">
-            Prefer the CLI? You can still bootstrap with{" "}
-            <code>docker compose run --rm api python -m app.cli bootstrap-platform-admin</code>.
+    <main className="page-shell setup-page">
+      <section className="auth-stage-shell">
+        <div className="auth-stage-intro">
+          <p className="eyebrow">Self-hosted onboarding</p>
+          <h1>Finish first-run setup</h1>
+          <p className="lede">
+            Create the admin account, stage the first household, and finalize the installation in
+            one controlled flow.
           </p>
-          <Link href="/" className="secondary-link">
-            Back to home
-          </Link>
-        </section>
-      </div>
+        </div>
+        <SetupWizard initialState={wizardState} initialStep={initialStep} />
+      </section>
     </main>
   );
 }

@@ -21,7 +21,7 @@ export function LoginForm({ nextPath = "/app" }: LoginFormProps) {
 
     const formData = new FormData(event.currentTarget);
     const payload = {
-      email: String(formData.get("email") ?? ""),
+      identifier: String(formData.get("identifier") ?? ""),
       password: String(formData.get("password") ?? "")
     };
 
@@ -47,19 +47,24 @@ export function LoginForm({ nextPath = "/app" }: LoginFormProps) {
   return (
     <form className="panel form-panel" onSubmit={handleSubmit} data-testid="login-form">
       <p className="eyebrow">Sign In</p>
-      <h1>Login</h1>
+      <h1>Pantry login</h1>
+      <p className="section-copy">
+        Use the account created during setup or one your platform admin has already staged for you.
+      </p>
       <label className="field">
-        <span>Email</span>
-        <input type="email" name="email" autoComplete="email" required />
+        <span>Username or email</span>
+        <input name="identifier" autoComplete="username" required />
       </label>
       <label className="field">
         <span>Password</span>
         <input type="password" name="password" autoComplete="current-password" required />
       </label>
       {error ? <p className="error-text">{error}</p> : null}
-      <button type="submit" className="primary-button" disabled={isSubmitting}>
-        {isSubmitting ? "Signing in..." : "Sign in"}
-      </button>
+      <div className="wizard-actions login-actions">
+        <button type="submit" className="primary-button" disabled={isSubmitting}>
+          {isSubmitting ? "Signing in..." : "Sign in"}
+        </button>
+      </div>
     </form>
   );
 }

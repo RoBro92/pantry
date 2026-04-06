@@ -21,25 +21,27 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
 
   return (
     <main className="page-shell">
-      <section className="hero compact-hero">
-        <p className="eyebrow">Self-hosted access</p>
-        <h1>Pantry Login</h1>
-        <p className="lede">
-          Sign in with a Pantry account that already has household membership or platform-admin
-          access.
-        </p>
-      </section>
-      <div className="auth-grid">
+      <section className="auth-stage-shell">
+        <div className="auth-stage-intro">
+          <p className="eyebrow">Pantry Access</p>
+          <h1>Welcome back</h1>
+          <p className="lede">
+            Sign in to open your households, continue pantry work, or step into the installation
+            console if you manage the instance.
+          </p>
+          <div className="setup-highlight-grid">
+            <article className="setup-highlight">
+              <strong>One login, clear access</strong>
+              <p>Platform admins and household members land in the same polished entry flow.</p>
+            </article>
+            <article className="setup-highlight">
+              <strong>Protected routing</strong>
+              <p>Return paths are preserved when a Pantry link asks you to authenticate first.</p>
+            </article>
+          </div>
+        </div>
         <LoginForm nextPath={nextPath} />
-        <section className="panel">
-          <p className="eyebrow">Before you sign in</p>
-          <ul>
-            <li>Use the setup flow only for the very first platform admin.</li>
-            <li>Platform admins can create households and assign memberships.</li>
-            <li>Users without memberships will need an admin to grant access first.</li>
-          </ul>
-        </section>
-      </div>
+      </section>
     </main>
   );
 }
