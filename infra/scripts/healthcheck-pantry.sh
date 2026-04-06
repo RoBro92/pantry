@@ -21,7 +21,8 @@ EOF
 }
 
 main() {
-  local env_file web_url api_url
+  local env_file web_url api_url web_probe_url api_probe_url
+  local web_bind_address web_port api_bind_address api_port
   local web_status_json api_health_json setup_status_json worker_status_json
   local compose_ps
 
@@ -57,19 +58,33 @@ main() {
   api_url="$(env_get "${env_file}" "API_BASE_URL" "")"
   [[ -n "${web_url}" ]] || die "WEB_APP_URL is not set in ${env_file}"
   [[ -n "${api_url}" ]] || die "API_BASE_URL is not set in ${env_file}"
+  web_bind_address="$(env_get "${env_file}" "WEB_BIND_ADDRESS" "0.0.0.0")"
+  web_port="$(env_get "${env_file}" "WEB_PORT" "3000")"
+  api_bind_address="$(env_get "${env_file}" "API_BIND_ADDRESS" "0.0.0.0")"
+  api_port="$(env_get "${env_file}" "API_PORT" "8000")"
+
+  if [[ "${web_bind_address}" == "0.0.0.0" ]]; then
+    web_bind_address="127.0.0.1"
+  fi
+  if [[ "${api_bind_address}" == "0.0.0.0" ]]; then
+    api_bind_address="127.0.0.1"
+  fi
+
+  web_probe_url="http://${web_bind_address}:${web_port}"
+  api_probe_url="http://${api_bind_address}:${api_port}"
 
   log_step "Waiting for Pantry services"
-  wait_for_http_ok "${web_url}/" "${TIMEOUT_SECONDS}" || die "Web health check timed out at ${web_url}/"
-  wait_for_http_ok "${api_url}/api/health" "${TIMEOUT_SECONDS}" || die "API health check timed out at ${api_url}/api/health"
+  wait_for_http_ok "${web_probe_url}/" "${TIMEOUT_SECONDS}" || die "Web health check timed out at ${web_probe_url}/"
+  wait_for_http_ok "${api_probe_url}/api/health" "${TIMEOUT_SECONDS}" || die "API health check timed out at ${api_probe_url}/api/health"
 
   log_step "Inspecting running containers"
   compose_ps="$(docker_compose_in_dir "${INSTALL_DIR}" ps)"
   printf '%s\n' "${compose_ps}"
 
   log_step "Checking web, API, setup, and worker status"
-  web_status_json="$(curl -fsS "${web_url}/" >/dev/null && printf '{"status":"ok"}')"
-  api_health_json="$(curl -fsS "${api_url}/api/health")"
-  setup_status_json="$(curl -fsS "${api_url}/api/setup/status")"
+  web_status_json="$(curl -fsS "${web_probe_url}/" >/dev/null && printf '{"status":"ok"}')"
+  api_health_json="$(curl -fsS "${api_probe_url}/api/health")"
+  setup_status_json="$(curl -fsS "${api_probe_url}/api/setup/status")"
   worker_status_json="$(docker_compose_in_dir "${INSTALL_DIR}" exec -T worker python -m worker.main --status)"
 
   python3 - "${api_health_json}" "${setup_status_json}" "${worker_status_json}" "${web_url}" "${api_url}" <<'PY'
