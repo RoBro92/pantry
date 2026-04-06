@@ -1,7 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -n "${BASH_SOURCE[0]:-}" && -f "${BASH_SOURCE[0]}" ]]; then
+  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+else
+  SCRIPT_DIR="$(mktemp -d)"
+  trap 'rm -rf "${SCRIPT_DIR}"' EXIT
+fi
+
 PANTRY_SELFHOST_LIB="${SCRIPT_DIR}/lib/pantry-selfhost.sh"
 if [[ ! -f "${PANTRY_SELFHOST_LIB}" ]]; then
   REPOSITORY_FALLBACK="${PANTRY_REPOSITORY:-RoBro92/pantry}"
@@ -218,7 +224,7 @@ EOF
 }
 
 main() {
-  local resolved_version detected_ip selected_version host web_port api_port use_https scheme
+  local resolved_version detected_ip selected_version host web_port api_port use_https scheme asset_ref
   local browser_url api_url
 
   require_root
@@ -271,13 +277,32 @@ main() {
     use_https="no"
   fi
   scheme="$([[ "${use_https}" == "yes" ]] && printf 'https' || printf 'http')"
+  asset_ref="v${selected_version}"
 
   prepare_install_layout "${selected_version}"
   configure_env_file "${selected_version}" "${host}" "${web_port}" "${api_port}" "${scheme}"
   mkdir -p "${INSTALL_DIR}/lib"
-  cp "${SCRIPT_DIR}/update-pantry.sh" "${INSTALL_DIR}/update-pantry.sh"
-  cp "${SCRIPT_DIR}/healthcheck-pantry.sh" "${INSTALL_DIR}/healthcheck-pantry.sh"
-  cp "${SCRIPT_DIR}/lib/pantry-selfhost.sh" "${INSTALL_DIR}/lib/pantry-selfhost.sh"
+  copy_or_download_asset \
+    "${PANTRY_REPO_ROOT}/infra/scripts/update-pantry.sh" \
+    "${REPOSITORY}" \
+    "${asset_ref}" \
+    "infra/scripts/update-pantry.sh" \
+    "${INSTALL_DIR}/update-pantry.sh" \
+    "${selected_version}"
+  copy_or_download_asset \
+    "${PANTRY_REPO_ROOT}/infra/scripts/healthcheck-pantry.sh" \
+    "${REPOSITORY}" \
+    "${asset_ref}" \
+    "infra/scripts/healthcheck-pantry.sh" \
+    "${INSTALL_DIR}/healthcheck-pantry.sh" \
+    "${selected_version}"
+  copy_or_download_asset \
+    "${PANTRY_REPO_ROOT}/infra/scripts/lib/pantry-selfhost.sh" \
+    "${REPOSITORY}" \
+    "${asset_ref}" \
+    "infra/scripts/lib/pantry-selfhost.sh" \
+    "${INSTALL_DIR}/lib/pantry-selfhost.sh" \
+    "${selected_version}"
   chmod +x "${INSTALL_DIR}/update-pantry.sh" "${INSTALL_DIR}/healthcheck-pantry.sh"
 
   run_install
