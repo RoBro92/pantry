@@ -7,6 +7,7 @@ services:
       - .env
     environment:
       INTERNAL_API_BASE_URL: ${INTERNAL_API_BASE_URL:-http://api:8000}
+      NODE_OPTIONS: ${NODE_OPTIONS:---max_old_space_size=2048}
     working_dir: /workspace
     command: >
       /bin/sh -lc

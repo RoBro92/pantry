@@ -1,30 +1,24 @@
 # Pantry
 
-Pantry is a self-hosted household inventory and meal management application designed to track food, reduce waste, and streamline day-to-day kitchen workflows.
+Pantry is a self-hosted household inventory and meal management application for tracking food, reducing waste, and keeping day-to-day kitchen workflows clear.
 
 ## Features
 
 - Pantry inventory with locations, stock lots, and expiry tracking
 - Recipe management with pantry coverage insights
-- Import and review flow for adding items
-- QR code location access (e.g. fridge, cupboard)
-- Admin diagnostics and system health visibility
-- Optional AI-powered suggestions (advisory only)
-- Fully self-hosted using Docker
+- Review-first import flows
+- QR location access
+- Diagnostics and installation visibility
+- Optional AI-powered suggestions
+- Guided first-run setup and login flow
 
-## Quick Start (Recommended)
-
-Run the install script:
+## Quick Start
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/RoBro92/pantry/main/infra/scripts/install-pantry.sh | bash
 ```
 
-This will:
-- install Docker and required dependencies
-- download the latest Pantry release
-- configure the environment
-- start the application
+The installer prepares Docker, writes environment defaults, pulls the release assets, runs migrations, and starts the stack.
 
 ## Manual Installation
 
@@ -38,32 +32,27 @@ docker compose -f infra/compose/pantry.yml up -d
 docker compose exec api alembic upgrade head
 ```
 
-## Accessing Pantry
+## First Run
 
-After installation, open:
+Open:
 
 ```text
 http://<your-server-ip>:3000
 ```
 
-(Port may vary depending on your configuration.)
+Pantry now uses:
+
+- `/` as the default entry point
+- the first-run wizard when setup is incomplete
+- the login page when setup is complete
+
+The setup wizard stages progress until the final confirmation step. It only writes users, household data, settings, dietary preferences, and optional AI/SMTP configuration into live tables when you click `Complete Setup`.
 
 ## Updating Pantry
 
 ```bash
 ./infra/scripts/update-pantry.sh
 ```
-
-This will:
-- pull the latest release image
-- restart containers
-- apply any required migrations
-
-## Versioning
-
-- The running version is defined by the `VERSION` file
-- Visible in the admin UI and diagnostics
-- Update checks are advisory only (no automatic updates)
 
 ## Configuration
 
@@ -74,30 +63,32 @@ infra/env/pantry.env.example
 ```
 
 Key options include:
-- base URL used for QR codes
-- database configuration
+
+- `WEB_APP_URL`
+- `API_BASE_URL`
+- `NEXT_PUBLIC_API_BASE_URL`
+- `PUBLIC_BROWSER_BASE_URL`
+- database credentials
 - optional AI provider settings
+- optional SMTP settings
+
+## Validation And Local Development
+
+See:
+
+- [docs/CONTRIBUTING.md](/Users/robinbrown/Documents/GitHub/pantry/docs/CONTRIBUTING.md)
+- [docs/DEPLOYMENT.md](/Users/robinbrown/Documents/GitHub/pantry/docs/DEPLOYMENT.md)
+- [docs/ARCHITECTURE.md](/Users/robinbrown/Documents/GitHub/pantry/docs/ARCHITECTURE.md)
+- [docs/TEST_STRATEGY.md](/Users/robinbrown/Documents/GitHub/pantry/docs/TEST_STRATEGY.md)
 
 ## Troubleshooting
 
-View logs:
-
 ```bash
 docker compose logs -f
-```
-
-Restart services:
-
-```bash
 docker compose restart
-```
-
-Run health check:
-
-```bash
 ./infra/scripts/healthcheck-pantry.sh
 ```
 
-## License
+## Versioning
 
-See the LICENSE file for details.
+The running version is defined by the `VERSION` file and surfaced across the app and diagnostics.

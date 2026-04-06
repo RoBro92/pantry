@@ -30,8 +30,8 @@ if [[ -z "$web_internal_api_url" ]]; then
   exit 1
 fi
 
-check_http "web home" "${WEB_URL}/" "Self-hosted foundation"
-check_http "web login" "${WEB_URL}/login" "Pantry Login"
+check_http "web home" "${WEB_URL}/" "Welcome back"
+check_http "web login" "${WEB_URL}/login" "Username or email"
 check_http "api health" "${API_URL}/api/health" "\"status\":\"ok\""
 
 echo "Checking worker status"

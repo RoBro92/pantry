@@ -15,24 +15,68 @@ test.beforeEach(() => {
   manifest = reseedE2E();
 });
 
-test("first-run setup bootstraps the initial platform admin in the browser", async ({ page }) => {
+test("first-run setup redirects into the wizard, persists progress, and completes cleanly", async ({
+  page
+}) => {
   resetToUninitialized();
 
-  await page.goto("/login");
-
+  await page.goto("/");
   await expect(page).toHaveURL(/\/setup$/);
-  await expect(page.getByTestId("setup-bootstrap-form")).toBeVisible();
+  await page.goto("/login");
+  await expect(page).toHaveURL(/\/setup$/);
 
-  const form = page.getByTestId("setup-bootstrap-form");
-  await form.getByLabel("Email").fill("owner@example.com");
-  await form.getByLabel("Display name").fill("Owner");
-  await form.getByLabel("Password", { exact: true }).fill("correct horse battery");
-  await form.getByLabel("Confirm password").fill("correct horse battery");
-  await form.getByRole("button", { name: "Create platform admin" }).click();
+  const wizard = page.getByTestId("setup-wizard");
 
-  await expect(page).toHaveURL(/\/admin$/);
-  await expect(page.getByRole("heading", { name: "Installation Console" })).toBeVisible();
-  await expect(page.getByText("Make the install usable")).toBeVisible();
+  await wizard.getByRole("button", { name: "Next" }).click();
+  const usersStep = page.getByTestId("setup-users-step");
+  await expect(page.getByRole("heading", { name: "Admin account and initial users" })).toBeVisible();
+
+  await usersStep.getByLabel("Username or email").fill("owner");
+  await usersStep.getByLabel("Display name").fill("Owner");
+  await usersStep.getByLabel("Password", { exact: true }).fill("correct horse battery");
+  await usersStep.getByLabel("Confirm password").fill("correct horse battery");
+
+  await wizard.getByRole("button", { name: "Next" }).click();
+  await expect(page.getByRole("heading", { name: "First household and storage locations" })).toBeVisible();
+
+  await page.getByLabel("Household name").fill("Brown Household");
+  await page.getByLabel("Storage area label").fill("Kitchen");
+  await page.getByLabel("Initial storage locations").fill("Fridge");
+  await page.getByRole("button", { name: "Add" }).first().click();
+  await expect(page.getByText("Household details saved.")).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "First household and storage locations" })).toBeVisible();
+  await expect(page.getByLabel("Household name")).toHaveValue("Brown Household");
+  await expect(page.getByRole("button", { name: "Fridge Remove" })).toBeVisible();
+
+  await wizard.getByRole("button", { name: "Next" }).click();
+  await expect(page.getByRole("heading", { name: "Public browser URL" })).toBeVisible();
+  await page.getByLabel("Public Pantry URL").fill("http://localhost:3000");
+  await wizard.getByRole("button", { name: /Household and storage/ }).click();
+  await expect(page.getByRole("heading", { name: "First household and storage locations" })).toBeVisible();
+  await wizard.getByRole("button", { name: "Next" }).click();
+
+  await wizard.getByRole("button", { name: "Next" }).click();
+  await expect(page.getByRole("heading", { name: "Dietary preferences" })).toBeVisible();
+  await page.getByLabel("Household-wide preferences").fill("Vegetarian");
+  await page.getByRole("button", { name: "Add" }).first().click();
+  await wizard.getByRole("button", { name: "Next" }).click();
+  await wizard.getByRole("button", { name: "Next" }).click();
+  await wizard.getByRole("button", { name: "Next" }).click();
+
+  await expect(page.getByRole("heading", { name: "Review and complete" })).toBeVisible();
+  await wizard.getByRole("button", { name: "Complete Setup" }).click();
+
+  await expect(page).toHaveURL(/\/app$/);
+  await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
+  await expect(page.locator(".household-card").getByText("Brown Household")).toBeVisible();
+});
+
+test("completed installs use the login page as the default entry point", async ({ page }) => {
+  await page.goto("/");
+  await expect(page).toHaveURL(/\/login$/);
+  await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
 });
 
 test("login lands on the authenticated dashboard", async ({ page }) => {
@@ -310,9 +354,9 @@ test("location route redirects to login and lands on the correct location page a
   await page.goto(href!);
 
   await expect(page).toHaveURL(/\/login\?next=%2Flocations%2F/);
-  await expect(page.getByRole("heading", { name: "Pantry Login" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
 
-  await page.getByLabel("Email").fill(manifest.member_email);
+  await page.getByLabel("Username or email").fill(manifest.member_email);
   await page.getByLabel("Password").fill(manifest.password);
   await page.getByRole("button", { name: "Sign in" }).click();
 

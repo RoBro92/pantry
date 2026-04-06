@@ -211,8 +211,8 @@ Useful commands:
   ./healthcheck-pantry.sh --install-dir ${INSTALL_DIR}
   ./update-pantry.sh --install-dir ${INSTALL_DIR}
 
-First admin setup:
-  Open ${browser_url}/setup in a browser
+First-run setup:
+  Open ${browser_url}/ in a browser
   or run:
   docker compose --env-file .env -f pantry.yml run --rm api \\
     python -m app.cli bootstrap-platform-admin --email admin@example.com --display-name "Pantry Admin"

@@ -44,7 +44,7 @@ export async function login(
   await page.goto("/login");
   await expect(page.getByTestId("login-form")).toBeVisible();
   await page.waitForLoadState("networkidle");
-  await page.getByLabel("Email").fill(credentials.email);
+  await page.getByLabel("Username or email").fill(credentials.email);
   await page.getByLabel("Password").fill(credentials.password);
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).toHaveURL(/\/app(?:$|\/)/);
