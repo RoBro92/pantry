@@ -15,12 +15,15 @@ Pantry now has a staged first-run setup wizard and a dedicated login entry flow.
 ## Validation
 
 - `cd apps/api && pytest -q tests/test_auth_api.py tests/test_setup_api.py`
-- Additional stack and E2E validation is expected for user-facing milestone completion
+- `cd apps/api && pytest -q`
+- `./infra/scripts/smoke-check.sh`
+- `npm run test:e2e`
+- `docker compose exec -T web sh -lc 'export NEXT_PUBLIC_APP_VERSION=$(cat /workspace/VERSION) && npm run build --workspace @pantry/web'`
 
 ## Known Gaps
 
-- Full stack validation should be rerun against the local Docker stack after any follow-up UI adjustments
+- The containerised Next.js production build completed compile, type-check, and static generation, then was killed while finishing build traces. The local dev stack was restarted and remained healthy after validation.
 
 ## Next Step
 
-Run the full local stack, execute the updated E2E suite, and verify the first-run wizard end to end in the browser.
+Open the local setup wizard in a browser, validate the first-run UX manually, and then decide whether to tune the production build memory footprint further.
