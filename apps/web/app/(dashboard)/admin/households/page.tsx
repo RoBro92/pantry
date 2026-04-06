@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { AdminHouseholdManagementPanel } from "../../../../components/admin-household-management-panel";
 import { DataTable } from "../../../../components/data-table";
+import { getHouseholdRoleLabel } from "../../../../lib/role-labels";
 import { getAdminHouseholds, getAdminUsers } from "../../../../lib/server-auth";
 
 export default async function AdminHouseholdsPage() {
@@ -22,7 +23,10 @@ export default async function AdminHouseholdsPage() {
               {household.memberships.length === 0
                 ? "None"
                 : household.memberships
-                    .map((membership) => `${membership.display_name ?? membership.email} (${membership.role})`)
+                    .map(
+                      (membership) =>
+                        `${membership.display_name ?? membership.email} (${getHouseholdRoleLabel(membership.role)})`,
+                    )
                     .join(", ")}
             </td>
             <td>

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { StatusCard } from "../../../components/status-card";
+import { getHouseholdRoleLabel } from "../../../lib/role-labels";
 import { requireSession } from "../../../lib/server-auth";
 
 export default async function SessionPage() {
@@ -65,7 +66,7 @@ export default async function SessionPage() {
               <article key={membership.external_id} className="household-card">
                 <div>
                   <strong>{membership.household_name}</strong>
-                  <p>{membership.role}</p>
+                  <p>{getHouseholdRoleLabel(membership.role)}</p>
                 </div>
                 <div className="household-card-actions">
                   <Link

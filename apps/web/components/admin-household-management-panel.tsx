@@ -4,6 +4,7 @@ import { FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { AdminHouseholdSummary, AdminUserSummary } from "../lib/api-types";
 import { postToApi } from "../lib/client-api";
+import { getHouseholdRoleLabel } from "../lib/role-labels";
 
 type AdminHouseholdManagementPanelProps = {
   households: AdminHouseholdSummary[];
@@ -71,7 +72,7 @@ export function AdminHouseholdManagementPanel({
           role,
         },
       );
-      setMembershipSuccess(`Assigned ${created.email} as ${created.role}.`);
+      setMembershipSuccess(`Assigned ${created.email} as ${getHouseholdRoleLabel(created.role)}.`);
       router.refresh();
       setMembershipPending(false);
     } catch (submissionError) {
@@ -151,8 +152,8 @@ export function AdminHouseholdManagementPanel({
           <label className="field">
             <span>Role</span>
             <select name="role" defaultValue="household_admin" required>
-              <option value="household_admin">household_admin</option>
-              <option value="household_user">household_user</option>
+              <option value="household_admin">{getHouseholdRoleLabel("household_admin")}</option>
+              <option value="household_user">{getHouseholdRoleLabel("household_user")}</option>
             </select>
           </label>
         </div>
@@ -162,7 +163,10 @@ export function AdminHouseholdManagementPanel({
             {selectedHouseholdSummary.memberships.length === 0
               ? "none yet"
               : selectedHouseholdSummary.memberships
-                  .map((membership) => `${membership.display_name ?? membership.email} (${membership.role})`)
+                  .map(
+                    (membership) =>
+                      `${membership.display_name ?? membership.email} (${getHouseholdRoleLabel(membership.role)})`,
+                  )
                   .join(", ")}
           </p>
         ) : null}
