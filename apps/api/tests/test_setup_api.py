@@ -44,12 +44,6 @@ def _save_required_setup_steps(client):
     )
     assert response.status_code == 200
 
-    response = client.put(
-        "/api/setup/wizard/public-url",
-        json={"public_base_url": "https://pantry.example.com"},
-    )
-    assert response.status_code == 200
-
 
 def test_setup_status_reports_uninitialized_install(client):
     response = client.get("/api/setup/status")
@@ -72,12 +66,73 @@ def test_setup_wizard_persists_staged_progress(client):
     assert payload["initial_users"][0]["login"] == "alex"
     assert payload["household_name"] == "Brown Household"
     assert payload["storage_locations"] == ["Fridge", "Freezer", "Pantry shelf"]
-    assert payload["public_base_url"] == "https://pantry.example.com"
+    assert payload["public_base_url"] is None
     assert payload["can_complete"] is True
+    step_states = {step["key"]: step["is_complete"] for step in payload["status"]["steps"]}
+    assert step_states["welcome"] is True
+    assert step_states["users"] is True
+    assert step_states["household"] is True
+    assert step_states["public_url"] is False
+    assert step_states["dietary"] is False
+    assert step_states["ai"] is False
+    assert step_states["smtp"] is False
+
+
+def test_setup_users_endpoint_persists_incomplete_additional_users(client):
+    response = client.put(
+        "/api/setup/wizard/users",
+        json={
+            "admin_login": "owner",
+            "admin_display_name": "Owner",
+            "admin_password": "correct horse battery",
+            "initial_users": [
+                {
+                    "stage_id": "user-blank",
+                    "login": "",
+                    "display_name": "Later User",
+                    "password": None,
+                }
+            ],
+        },
+    )
+    assert response.status_code == 200
+
+    payload = response.json()
+    assert payload["initial_users"] == [
+        {
+            "stage_id": "user-blank",
+            "login": "",
+            "display_name": "Later User",
+            "password_saved": False,
+            "is_platform_admin": False,
+        }
+    ]
+    assert payload["can_complete"] is False
+    step_states = {step["key"]: step["is_complete"] for step in payload["status"]["steps"]}
+    assert step_states["users"] is False
+
+
+def test_setup_public_url_can_be_cleared_without_marking_step_complete(client):
+    response = client.put(
+        "/api/setup/wizard/public-url",
+        json={"public_base_url": ""},
+    )
+    assert response.status_code == 200
+
+    payload = response.json()
+    assert payload["public_base_url"] is None
+    step_states = {step["key"]: step["is_complete"] for step in payload["status"]["steps"]}
+    assert step_states["public_url"] is False
 
 
 def test_setup_finalize_commits_all_staged_data_and_authenticates(client, db_session):
     _save_required_setup_steps(client)
+
+    response = client.put(
+        "/api/setup/wizard/public-url",
+        json={"public_base_url": "https://pantry.example.com"},
+    )
+    assert response.status_code == 200
 
     response = client.put(
         "/api/setup/wizard/dietary",
@@ -162,6 +217,20 @@ def test_setup_finalize_commits_all_staged_data_and_authenticates(client, db_ses
     assert setup_state.payload == {}
     assert setup_state.encrypted_ai_api_key is None
     assert setup_state.encrypted_smtp_password is None
+
+
+def test_setup_finalize_allows_optional_steps_to_be_skipped(client, db_session):
+    _save_required_setup_steps(client)
+
+    finalize_response = client.post("/api/setup/wizard/finalize")
+    assert finalize_response.status_code == 200
+
+    instance_settings = db_session.scalar(select(InstanceSetting))
+    assert instance_settings is not None
+    assert instance_settings.public_base_url is None
+
+    assert db_session.scalar(select(AIProviderConfig)) is None
+    assert db_session.scalar(select(SetupState)).status == "completed"
 
 
 def test_setup_finalize_rejects_incomplete_state_without_creating_users(client, db_session):

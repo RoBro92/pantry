@@ -15,7 +15,7 @@ test.beforeEach(() => {
   manifest = reseedE2E();
 });
 
-test("first-run setup redirects into the wizard, persists progress, and completes cleanly", async ({
+test("first-run setup handles staged users, skips optional steps, and completes cleanly", async ({
   page
 }) => {
   resetToUninitialized();
@@ -26,46 +26,116 @@ test("first-run setup redirects into the wizard, persists progress, and complete
   await expect(page).toHaveURL(/\/setup$/);
 
   const wizard = page.getByTestId("setup-wizard");
+  const progressItems = wizard.locator(".setup-progress-item");
+
+  await expect(progressItems.nth(0).locator(".setup-progress-count")).toHaveText("1");
+  await expect(progressItems.nth(1).locator(".setup-progress-count")).toHaveText("2");
 
   await wizard.getByRole("button", { name: "Next" }).click();
   const usersStep = page.getByTestId("setup-users-step");
   await expect(page.getByRole("heading", { name: "Admin account and initial users" })).toBeVisible();
+  await expect(progressItems.nth(0).locator(".setup-progress-count")).toHaveText("✓");
+  await expect(progressItems.nth(1).locator(".setup-progress-count")).toHaveText("2");
+  await expect(wizard.getByRole("button", { name: "Next" })).toBeDisabled();
+  await expect(page.getByTestId("setup-admin-password-status")).toContainText(
+    "Enter a username or email for the platform admin.",
+  );
 
-  await usersStep.getByLabel("Username or email").fill("owner");
-  await usersStep.getByLabel("Display name").fill("Owner");
-  await usersStep.getByLabel("Password", { exact: true }).fill("correct horse battery");
-  await usersStep.getByLabel("Confirm password").fill("correct horse battery");
+  const adminFields = usersStep.locator(".setup-subsection").nth(0);
+  await adminFields.getByLabel("Username or email").fill("owner");
+  await expect(page.getByTestId("setup-admin-password-status")).toContainText(
+    "Add a password of at least 8 characters before continuing.",
+  );
 
-  await wizard.getByRole("button", { name: "Next" }).click();
-  await expect(page.getByRole("heading", { name: "First household and storage locations" })).toBeVisible();
+  await adminFields.getByLabel("Display name").fill("Owner");
+  await adminFields.getByLabel("Password", { exact: true }).fill("short");
+  await adminFields.getByLabel("Confirm password").fill("short");
+  await expect(page.getByTestId("setup-admin-password-status")).toContainText(
+    "Passwords must be at least 8 characters.",
+  );
+  await expect(wizard.getByRole("button", { name: "Next" })).toBeDisabled();
+  await adminFields.getByLabel("Password", { exact: true }).fill("correct horse battery");
+  await adminFields.getByLabel("Confirm password").fill("correct horse battery");
 
-  await page.getByLabel("Household name").fill("Brown Household");
-  await page.getByLabel("Storage area label").fill("Kitchen");
-  await page.getByLabel("Initial storage locations").fill("Fridge");
-  await page.getByRole("button", { name: "Add" }).first().click();
-  await expect(page.getByText("Household details saved.")).toBeVisible();
+  await usersStep.getByRole("button", { name: "Add additional user" }).click();
+  await usersStep.getByRole("button", { name: "Add additional user" }).click();
+  await expect(page.getByTestId("setup-user-card-1")).toBeVisible();
+  await expect(page.getByTestId("setup-user-card-2")).toBeVisible();
+
+  const firstAdditionalUser = page.getByTestId("setup-user-card-1");
+  await firstAdditionalUser.getByLabel("Username or email").fill("alex");
+  await firstAdditionalUser.getByLabel("Display name").fill("Alex");
+  await firstAdditionalUser.getByLabel("Password", { exact: true }).fill("correct horse battery");
+  await firstAdditionalUser
+    .getByLabel("Confirm password")
+    .fill("correct horse battery");
+
+  const secondAdditionalUser = page.getByTestId("setup-user-card-2");
+  await secondAdditionalUser.getByLabel("Username or email").fill("bea");
+  await secondAdditionalUser.getByLabel("Display name").fill("Bea");
+  await secondAdditionalUser.getByRole("button", { name: "Remove" }).click();
+  await expect(page.getByTestId("setup-user-card-2")).toHaveCount(0);
+
+  await page.getByRole("heading", { name: "Admin account and initial users" }).click();
+  await expect(page.getByText("Users saved.")).toBeVisible();
+  await expect(wizard.getByRole("button", { name: "Next" })).toBeEnabled();
 
   await page.reload();
-  await expect(page.getByRole("heading", { name: "First household and storage locations" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Admin account and initial users" })).toBeVisible();
+  await expect(progressItems.nth(0).locator(".setup-progress-count")).toHaveText("✓");
+  await expect(progressItems.nth(1).locator(".setup-progress-count")).toHaveText("2");
+  await expect(progressItems.nth(2).locator(".setup-progress-count")).toHaveText("3");
+  await expect(page.getByTestId("setup-user-card-1").getByLabel("Username or email")).toHaveValue("alex");
+  await expect(page.getByTestId("setup-user-card-1").getByLabel("Display name")).toHaveValue("Alex");
+  await expect(page.getByTestId("setup-user-card-2")).toHaveCount(0);
+
+  await wizard.getByRole("button", { name: "Next" }).click();
+  await expect(page.getByRole("heading", { name: "Household and storage locations" })).toBeVisible();
+
+  await page.getByLabel("Household name").fill("Brown Household");
+  await page.getByLabel("Default storage location").fill("Kitchen");
+  await page.getByLabel("Additional storage locations").fill("Fridge");
+  await page.getByRole("button", { name: "Add" }).first().click();
+  await page
+    .getByLabel("Household membership for Alex (alex)")
+    .selectOption({ label: "User" });
+  await expect(page.getByText("Household details saved.")).toBeVisible();
+  await expect(page.getByLabel(/Household membership for .*owner/i)).toBeDisabled();
+  await expect(page.getByLabel(/Household membership for .*owner/i)).toHaveValue(
+    "household_admin",
+  );
+  await expect(page.getByLabel("Household membership for Alex (alex)")).toHaveValue(
+    "household_user",
+  );
+
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Household and storage locations" })).toBeVisible();
   await expect(page.getByLabel("Household name")).toHaveValue("Brown Household");
   await expect(page.getByRole("button", { name: "Fridge Remove" })).toBeVisible();
+  await expect(page.getByLabel("Household membership for Alex (alex)")).toHaveValue(
+    "household_user",
+  );
 
   await wizard.getByRole("button", { name: "Next" }).click();
   await expect(page.getByRole("heading", { name: "Public browser URL" })).toBeVisible();
-  await page.getByLabel("Public Pantry URL").fill("http://localhost:3000");
-  await wizard.getByRole("button", { name: /Household and storage/ }).click();
-  await expect(page.getByRole("heading", { name: "First household and storage locations" })).toBeVisible();
-  await wizard.getByRole("button", { name: "Next" }).click();
+  await expect(wizard.getByRole("button", { name: "Skip for now" })).toBeVisible();
+  await wizard.getByRole("button", { name: "Skip for now" }).click();
 
-  await wizard.getByRole("button", { name: "Next" }).click();
   await expect(page.getByRole("heading", { name: "Dietary preferences" })).toBeVisible();
-  await page.getByLabel("Household-wide preferences").fill("Vegetarian");
-  await page.getByRole("button", { name: "Add" }).first().click();
-  await wizard.getByRole("button", { name: "Next" }).click();
-  await wizard.getByRole("button", { name: "Next" }).click();
-  await wizard.getByRole("button", { name: "Next" }).click();
+  await wizard.getByRole("button", { name: "Skip for now" }).click();
+  await expect(page.getByRole("heading", { name: "AI configuration" })).toBeVisible();
+  await wizard.getByRole("button", { name: "Skip for now" }).click();
+  await expect(page.getByRole("heading", { name: "SMTP configuration" })).toBeVisible();
+  await wizard.getByRole("button", { name: "Skip for now" }).click();
 
   await expect(page.getByRole("heading", { name: "Review and complete" })).toBeVisible();
+  await expect(progressItems.nth(2).locator(".setup-progress-count")).toHaveText("✓");
+  await expect(progressItems.nth(3).locator(".setup-progress-count")).toHaveText("4");
+  await expect(progressItems.nth(4).locator(".setup-progress-count")).toHaveText("5");
+  await expect(progressItems.nth(5).locator(".setup-progress-count")).toHaveText("6");
+  await expect(progressItems.nth(6).locator(".setup-progress-count")).toHaveText("7");
+  await expect(page.getByText("Skipped for now")).toHaveCount(4);
+  await expect(page.getByText(/Alex \(alex\) \(User\)/)).toBeVisible();
   await wizard.getByRole("button", { name: "Complete Setup" }).click();
 
   await expect(page).toHaveURL(/\/app$/);
@@ -310,11 +380,11 @@ test("platform admin can create a user, create a household, and assign membershi
   await membershipForm
     .locator('select[name="user_external_id"]')
     .selectOption({ label: "Weekday Member (weekday-member@example.com)" });
-  await membershipForm.locator('select[name="role"]').selectOption("household_user");
+  await membershipForm.locator('select[name="role"]').selectOption({ label: "User" });
   await membershipForm.getByRole("button", { name: "Assign membership" }).click();
 
-  await expect(page.getByText("Assigned weekday-member@example.com as household_user.")).toBeVisible();
-  await expect(page.getByRole("row", { name: /Weekday Household .*Weekday Member \(household_user\)/ })).toBeVisible();
+  await expect(page.getByText("Assigned weekday-member@example.com as User.")).toBeVisible();
+  await expect(page.getByRole("row", { name: /Weekday Household .*Weekday Member \(User\)/ })).toBeVisible();
 
   await page.getByRole("button", { name: "Logout" }).click();
 
