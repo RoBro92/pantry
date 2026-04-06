@@ -30,11 +30,10 @@ export default async function SetupPage({ searchParams }: SetupPageProps) {
     <main className="page-shell setup-page">
       <section className="auth-stage-shell">
         <div className="auth-stage-intro">
-          <p className="eyebrow">Self-hosted onboarding</p>
-          <h1>Finish first-run setup</h1>
+          <p className="eyebrow">Pantry</p>
+          <h1>Setup Wizard</h1>
           <p className="lede">
-            Create the admin account, stage the first household, and finalize the installation in
-            one controlled flow.
+            Welcome to Pantry! Let's get you set up with a few quick steps to start using your self hosted ingredient manager.
           </p>
         </div>
         <SetupWizard initialState={wizardState} initialStep={initialStep} />

@@ -36,7 +36,7 @@ const STEP_ORDER: SetupStepKey[] = [
   "review"
 ];
 
-const LOCATION_SUGGESTIONS = ["Fridge", "Freezer", "Cupboard", "Pantry shelf"];
+const LOCATION_SUGGESTIONS = ["Fridge", "Freezer", "Cupboard", "shelf"];
 const DIETARY_SUGGESTIONS = [
   "Vegan",
   "Vegetarian",
@@ -629,24 +629,22 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
       return (
         <section className="setup-step-card">
           <p className="eyebrow">First Run</p>
-          <h1>Set up Pantry once, then finalize when you’re ready.</h1>
+          <h1>Complete Pantry setup once to proceed to dashboard</h1>
           <p className="lede compact">
-            This guided setup stages your admin account, household, storage locations, preferences,
-            and optional integrations. Nothing is written into Pantry’s live tables until you click
-            <strong> Complete Setup</strong> on the final step.
+            Follow the guided setup to create Users, a Household, and other key details. You can always adjust these later, but this will get you up and running with the best experience out of the box.
           </p>
           <div className="setup-highlight-grid">
             <article className="setup-highlight">
-              <strong>Professional first run</strong>
-              <p>Move through the steps at your own pace with clear progress and review controls.</p>
+              <strong>Create Users</strong>
+              <p>Create your primary platform user and then add additional household users with individual dietary preferences.</p>
             </article>
             <article className="setup-highlight">
-              <strong>Progress persists</strong>
-              <p>Staged details survive refreshes so you can come back without starting over.</p>
+              <strong>AI Integration</strong>
+              <p>Currently supports Ollama and OpenAI API integrations for smart recipe suggestions based on pantry contents</p>
             </article>
             <article className="setup-highlight">
-              <strong>Safe finalization</strong>
-              <p>Pantry only marks setup complete after the final transactional commit succeeds.</p>
+              <strong>SMTP Setup</strong>
+              <p>Optional SMTP setup for emailed shopping lists, password resets and notifications</p>
             </article>
           </div>
         </section>
@@ -659,13 +657,12 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
           <p className="eyebrow">Step 2</p>
           <h1>Admin account and initial users</h1>
           <p className="step-copy">
-            Start with the installation owner, then add any extra people you want ready on day one.
-            Passwords are stored securely in staged form until final completion.
+            Create the platform administrator and then add additional users, you can always add more later.
           </p>
 
           <div className="setup-subsection">
             <div className="setup-subsection-heading">
-              <h2>Main platform admin</h2>
+              <h2>Platform admin</h2>
               <span className="pill is-required">Required</span>
             </div>
             <div className="content-grid">
@@ -759,10 +756,9 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
       return (
         <section className="setup-step-card">
           <p className="eyebrow">Step 3</p>
-          <h1>First household and storage locations</h1>
+          <h1>Household and storage locations</h1>
           <p className="step-copy">
-            Create the first household, name the primary storage area, and stage the places people
-            will browse most often.
+            Create your household, optionally add storage locations which you can assign goods to later.
           </p>
 
           <div className="content-grid">
@@ -774,11 +770,11 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                   setWizard((current) => ({ ...current, household_name: event.target.value }))
                 }
                 onBlur={() => void persistStep("household", { suppressErrors: true })}
-                placeholder="Brown household"
+                placeholder="household"
               />
             </label>
             <label className="field">
-              <span>Storage area label</span>
+              <span>Default storage location</span>
               <input
                 value={wizard.location_group_name ?? ""}
                 onChange={(event) =>
@@ -797,7 +793,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
             onNewValueChange={setNewLocation}
             onAddToken={(value) => addStorageLocation(value)}
             onRemoveToken={removeStorageLocation}
-            label="Initial storage locations"
+            label="Additional storage locations"
             placeholder="Add a storage location"
           />
 
@@ -854,7 +850,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
           <h1>Public browser URL</h1>
           <p className="step-copy">
             Pantry uses this for QR codes and browser links, so it should match the address people
-            will actually open on phones and laptops.
+            will actually open personal devices.
           </p>
           <label className="field">
             <span>Public Pantry URL</span>
@@ -882,8 +878,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
           <p className="eyebrow">Step 5</p>
           <h1>Dietary preferences</h1>
           <p className="step-copy">
-            Capture household defaults now so recipe suggestions and meal planning can grow into the
-            right constraints later.
+            Select household dietary preferences and assign individual preferences to users. This will help Pantry make better meal suggestions and warnings about expiring goods.
           </p>
 
           <TokenEditor
@@ -936,7 +931,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
           <p className="eyebrow">Step 6</p>
           <h1>AI configuration</h1>
           <p className="step-copy">
-            Optional. Configure Pantry’s instance-level AI provider now if you want meal and pantry
+            Optional. Configure Pantry’s instance level AI provider now if you want meal and pantry
             suggestions ready after setup.
           </p>
           <label className="checkbox-row">
@@ -1145,8 +1140,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
         <p className="eyebrow">Step 8</p>
         <h1>Review and complete</h1>
         <p className="step-copy">
-          Check the staged data, jump back to anything you want to edit, then finalize the install
-          in one controlled commit.
+          Check everything looks right, then complete the setup. This will create your admin user, household, and any other staged details in one final step. You can always adjust these later in settings, but this is a good chance to make sure everything is correct before you start using Pantry.
         </p>
 
         <div className="review-grid">
