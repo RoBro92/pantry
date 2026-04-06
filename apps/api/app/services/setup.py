@@ -63,7 +63,7 @@ SETUP_STEP_TITLES = {
     "smtp": "SMTP configuration",
     "review": "Review and complete",
 }
-REQUIRED_STEPS = {"welcome", "users", "household", "public_url"}
+REQUIRED_STEPS = {"welcome", "users", "household"}
 DEFAULT_LOCATION_GROUP_NAME = "Kitchen"
 DEFAULT_ADMIN_STAGE_ID = "platform-admin"
 
@@ -172,6 +172,13 @@ def _normalize_preferences(values: list[str]) -> list[str]:
     return dedupe_preserving_order([item.strip() for item in values if item.strip()])
 
 
+def _normalize_optional_public_base_url(value: str | None) -> str | None:
+    normalized = _normalize_optional_text(value)
+    if normalized is None:
+        return None
+    return normalize_public_base_url(normalized)
+
+
 def _serialize_user(user: dict[str, object], *, is_platform_admin: bool) -> StagedSetupUserSummary:
     return StagedSetupUserSummary(
         stage_id=str(user.get("stage_id") or DEFAULT_ADMIN_STAGE_ID),
@@ -199,6 +206,7 @@ def _compute_step_completion(payload: dict[str, object]) -> dict[str, bool]:
     admin_user = payload["admin_user"]
     initial_users = payload["initial_users"]
     household = payload["household"]
+    dietary = payload["dietary"]
     ai = payload["ai"]
     smtp = payload["smtp"]
 
@@ -209,24 +217,14 @@ def _compute_step_completion(payload: dict[str, object]) -> dict[str, bool]:
     )
     household_complete = bool(str(household.get("name") or "").strip()) and len(household.get("storage_locations") or []) > 0
     public_url_complete = bool(str(payload.get("public_base_url") or "").strip())
-    dietary_complete = True
+    dietary_complete = bool(dietary.get("household_preferences") or dietary.get("user_preferences"))
     ai_enabled = bool(ai.get("is_enabled"))
-    ai_complete = not ai_enabled or (
+    ai_complete = ai_enabled and (
         bool(ai.get("provider_type")) and bool(ai.get("base_url")) and bool(ai.get("default_model"))
     )
     smtp_enabled = bool(smtp.get("is_enabled"))
-    smtp_complete = not smtp_enabled or bool(smtp.get("host"))
-    review_complete = all(
-        [
-            bool(payload.get("welcome_acknowledged")),
-            users_complete,
-            household_complete,
-            public_url_complete,
-            dietary_complete,
-            ai_complete,
-            smtp_complete,
-        ]
-    )
+    smtp_complete = smtp_enabled and bool(smtp.get("host"))
+    review_complete = all([bool(payload.get("welcome_acknowledged")), users_complete, household_complete])
 
     return {
         "welcome": bool(payload.get("welcome_acknowledged")),
@@ -249,8 +247,6 @@ def _missing_requirements(payload: dict[str, object]) -> list[str]:
         missing.append("Create a platform admin login and save a password.")
     if not completion["household"]:
         missing.append("Add the first household and at least one storage location.")
-    if not completion["public_url"]:
-        missing.append("Save a public browser URL.")
     return missing
 
 
@@ -389,10 +385,7 @@ def update_setup_users(db: Session, payload: SetupUsersUpdateRequest) -> SetupWi
     existing_admin = merged["admin_user"]
 
     admin_login = _normalize_login(payload.admin_login)
-    if not admin_login:
-        raise ValueError("The platform admin username is required.")
-
-    staged_logins = {admin_login}
+    staged_logins = {admin_login} if admin_login else set()
     merged["admin_user"] = {
         "stage_id": DEFAULT_ADMIN_STAGE_ID,
         "login": admin_login,
@@ -406,11 +399,10 @@ def update_setup_users(db: Session, payload: SetupUsersUpdateRequest) -> SetupWi
     initial_users: list[dict[str, object]] = []
     for user in payload.initial_users:
         login = _normalize_login(user.login)
-        if not login:
-            raise ValueError("Each initial user needs a username.")
-        if login in staged_logins:
+        if login and login in staged_logins:
             raise ValueError("Each staged user must have a unique username.")
-        staged_logins.add(login)
+        if login:
+            staged_logins.add(login)
 
         existing_user = next(
             (
@@ -461,7 +453,7 @@ def update_setup_household(db: Session, payload: SetupHouseholdUpdateRequest) ->
 def update_setup_public_url(db: Session, payload: SetupPublicURLUpdateRequest) -> SetupWizardStateResponse:
     state = _get_or_create_setup_state(db)
     merged = _merged_payload(state.payload)
-    merged["public_base_url"] = normalize_public_base_url(payload.public_base_url)
+    merged["public_base_url"] = _normalize_optional_public_base_url(payload.public_base_url) or ""
     state.payload = merged
     db.add(state)
     db.commit()
@@ -665,7 +657,9 @@ def finalize_setup(db: Session) -> User:
             db.add(Membership(user_id=user.id, household_id=household.id, role_id=role.id, is_active=True))
 
         settings = get_or_create_instance_settings(db)
-        settings.public_base_url = normalize_public_base_url(str(payload.get("public_base_url") or ""))
+        settings.public_base_url = _normalize_optional_public_base_url(
+            payload.get("public_base_url") if isinstance(payload.get("public_base_url"), str) else None
+        )
 
         smtp_payload = payload["smtp"]
         smtp_host = _normalize_optional_text(smtp_payload.get("host") if isinstance(smtp_payload.get("host"), str) else None)

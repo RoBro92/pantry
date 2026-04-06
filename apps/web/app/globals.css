@@ -304,6 +304,10 @@ code {
   font-size: 0.92rem;
 }
 
+.helper-text.is-error {
+  color: var(--danger);
+}
+
 .shell-grid {
   display: grid;
   gap: 1rem;
@@ -629,6 +633,12 @@ code {
   padding: 0.3rem 0;
 }
 
+.wizard-actions-group {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+}
+
 .login-actions {
   justify-content: flex-end;
 }
@@ -669,6 +679,11 @@ code {
 
   .wizard-actions {
     flex-direction: column-reverse;
+  }
+
+  .wizard-actions-group {
+    display: grid;
+    gap: 0.75rem;
   }
 
   .primary-link,

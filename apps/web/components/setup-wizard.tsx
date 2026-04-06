@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type {
   SetupStatusResponse,
   SetupWizardAssignmentSummary,
@@ -10,6 +10,7 @@ import type {
   SetupWizardUserSummary,
   SessionResponse
 } from "../lib/api-types";
+import { getHouseholdRoleLabel, type HouseholdRole } from "../lib/role-labels";
 import { postToApi, putToApi } from "../lib/client-api";
 import { SetupProgress } from "./setup-progress";
 
@@ -35,8 +36,9 @@ const STEP_ORDER: SetupStepKey[] = [
   "smtp",
   "review"
 ];
+const OPTIONAL_STEPS = new Set<SetupStepKey>(["public_url", "dietary", "ai", "smtp"]);
 
-const LOCATION_SUGGESTIONS = ["Fridge", "Freezer", "Cupboard", "shelf"];
+const LOCATION_SUGGESTIONS = ["Fridge", "Freezer", "Cupboard", "Pantry shelf"];
 const DIETARY_SUGGESTIONS = [
   "Vegan",
   "Vegetarian",
@@ -46,6 +48,10 @@ const DIETARY_SUGGESTIONS = [
   "Nut allergy",
   "Egg-free"
 ];
+const EMPTY_PASSWORD_DRAFT: PasswordDraft = {
+  password: "",
+  confirm: ""
+};
 
 function nextStep(currentStep: SetupStepKey): SetupStepKey {
   const currentIndex = STEP_ORDER.indexOf(currentStep);
@@ -79,11 +85,102 @@ function findUserPreferences(
 }
 
 function summarizeUser(user: SetupWizardUserSummary) {
+  if (!user.login && user.display_name) {
+    return user.display_name;
+  }
+  if (!user.login) {
+    return "Staged user";
+  }
   return user.display_name ? `${user.display_name} (${user.login})` : user.login;
 }
 
 function renderSavedPasswordHint(user: SetupWizardUserSummary) {
   return user.password_saved ? "Password saved" : "Password not saved yet";
+}
+
+function normalizeLoginKey(login: string) {
+  return login.trim().toLowerCase();
+}
+
+function getPasswordDraftError(draft: PasswordDraft) {
+  const hasInput = Boolean(draft.password || draft.confirm);
+  if (!hasInput) {
+    return null;
+  }
+  if (draft.password !== draft.confirm) {
+    return "Password confirmation must match.";
+  }
+  if (draft.password.length < 8) {
+    return "Passwords must be at least 8 characters.";
+  }
+  return null;
+}
+
+function getPersistablePassword(draft: PasswordDraft | undefined) {
+  if (!draft) {
+    return null;
+  }
+  if (getPasswordDraftError(draft)) {
+    return null;
+  }
+  return draft.password ? draft.password : null;
+}
+
+function getUsersStepValidation(
+  wizard: SetupWizardStateResponse,
+  adminPasswordDraft: PasswordDraft,
+  userPasswordDrafts: Record<string, PasswordDraft>
+) {
+  const loginCounts = new Map<string, number>();
+  for (const user of [wizard.admin_user, ...wizard.initial_users]) {
+    const key = normalizeLoginKey(user.login);
+    if (!key) {
+      continue;
+    }
+    loginCounts.set(key, (loginCounts.get(key) ?? 0) + 1);
+  }
+
+  let adminMessage: string | null = null;
+  const adminLoginKey = normalizeLoginKey(wizard.admin_user.login);
+  if (!adminLoginKey) {
+    adminMessage = "Enter a username or email for the platform admin.";
+  } else if ((loginCounts.get(adminLoginKey) ?? 0) > 1) {
+    adminMessage = "Each staged user must have a unique username or email.";
+  } else {
+    adminMessage = getPasswordDraftError(adminPasswordDraft);
+    if (!adminMessage && !wizard.admin_user.password_saved && !adminPasswordDraft.password) {
+      adminMessage = "Add a password of at least 8 characters before continuing.";
+    }
+  }
+
+  const additionalMessages: Record<string, string | null> = {};
+  for (const user of wizard.initial_users) {
+    const loginKey = normalizeLoginKey(user.login);
+    let message: string | null = null;
+    if (!loginKey) {
+      message = "Add a username or email, or remove this staged user before continuing.";
+    } else if ((loginCounts.get(loginKey) ?? 0) > 1) {
+      message = "Each staged user must have a unique username or email.";
+    } else {
+      message = getPasswordDraftError(userPasswordDrafts[user.stage_id] ?? EMPTY_PASSWORD_DRAFT);
+      if (!message && !user.password_saved && !userPasswordDrafts[user.stage_id]?.password) {
+        message = "Add a password of at least 8 characters, or remove this user before continuing.";
+      }
+    }
+    additionalMessages[user.stage_id] = message;
+  }
+
+  const firstMessage =
+    adminMessage ??
+    wizard.initial_users.map((user) => additionalMessages[user.stage_id]).find(Boolean) ??
+    null;
+
+  return {
+    adminMessage,
+    additionalMessages,
+    canContinue: !adminMessage && Object.values(additionalMessages).every((message) => !message),
+    firstMessage
+  };
 }
 
 function PasswordFields({
@@ -199,10 +296,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
   const searchParams = useSearchParams();
   const [wizard, setWizard] = useState(initialState);
   const [currentStep, setCurrentStep] = useState<SetupStepKey>(initialStep);
-  const [adminPasswordDraft, setAdminPasswordDraft] = useState<PasswordDraft>({
-    password: "",
-    confirm: ""
-  });
+  const [adminPasswordDraft, setAdminPasswordDraft] = useState<PasswordDraft>(EMPTY_PASSWORD_DRAFT);
   const [userPasswordDrafts, setUserPasswordDrafts] = useState<Record<string, PasswordDraft>>({});
   const [newLocation, setNewLocation] = useState("");
   const [newHouseholdDietaryPreference, setNewHouseholdDietaryPreference] = useState("");
@@ -212,8 +306,13 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
   const [error, setError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const saveCounterRef = useRef(0);
+  const latestAppliedSaveIdRef = useRef(0);
 
   const allUsers = [wizard.admin_user, ...wizard.initial_users];
+  const configuredUsers = allUsers.filter((user) => Boolean(user.login.trim()));
+  const usersValidation = getUsersStepValidation(wizard, adminPasswordDraft, userPasswordDrafts);
+  const canSkipCurrentStep = OPTIONAL_STEPS.has(currentStep);
 
   function moveToStep(step: SetupStepKey) {
     setCurrentStep(step);
@@ -222,19 +321,69 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
     router.replace(`/setup?${params.toString()}`, { scroll: false });
   }
 
-  function updateWizard(nextState: SetupWizardStateResponse, savedMessage?: string) {
+  function updateWizard(
+    nextState: SetupWizardStateResponse,
+    savedMessage?: string,
+    saveId?: number
+  ) {
+    if (saveId !== undefined) {
+      if (saveId < latestAppliedSaveIdRef.current) {
+        return;
+      }
+      latestAppliedSaveIdRef.current = saveId;
+    }
     setWizard(nextState);
     setError(null);
     setStatusMessage(savedMessage ?? "Progress saved.");
   }
 
-  function scheduleStepSave(step: SetupStepKey) {
-    window.setTimeout(() => {
-      void persistStep(step, { suppressErrors: true });
-    }, 0);
+  function clearSavedPasswordDrafts() {
+    const adminPassword = getPersistablePassword(adminPasswordDraft);
+    if (adminPassword) {
+      setAdminPasswordDraft(EMPTY_PASSWORD_DRAFT);
+    }
+    setUserPasswordDrafts((current) =>
+      Object.fromEntries(
+        Object.entries(current).filter(([, draft]) => !getPersistablePassword(draft))
+      )
+    );
+  }
+
+  async function persistUsersSnapshot(
+    snapshot: SetupWizardStateResponse,
+    options?: { suppressErrors?: boolean; clearPasswordDrafts?: boolean; saveId?: number }
+  ) {
+    const suppressErrors = Boolean(options?.suppressErrors);
+    const validation = getUsersStepValidation(snapshot, adminPasswordDraft, userPasswordDrafts);
+    if (!suppressErrors && !validation.canContinue) {
+      setError(validation.firstMessage);
+      return false;
+    }
+
+    updateWizard(
+      await putToApi<SetupWizardStateResponse>("/api/setup/wizard/users", {
+        admin_login: snapshot.admin_user.login,
+        admin_display_name: snapshot.admin_user.display_name,
+        admin_password: getPersistablePassword(adminPasswordDraft),
+        initial_users: snapshot.initial_users.map((user) => ({
+          stage_id: user.stage_id,
+          login: user.login,
+          display_name: user.display_name,
+          password: getPersistablePassword(userPasswordDrafts[user.stage_id])
+        }))
+      }),
+      "Users saved.",
+      options?.saveId
+    );
+
+    if (options?.clearPasswordDrafts) {
+      clearSavedPasswordDrafts();
+    }
+    return true;
   }
 
   async function persistHouseholdSnapshot(snapshot: SetupWizardStateResponse) {
+    const saveId = ++saveCounterRef.current;
     try {
       updateWizard(
         await putToApi<SetupWizardStateResponse>("/api/setup/wizard/household", {
@@ -243,7 +392,8 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
           storage_locations: snapshot.storage_locations,
           household_assignments: snapshot.household_assignments
         }),
-        "Household details saved."
+        "Household details saved.",
+        saveId
       );
     } catch {
       // Keep inline interaction resilient; the explicit Next save still surfaces errors.
@@ -251,13 +401,15 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
   }
 
   async function persistDietarySnapshot(snapshot: SetupWizardStateResponse) {
+    const saveId = ++saveCounterRef.current;
     try {
       updateWizard(
         await putToApi<SetupWizardStateResponse>("/api/setup/wizard/dietary", {
           household_preferences: snapshot.household_dietary_preferences,
           user_preferences: snapshot.user_dietary_preferences
         }),
-        "Dietary preferences saved."
+        "Dietary preferences saved.",
+        saveId
       );
     } catch {
       // Keep inline interaction resilient; the explicit Next save still surfaces errors.
@@ -266,42 +418,17 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
 
   async function persistStep(
     step: SetupStepKey,
-    options?: { suppressErrors?: boolean }
+    options?: {
+      suppressErrors?: boolean;
+      clearPasswordDrafts?: boolean;
+      stateSnapshot?: SetupWizardStateResponse;
+      aiApiKeyOverride?: string;
+      smtpPasswordOverride?: string;
+    }
   ): Promise<boolean> {
     const suppressErrors = Boolean(options?.suppressErrors);
-
-    if (step === "users") {
-      if (
-        adminPasswordDraft.password &&
-        adminPasswordDraft.password !== adminPasswordDraft.confirm
-      ) {
-        if (!suppressErrors) {
-          setError("The platform admin password confirmation does not match.");
-        }
-        return false;
-      }
-      if (adminPasswordDraft.password && adminPasswordDraft.password.length < 8) {
-        if (!suppressErrors) {
-          setError("Passwords must be at least 8 characters.");
-        }
-        return false;
-      }
-
-      for (const draft of Object.values(userPasswordDrafts)) {
-        if (draft.password && draft.password !== draft.confirm) {
-          if (!suppressErrors) {
-            setError("Each staged user password must match its confirmation.");
-          }
-          return false;
-        }
-        if (draft.password && draft.password.length < 8) {
-          if (!suppressErrors) {
-            setError("Passwords must be at least 8 characters.");
-          }
-          return false;
-        }
-      }
-    }
+    const snapshot = options?.stateSnapshot ?? wizard;
+    const saveId = ++saveCounterRef.current;
 
     setIsSaving(true);
     if (!suppressErrors) {
@@ -315,71 +442,64 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
           await putToApi<SetupWizardStateResponse>("/api/setup/wizard/welcome", {
             acknowledged: true
           }),
-          "Welcome step saved."
+          "Welcome step saved.",
+          saveId
         );
       }
 
       if (step === "users") {
-        const initialUsersPayload = wizard.initial_users.map((user) => ({
-          stage_id: user.stage_id,
-          login: user.login,
-          display_name: user.display_name,
-          password: userPasswordDrafts[user.stage_id]?.password || null
-        }));
-        updateWizard(
-          await putToApi<SetupWizardStateResponse>("/api/setup/wizard/users", {
-            admin_login: wizard.admin_user.login,
-            admin_display_name: wizard.admin_user.display_name,
-            admin_password: adminPasswordDraft.password || null,
-            initial_users: initialUsersPayload
-          }),
-          "Users saved."
-        );
-        setAdminPasswordDraft({ password: "", confirm: "" });
-        setUserPasswordDrafts({});
+        return await persistUsersSnapshot(snapshot, {
+          suppressErrors,
+          clearPasswordDrafts: options?.clearPasswordDrafts ?? true,
+          saveId
+        });
       }
 
       if (step === "household") {
         updateWizard(
           await putToApi<SetupWizardStateResponse>("/api/setup/wizard/household", {
-            household_name: wizard.household_name ?? "",
-            location_group_name: wizard.location_group_name ?? "",
-            storage_locations: wizard.storage_locations,
-            household_assignments: wizard.household_assignments
+            household_name: snapshot.household_name ?? "",
+            location_group_name: snapshot.location_group_name ?? "",
+            storage_locations: snapshot.storage_locations,
+            household_assignments: snapshot.household_assignments
           }),
-          "Household details saved."
+          "Household details saved.",
+          saveId
         );
       }
 
       if (step === "public_url") {
         updateWizard(
           await putToApi<SetupWizardStateResponse>("/api/setup/wizard/public-url", {
-            public_base_url: wizard.public_base_url
+            public_base_url: snapshot.public_base_url ?? ""
           }),
-          "Public browser URL saved."
+          "Public browser URL saved.",
+          saveId
         );
       }
 
       if (step === "dietary") {
         updateWizard(
           await putToApi<SetupWizardStateResponse>("/api/setup/wizard/dietary", {
-            household_preferences: wizard.household_dietary_preferences,
-            user_preferences: wizard.user_dietary_preferences
+            household_preferences: snapshot.household_dietary_preferences,
+            user_preferences: snapshot.user_dietary_preferences
           }),
-          "Dietary preferences saved."
+          "Dietary preferences saved.",
+          saveId
         );
       }
 
       if (step === "ai") {
         updateWizard(
           await putToApi<SetupWizardStateResponse>("/api/setup/wizard/ai", {
-            provider_type: wizard.ai_config.provider_type,
-            base_url: wizard.ai_config.base_url,
-            default_model: wizard.ai_config.default_model,
-            api_key: aiApiKey || null,
-            is_enabled: wizard.ai_config.is_enabled
+            provider_type: snapshot.ai_config.provider_type,
+            base_url: snapshot.ai_config.base_url,
+            default_model: snapshot.ai_config.default_model,
+            api_key: (options?.aiApiKeyOverride ?? aiApiKey) || null,
+            is_enabled: snapshot.ai_config.is_enabled
           }),
-          "AI settings saved."
+          "AI settings saved.",
+          saveId
         );
         setAiApiKey("");
       }
@@ -387,16 +507,17 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
       if (step === "smtp") {
         updateWizard(
           await putToApi<SetupWizardStateResponse>("/api/setup/wizard/smtp", {
-            host: wizard.smtp_config.host,
-            port: wizard.smtp_config.port,
-            username: wizard.smtp_config.username,
-            password: smtpPassword || null,
-            from_email: wizard.smtp_config.from_email,
-            from_name: wizard.smtp_config.from_name,
-            security: wizard.smtp_config.security,
-            is_enabled: wizard.smtp_config.is_enabled
+            host: snapshot.smtp_config.host,
+            port: snapshot.smtp_config.port,
+            username: snapshot.smtp_config.username,
+            password: (options?.smtpPasswordOverride ?? smtpPassword) || null,
+            from_email: snapshot.smtp_config.from_email,
+            from_name: snapshot.smtp_config.from_name,
+            security: snapshot.smtp_config.security,
+            is_enabled: snapshot.smtp_config.is_enabled
           }),
-          "SMTP settings saved."
+          "SMTP settings saved.",
+          saveId
         );
         setSmtpPassword("");
       }
@@ -417,6 +538,71 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
       if (saved) {
         moveToStep(nextStep(currentStep));
       }
+    }
+  }
+
+  async function handleBack() {
+    await persistStep(currentStep, { suppressErrors: true, clearPasswordDrafts: true });
+    moveToStep(previousStep(currentStep));
+  }
+
+  async function handleStepJump(step: SetupStepKey) {
+    if (step === currentStep) {
+      return;
+    }
+    await persistStep(currentStep, { suppressErrors: true, clearPasswordDrafts: true });
+    moveToStep(step);
+  }
+
+  async function handleSkip() {
+    if (!OPTIONAL_STEPS.has(currentStep)) {
+      return;
+    }
+
+    const nextWizard =
+      currentStep === "public_url"
+        ? { ...wizard, public_base_url: "" }
+        : currentStep === "dietary"
+          ? {
+              ...wizard,
+              household_dietary_preferences: [],
+              user_dietary_preferences: []
+            }
+          : currentStep === "ai"
+            ? {
+                ...wizard,
+                ai_config: {
+                  provider_type: null,
+                  base_url: "",
+                  default_model: "",
+                  is_enabled: false,
+                  has_api_key: false
+                }
+              }
+            : {
+                ...wizard,
+                smtp_config: {
+                  host: "",
+                  port: null,
+                  username: "",
+                  has_password: false,
+                  from_email: "",
+                  from_name: "",
+                  security: null,
+                  is_enabled: false
+                }
+              };
+
+    const saved = await persistStep(currentStep, {
+      stateSnapshot: nextWizard,
+      aiApiKeyOverride: "",
+      smtpPasswordOverride: "",
+      clearPasswordDrafts: true
+    });
+    if (saved) {
+      setAiApiKey("");
+      setSmtpPassword("");
+      moveToStep(nextStep(currentStep));
     }
   }
 
@@ -461,10 +647,10 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
   }
 
   function addInitialUser() {
-    setWizard((current) => ({
-      ...current,
+    const nextWizard = {
+      ...wizard,
       initial_users: [
-        ...current.initial_users,
+        ...wizard.initial_users,
         {
           stage_id: createStageId(),
           login: "",
@@ -473,59 +659,56 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
           is_platform_admin: false
         }
       ]
-    }));
-    scheduleStepSave("users");
+    };
+    setWizard(nextWizard);
+    void persistStep("users", {
+      suppressErrors: true,
+      clearPasswordDrafts: false,
+      stateSnapshot: nextWizard
+    });
   }
 
   function removeInitialUser(stageId: string) {
-    setWizard((current) => ({
-      ...current,
-      initial_users: current.initial_users.filter((user) => user.stage_id !== stageId),
-      household_assignments: current.household_assignments.filter(
+    const nextWizard = {
+      ...wizard,
+      initial_users: wizard.initial_users.filter((user) => user.stage_id !== stageId),
+      household_assignments: wizard.household_assignments.filter(
         (assignment) => assignment.stage_user_id !== stageId
       ),
-      user_dietary_preferences: current.user_dietary_preferences.filter(
+      user_dietary_preferences: wizard.user_dietary_preferences.filter(
         (preference) => preference.stage_user_id !== stageId
       )
-    }));
+    };
+    setWizard(nextWizard);
     setUserPasswordDrafts((current) => {
       const nextDrafts = { ...current };
       delete nextDrafts[stageId];
       return nextDrafts;
     });
-    scheduleStepSave("users");
+    void persistStep("users", {
+      suppressErrors: true,
+      clearPasswordDrafts: false,
+      stateSnapshot: nextWizard
+    });
   }
 
-  function toggleHouseholdAssignment(stageUserId: string, selected: boolean) {
+  function updateHouseholdAssignment(stageUserId: string, role: HouseholdRole | "none") {
     const nextWizard = {
       ...wizard,
-      household_assignments: selected
-        ? [
-            ...wizard.household_assignments.filter(
+      household_assignments:
+        role === "none"
+          ? wizard.household_assignments.filter(
               (assignment) => assignment.stage_user_id !== stageUserId
-            ),
-            {
-              stage_user_id: stageUserId,
-              role: "household_user" as const
-            }
-          ]
-        : wizard.household_assignments.filter((assignment) => assignment.stage_user_id !== stageUserId)
-    };
-    setWizard(nextWizard);
-    void persistHouseholdSnapshot(nextWizard);
-  }
-
-  function updateHouseholdAssignmentRole(stageUserId: string, role: "household_admin" | "household_user") {
-    const nextWizard = {
-      ...wizard,
-      household_assignments: wizard.household_assignments.map((assignment) =>
-        assignment.stage_user_id === stageUserId
-          ? {
-              ...assignment,
-              role
-            }
-          : assignment
-      )
+            )
+          : [
+              ...wizard.household_assignments.filter(
+                (assignment) => assignment.stage_user_id !== stageUserId
+              ),
+              {
+                stage_user_id: stageUserId,
+                role
+              }
+            ]
     };
     setWizard(nextWizard);
     void persistHouseholdSnapshot(nextWizard);
@@ -657,7 +840,8 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
           <p className="eyebrow">Step 2</p>
           <h1>Admin account and initial users</h1>
           <p className="step-copy">
-            Create the platform administrator and then add additional users, you can always add more later.
+            Create the main Pantry admin first, then stage any additional users you want available
+            as soon as setup finishes.
           </p>
 
           <div className="setup-subsection">
@@ -671,6 +855,9 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                 <input
                   value={wizard.admin_user.login}
                   onChange={(event) => updateAdmin({ login: event.target.value })}
+                  onBlur={() =>
+                    void persistStep("users", { suppressErrors: true, clearPasswordDrafts: false })
+                  }
                   placeholder="owner"
                 />
               </label>
@@ -679,6 +866,9 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                 <input
                   value={wizard.admin_user.display_name ?? ""}
                   onChange={(event) => updateAdmin({ display_name: event.target.value })}
+                  onBlur={() =>
+                    void persistStep("users", { suppressErrors: true, clearPasswordDrafts: false })
+                  }
                   placeholder="Pantry owner"
                 />
               </label>
@@ -687,27 +877,42 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
               label={wizard.admin_user.password_saved ? "Replace password" : "Password"}
               draft={adminPasswordDraft}
               onChange={setAdminPasswordDraft}
+              onBlur={() =>
+                void persistStep("users", { suppressErrors: true, clearPasswordDrafts: true })
+              }
             />
-            <p className="helper-text">{renderSavedPasswordHint(wizard.admin_user)}</p>
+            <p
+              className={`helper-text${usersValidation.adminMessage ? " is-error" : ""}`}
+              data-testid="setup-admin-password-status"
+            >
+              {usersValidation.adminMessage ?? renderSavedPasswordHint(wizard.admin_user)}
+            </p>
           </div>
 
           <div className="setup-subsection">
             <div className="setup-subsection-heading">
               <h2>Additional users</h2>
               <button type="button" className="ghost-button" onClick={addInitialUser}>
-                Add user
+                Add additional user
               </button>
             </div>
             <div className="stack">
               {wizard.initial_users.length === 0 ? (
                 <div className="empty-state">
-                  <p>No extra users staged yet. You can skip this for now and add people later.</p>
+                  <p>
+                    No extra users staged yet. Add as many people as you want now, or leave this
+                    section empty and invite them later.
+                  </p>
                 </div>
               ) : null}
               {wizard.initial_users.map((user, index) => (
-                <article key={user.stage_id} className="setup-user-card">
+                <article
+                  key={user.stage_id}
+                  className="setup-user-card"
+                  data-testid={`setup-user-card-${index + 1}`}
+                >
                   <div className="setup-card-toolbar">
-                    <strong>Initial user {index + 1}</strong>
+                    <strong>Additional user {index + 1}</strong>
                     <button
                       type="button"
                       className="inline-danger"
@@ -724,6 +929,13 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                         onChange={(event) =>
                           updateInitialUser(user.stage_id, { login: event.target.value })
                         }
+                        onBlur={() =>
+                          void persistStep("users", {
+                            suppressErrors: true,
+                            clearPasswordDrafts: false
+                          })
+                        }
+                        placeholder="alex"
                       />
                     </label>
                     <label className="field">
@@ -733,17 +945,35 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                         onChange={(event) =>
                           updateInitialUser(user.stage_id, { display_name: event.target.value })
                         }
+                        onBlur={() =>
+                          void persistStep("users", {
+                            suppressErrors: true,
+                            clearPasswordDrafts: false
+                          })
+                        }
+                        placeholder="Alex"
                       />
                     </label>
                   </div>
                   <PasswordFields
                     label={user.password_saved ? "Replace password" : "Password"}
-                    draft={userPasswordDrafts[user.stage_id] ?? { password: "", confirm: "" }}
+                    draft={userPasswordDrafts[user.stage_id] ?? EMPTY_PASSWORD_DRAFT}
                     onChange={(draft) =>
                       setUserPasswordDrafts((current) => ({ ...current, [user.stage_id]: draft }))
                     }
+                    onBlur={() =>
+                      void persistStep("users", { suppressErrors: true, clearPasswordDrafts: true })
+                    }
                   />
-                  <p className="helper-text">{renderSavedPasswordHint(user)}</p>
+                  <p className="helper-text">Assign this user’s household role in the next step.</p>
+                  <p
+                    className={`helper-text${
+                      usersValidation.additionalMessages[user.stage_id] ? " is-error" : ""
+                    }`}
+                  >
+                    {usersValidation.additionalMessages[user.stage_id] ??
+                      renderSavedPasswordHint(user)}
+                  </p>
                 </article>
               ))}
             </div>
@@ -754,11 +984,12 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
 
     if (currentStep === "household") {
       return (
-        <section className="setup-step-card">
+        <section className="setup-step-card" data-testid="setup-household-step">
           <p className="eyebrow">Step 3</p>
           <h1>Household and storage locations</h1>
           <p className="step-copy">
-            Create your household, optionally add storage locations which you can assign goods to later.
+            Create the first household, stage the storage locations you want available on day one,
+            and choose who belongs to it.
           </p>
 
           <div className="content-grid">
@@ -802,36 +1033,33 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
               <h2>Who should belong to this household?</h2>
             </div>
             <div className="stack">
-              {allUsers.map((user) => {
+              {configuredUsers.map((user) => {
                 const assignment = findAssignment(wizard.household_assignments, user.stage_id);
                 const isAdmin = user.is_platform_admin;
                 return (
                   <article key={user.stage_id} className="setup-assignment-card">
-                    <label className="checkbox-row">
-                      <input
-                        type="checkbox"
-                        checked={isAdmin || Boolean(assignment)}
-                        disabled={isAdmin}
-                        onChange={(event) =>
-                          toggleHouseholdAssignment(user.stage_id, event.target.checked)
-                        }
-                      />
-                      <span>{summarizeUser(user)}</span>
-                    </label>
-                    <label className="field compact">
-                      <span>Household role</span>
+                    <div className="setup-card-toolbar">
+                      <strong>{summarizeUser(user)}</strong>
+                      {isAdmin ? <span className="pill">Required</span> : null}
+                    </div>
+                    <label className="field">
+                      <span>Membership</span>
                       <select
-                        disabled={isAdmin || !assignment}
-                        value={isAdmin ? "household_admin" : assignment?.role ?? "household_user"}
+                        aria-label={`Household membership for ${summarizeUser(user)}`}
+                        disabled={isAdmin}
+                        value={isAdmin ? "household_admin" : assignment?.role ?? "none"}
                         onChange={(event) =>
-                          updateHouseholdAssignmentRole(
+                          updateHouseholdAssignment(
                             user.stage_id,
-                            event.target.value as "household_admin" | "household_user"
+                            event.target.value as HouseholdRole | "none"
                           )
                         }
                       >
-                        <option value="household_admin">Household admin</option>
-                        <option value="household_user">Household user</option>
+                        {isAdmin ? null : <option value="none">Not assigned</option>}
+                        <option value="household_admin">{getHouseholdRoleLabel("household_admin")}</option>
+                        {!isAdmin ? (
+                          <option value="household_user">{getHouseholdRoleLabel("household_user")}</option>
+                        ) : null}
                       </select>
                     </label>
                   </article>
@@ -868,6 +1096,10 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
             <code>http://192.168.1.10:3000</code>
             <code>https://pantry.example.com</code>
           </div>
+          <p className="helper-text">
+            Optional. Skip this for now if you want Pantry to use the deployment default until you
+            decide on a permanent address.
+          </p>
         </section>
       );
     }
@@ -897,7 +1129,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
               <h2>Optional individual preferences</h2>
             </div>
             <div className="stack">
-              {allUsers.map((user) => (
+              {configuredUsers.map((user) => (
                 <article key={user.stage_id} className="setup-user-card">
                   <div className="setup-card-toolbar">
                     <strong>{summarizeUser(user)}</strong>
@@ -1140,14 +1372,15 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
         <p className="eyebrow">Step 8</p>
         <h1>Review and complete</h1>
         <p className="step-copy">
-          Check everything looks right, then complete the setup. This will create your admin user, household, and any other staged details in one final step. You can always adjust these later in settings, but this is a good chance to make sure everything is correct before you start using Pantry.
+          Check everything looks right, then complete the setup. Pantry will only write this staged
+          data into the live application once you confirm.
         </p>
 
         <div className="review-grid">
           <article className="review-card">
             <div className="setup-card-toolbar">
               <strong>Users</strong>
-              <button type="button" className="ghost-button" onClick={() => moveToStep("users")}>
+              <button type="button" className="ghost-button" onClick={() => void handleStepJump("users")}>
                 Edit
               </button>
             </div>
@@ -1159,37 +1392,83 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
           <article className="review-card">
             <div className="setup-card-toolbar">
               <strong>Household</strong>
-              <button type="button" className="ghost-button" onClick={() => moveToStep("household")}>
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() => void handleStepJump("household")}
+              >
                 Edit
               </button>
             </div>
-            <p>{wizard.household_name}</p>
+            <p>{wizard.household_name || "Not configured yet"}</p>
             <p>
-              {wizard.location_group_name}: {wizard.storage_locations.join(", ")}
+              {wizard.location_group_name}:{" "}
+              {wizard.storage_locations.length > 0 ? wizard.storage_locations.join(", ") : "No storage locations yet"}
+            </p>
+            <p>
+              Members:{" "}
+              {configuredUsers
+                .map((user) => {
+                  if (user.is_platform_admin) {
+                    return `${summarizeUser(user)} (${getHouseholdRoleLabel("household_admin")})`;
+                  }
+                  const assignment = findAssignment(wizard.household_assignments, user.stage_id);
+                  if (!assignment) {
+                    return null;
+                  }
+                  return `${summarizeUser(user)} (${getHouseholdRoleLabel(assignment.role)})`;
+                })
+                .filter(Boolean)
+                .join(", ") || "No household members selected yet"}
             </p>
           </article>
           <article className="review-card">
             <div className="setup-card-toolbar">
               <strong>Public URL</strong>
-              <button type="button" className="ghost-button" onClick={() => moveToStep("public_url")}>
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() => void handleStepJump("public_url")}
+              >
                 Edit
               </button>
             </div>
-            <p>{wizard.public_base_url}</p>
+            <p>{wizard.public_base_url || "Skipped for now"}</p>
           </article>
           <article className="review-card">
             <div className="setup-card-toolbar">
               <strong>Dietary preferences</strong>
-              <button type="button" className="ghost-button" onClick={() => moveToStep("dietary")}>
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() => void handleStepJump("dietary")}
+              >
                 Edit
               </button>
             </div>
-            <p>{wizard.household_dietary_preferences.join(", ") || "None staged"}</p>
+            <p>
+              {wizard.household_dietary_preferences.length > 0
+                ? wizard.household_dietary_preferences.join(", ")
+                : "Skipped for now"}
+            </p>
+            <p>
+              Personal preferences:{" "}
+              {wizard.user_dietary_preferences.length > 0
+                ? wizard.user_dietary_preferences
+                    .map((preference) => {
+                      const user = allUsers.find(
+                        (candidate) => candidate.stage_id === preference.stage_user_id
+                      );
+                      return `${user ? summarizeUser(user) : "Staged user"} (${preference.preferences.join(", ")})`;
+                    })
+                    .join(", ")
+                : "Not configured"}
+            </p>
           </article>
           <article className="review-card">
             <div className="setup-card-toolbar">
               <strong>AI</strong>
-              <button type="button" className="ghost-button" onClick={() => moveToStep("ai")}>
+              <button type="button" className="ghost-button" onClick={() => void handleStepJump("ai")}>
                 Edit
               </button>
             </div>
@@ -1202,7 +1481,11 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
           <article className="review-card">
             <div className="setup-card-toolbar">
               <strong>SMTP</strong>
-              <button type="button" className="ghost-button" onClick={() => moveToStep("smtp")}>
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() => void handleStepJump("smtp")}
+              >
                 Edit
               </button>
             </div>
@@ -1244,7 +1527,11 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
         <p className="sidebar-copy">
           Build the install now, then finalize once everything looks right.
         </p>
-        <SetupProgress steps={wizard.status.steps} currentStep={currentStep} onJump={moveToStep} />
+        <SetupProgress
+          steps={wizard.status.steps}
+          currentStep={currentStep}
+          onJump={(step) => void handleStepJump(step)}
+        />
       </aside>
 
       <div className="setup-main">
@@ -1257,29 +1544,41 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
             type="button"
             className="ghost-button"
             disabled={currentStep === "welcome" || isSaving}
-            onClick={() => moveToStep(previousStep(currentStep))}
+            onClick={() => void handleBack()}
           >
             Back
           </button>
-          {currentStep === "review" ? (
-            <button
-              type="button"
-              className="primary-button"
-              disabled={isSaving || !wizard.can_complete}
-              onClick={handleCompleteSetup}
-            >
-              {isSaving ? "Completing..." : "Complete Setup"}
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="primary-button"
-              disabled={isSaving}
-              onClick={handleNext}
-            >
-              {isSaving ? "Saving..." : "Next"}
-            </button>
-          )}
+          <div className="wizard-actions-group">
+            {canSkipCurrentStep ? (
+              <button
+                type="button"
+                className="ghost-button"
+                disabled={isSaving}
+                onClick={() => void handleSkip()}
+              >
+                Skip for now
+              </button>
+            ) : null}
+            {currentStep === "review" ? (
+              <button
+                type="button"
+                className="primary-button"
+                disabled={isSaving || !wizard.can_complete}
+                onClick={handleCompleteSetup}
+              >
+                {isSaving ? "Completing..." : "Complete Setup"}
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="primary-button"
+                disabled={isSaving || (currentStep === "users" && !usersValidation.canContinue)}
+                onClick={handleNext}
+              >
+                {isSaving ? "Saving..." : "Next"}
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>
