@@ -10,6 +10,7 @@ from alembic.config import Config
 from app.core.db import SessionLocal
 from app.services.auth import count_platform_admins, create_platform_admin, reset_user_password
 from app.services.e2e_seed import seed_e2e_baseline
+from app.services.setup import mark_setup_completed
 
 
 def _load_password(value: str | None, prompt_text: str) -> str:
@@ -39,6 +40,7 @@ def bootstrap_platform_admin(args: argparse.Namespace) -> None:
             password=password,
             display_name=args.display_name,
         )
+        mark_setup_completed(db)
         print(f"Created platform admin {user.email} ({user.external_id})")
 
 

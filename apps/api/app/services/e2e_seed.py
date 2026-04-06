@@ -15,6 +15,7 @@ from app.models import Base, Role
 from app.services.auth import create_household, create_membership, create_platform_admin, create_user
 from app.services.pantry_catalog import create_location, create_location_group, create_product
 from app.services.pantry_stock import add_stock_lot
+from app.services.setup import mark_setup_completed
 
 E2E_PASSWORD = "correct horse battery"
 E2E_ADMIN_EMAIL = "e2e-admin@example.com"
@@ -141,6 +142,7 @@ def seed_e2e_baseline(db: Session) -> E2ESeedManifest:
         purchased_on=None,
         expires_on=None,
     )
+    mark_setup_completed(db)
 
     return E2ESeedManifest(
         admin_email=admin.email,

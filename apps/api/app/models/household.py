@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import String
+from sqlalchemy import JSON, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
@@ -14,6 +14,7 @@ class Household(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         String(32), default=lambda: generate_external_id("hse"), unique=True, nullable=False
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
+    dietary_preferences: Mapped[list[str] | None] = mapped_column(JSON(), nullable=True)
 
     memberships = relationship("Membership", back_populates="household")
     location_groups = relationship("LocationGroup", back_populates="household")

@@ -1,11 +1,18 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 
 
 class LoginRequest(BaseModel):
-    email: str
+    identifier: str | None = None
+    email: str | None = None
     password: str
+
+    @model_validator(mode="after")
+    def validate_identifier(self) -> "LoginRequest":
+        if not (self.identifier or self.email):
+            raise ValueError("A username or email is required.")
+        return self
 
 
 class SessionUser(BaseModel):
@@ -34,4 +41,3 @@ class SessionResponse(BaseModel):
 
 class LogoutResponse(BaseModel):
     ok: bool
-
