@@ -22,6 +22,18 @@ class CreateProductRequest(BaseModel):
     barcodes: list[str] = Field(default_factory=list)
 
 
+class CreatePantryEntryRequest(BaseModel):
+    name: str
+    quantity: Decimal
+    unit: str
+    location_external_id: str
+    aliases: list[str] = Field(default_factory=list)
+    purchased_on: date | None = None
+    expires_on: date | None = None
+    note: str | None = None
+    existing_product_external_id: str | None = None
+
+
 class AddStockLotRequest(BaseModel):
     product_external_id: str
     location_external_id: str
@@ -83,6 +95,20 @@ class PantryProductSummary(BaseModel):
     aliases: list[str]
     barcodes: list[str]
     locations: list[ProductLocationSummary]
+    stock_lots: list["StockLotSummary"]
+
+
+class ProductMatchSummary(BaseModel):
+    external_id: str
+    name: str
+    default_unit: str
+    aliases: list[str]
+
+
+class ProductAliasConflictSummary(BaseModel):
+    alias: str
+    product_external_id: str
+    product_name: str
 
 
 class StockLotSummary(BaseModel):
@@ -148,3 +174,12 @@ class NearExpiryResponse(BaseModel):
 class StockMutationResponse(BaseModel):
     lot: StockLotSummary
     created_lot: StockLotSummary | None = None
+
+
+class PantryEntryMutationResponse(BaseModel):
+    status: str
+    message: str
+    product: ProductSummary | None = None
+    lot: StockLotSummary | None = None
+    matched_product: ProductMatchSummary | None = None
+    alias_conflicts: list[ProductAliasConflictSummary] = Field(default_factory=list)

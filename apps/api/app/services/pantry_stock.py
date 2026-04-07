@@ -13,7 +13,13 @@ from app.models.stock_lot import StockLot
 from app.models.base import utc_now
 from app.models.user import User
 from app.services.audit import record_audit_event
-from app.services.pantry_catalog import get_location_by_external_id, get_product_by_external_id
+from app.services.pantry_catalog import (
+    create_product,
+    find_alias_conflicts,
+    get_location_by_external_id,
+    get_product_by_external_id,
+    get_product_by_lookup_name,
+)
 from app.services.pantry_normalization import normalize_unit, require_text
 
 
@@ -111,6 +117,102 @@ def add_stock_lot(
         return get_stock_lot_by_external_id(db, household=household, external_id=lot.external_id) or lot
 
     return lot
+
+
+def create_or_add_pantry_entry(
+    db: Session,
+    *,
+    household: Household,
+    actor: User,
+    name: str,
+    quantity: Decimal,
+    unit: str,
+    location_external_id: str,
+    aliases: list[str],
+    note: str | None,
+    purchased_on: date | None,
+    expires_on: date | None,
+    existing_product_external_id: str | None = None,
+    allow_create_product: bool = True,
+) -> dict[str, object]:
+    display_name = require_text(name, field_name="Product name")
+    matched_product = get_product_by_lookup_name(db, household=household, lookup_name=display_name)
+
+    if matched_product is not None:
+        if existing_product_external_id != matched_product.external_id:
+            return {
+                "status": "existing_product",
+                "message": f"{matched_product.name} already exists.",
+                "matched_product": matched_product,
+                "alias_conflicts": [],
+            }
+
+        lot = add_stock_lot(
+            db,
+            household=household,
+            actor=actor,
+            product_external_id=matched_product.external_id,
+            location_external_id=location_external_id,
+            quantity=quantity,
+            note=note,
+            purchased_on=purchased_on,
+            expires_on=expires_on,
+            unit_override=None,
+        )
+        return {
+            "status": "added_to_existing",
+            "message": f"Added another stock lot to {matched_product.name}.",
+            "product": matched_product,
+            "lot": lot,
+            "matched_product": matched_product,
+            "alias_conflicts": [],
+        }
+
+    alias_conflicts = find_alias_conflicts(db, household=household, aliases=aliases)
+    if alias_conflicts:
+        conflict_names = ", ".join(conflict["alias"] for conflict in alias_conflicts)
+        return {
+            "status": "alias_conflict",
+            "message": f"These aliases are already in use: {conflict_names}.",
+            "alias_conflicts": alias_conflicts,
+        }
+
+    if not allow_create_product:
+        return {
+            "status": "creation_not_allowed",
+            "message": "Ask a household admin to create this product or choose an existing one.",
+            "alias_conflicts": [],
+        }
+
+    product = create_product(
+        db,
+        household=household,
+        actor=actor,
+        name=display_name,
+        default_unit=unit,
+        aliases=aliases,
+        barcodes=[],
+    )
+    lot = add_stock_lot(
+        db,
+        household=household,
+        actor=actor,
+        product_external_id=product.external_id,
+        location_external_id=location_external_id,
+        quantity=quantity,
+        note=note,
+        purchased_on=purchased_on,
+        expires_on=expires_on,
+        unit_override=None,
+    )
+    return {
+        "status": "created",
+        "message": f"Created {product.name} and added the first stock lot.",
+        "product": product,
+        "lot": lot,
+        "matched_product": None,
+        "alias_conflicts": [],
+    }
 
 
 def remove_stock_from_lot(

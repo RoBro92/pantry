@@ -11,6 +11,7 @@ from app.domain.roles import HOUSEHOLD_ADMIN_ROLE
 from app.models.user import User
 from app.schemas.pantry import (
     AddStockLotRequest,
+    CreatePantryEntryRequest,
     CreateLocationGroupRequest,
     CreateLocationRequest,
     CreateProductRequest,
@@ -19,6 +20,7 @@ from app.schemas.pantry import (
     MoveStockLotRequest,
     NearExpiryResponse,
     PantryOverviewResponse,
+    PantryEntryMutationResponse,
     ProductSummary,
     RemoveStockRequest,
     StockMutationResponse,
@@ -31,7 +33,12 @@ from app.services.pantry_queries import (
     build_pantry_overview,
     build_stock_lot_summary,
 )
-from app.services.pantry_stock import add_stock_lot, move_stock_lot, remove_stock_from_lot
+from app.services.pantry_stock import (
+    add_stock_lot,
+    create_or_add_pantry_entry,
+    move_stock_lot,
+    remove_stock_from_lot,
+)
 from app.services.tenancy import HouseholdAccess
 
 router = APIRouter(prefix="/households/{household_external_id}", tags=["pantry"])
@@ -141,6 +148,64 @@ def post_product(
         default_unit=product.default_unit,
         aliases=[alias.name for alias in product.aliases],
         barcodes=[barcode.value for barcode in product.barcodes],
+    )
+
+
+@router.post("/pantry/entries", response_model=PantryEntryMutationResponse)
+def post_pantry_entry(
+    payload: CreatePantryEntryRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
+    access: HouseholdAccess = Depends(require_household_access()),
+):
+    try:
+        result = create_or_add_pantry_entry(
+            db,
+            household=access.household,
+            actor=current_user,
+            name=payload.name,
+            quantity=payload.quantity,
+            unit=payload.unit,
+            location_external_id=payload.location_external_id,
+            aliases=payload.aliases,
+            note=payload.note,
+            purchased_on=payload.purchased_on,
+            expires_on=payload.expires_on,
+            existing_product_external_id=payload.existing_product_external_id,
+            allow_create_product=access.can_administer,
+        )
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
+
+    product = result.get("product")
+    lot = result.get("lot")
+    matched_product = result.get("matched_product")
+    return PantryEntryMutationResponse(
+        status=str(result["status"]),
+        message=str(result["message"]),
+        product=(
+            ProductSummary(
+                external_id=product.external_id,
+                name=product.name,
+                default_unit=product.default_unit,
+                aliases=[alias.name for alias in product.aliases],
+                barcodes=[barcode.value for barcode in product.barcodes],
+            )
+            if product is not None
+            else None
+        ),
+        lot=build_stock_lot_summary(lot) if lot is not None else None,
+        matched_product=(
+            {
+                "external_id": matched_product.external_id,
+                "name": matched_product.name,
+                "default_unit": matched_product.default_unit,
+                "aliases": [alias.name for alias in matched_product.aliases],
+            }
+            if matched_product is not None
+            else None
+        ),
+        alias_conflicts=list(result.get("alias_conflicts", [])),
     )
 
 
