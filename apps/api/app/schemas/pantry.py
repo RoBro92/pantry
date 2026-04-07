@@ -20,6 +20,7 @@ class CreateProductRequest(BaseModel):
     default_unit: str
     aliases: list[str] = Field(default_factory=list)
     barcodes: list[str] = Field(default_factory=list)
+    confirmed_enrichment: "ConfirmedProductEnrichmentRequest | None" = None
 
 
 class CreatePantryEntryRequest(BaseModel):
@@ -27,11 +28,93 @@ class CreatePantryEntryRequest(BaseModel):
     quantity: Decimal
     unit: str
     location_external_id: str
+    barcode: str | None = None
     aliases: list[str] = Field(default_factory=list)
     purchased_on: date | None = None
     expires_on: date | None = None
     note: str | None = None
     existing_product_external_id: str | None = None
+    confirmed_enrichment: "ConfirmedProductEnrichmentRequest | None" = None
+
+
+class ProductNutritionSummaryItem(BaseModel):
+    key: str
+    label: str
+    value: float
+    unit: str | None = None
+
+
+class ProductEnrichmentAttribution(BaseModel):
+    source_name: str
+    source_label: str
+    source_url: str
+    product_url: str | None = None
+    data_notice: str
+    license_name: str | None = None
+    license_url: str | None = None
+
+
+class ProductEnrichmentSummary(BaseModel):
+    source_name: str
+    source_product_id: str
+    source_barcode: str | None
+    source_product_name: str | None
+    source_product_url: str | None
+    product_image_url: str | None
+    ingredients_text: str | None
+    allergens_text: str | None
+    traces_text: str | None
+    allergen_tags: list[str] = Field(default_factory=list)
+    trace_tags: list[str] = Field(default_factory=list)
+    nutrition_summary: list[ProductNutritionSummaryItem] = Field(default_factory=list)
+    labels: list[str] = Field(default_factory=list)
+    categories: list[str] = Field(default_factory=list)
+    match_status: str | None = None
+    match_confidence: float | None = None
+    last_synced_at: datetime | None = None
+    attribution: ProductEnrichmentAttribution
+
+
+class ConfirmedProductEnrichmentRequest(BaseModel):
+    source_name: str
+    source_product_id: str
+    match_status: str | None = None
+
+
+class ProductEnrichmentCandidate(BaseModel):
+    source_name: str
+    source_product_id: str
+    source_barcode: str | None
+    source_product_name: str | None
+    source_product_url: str | None
+    product_image_url: str | None
+    ingredients_text: str | None
+    allergens_text: str | None
+    traces_text: str | None
+    allergen_tags: list[str] = Field(default_factory=list)
+    trace_tags: list[str] = Field(default_factory=list)
+    nutrition_summary: list[ProductNutritionSummaryItem] = Field(default_factory=list)
+    labels: list[str] = Field(default_factory=list)
+    categories: list[str] = Field(default_factory=list)
+    match_status: str
+    match_confidence: float | None = None
+    incomplete_fields: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    attribution: ProductEnrichmentAttribution
+
+
+class ProductEnrichmentPreviewRequest(BaseModel):
+    product_name: str
+    barcode: str | None = None
+
+
+class ProductEnrichmentPreviewResponse(BaseModel):
+    query_name: str
+    query_barcode: str | None
+    lookup_strategy: str
+    status: str
+    message: str
+    candidates: list[ProductEnrichmentCandidate] = Field(default_factory=list)
 
 
 class AddStockLotRequest(BaseModel):
@@ -76,6 +159,7 @@ class ProductSummary(BaseModel):
     default_unit: str
     aliases: list[str]
     barcodes: list[str]
+    enrichment: ProductEnrichmentSummary | None = None
 
 
 class ProductLocationSummary(BaseModel):
@@ -94,6 +178,7 @@ class PantryProductSummary(BaseModel):
     lot_count: int
     aliases: list[str]
     barcodes: list[str]
+    enrichment: ProductEnrichmentSummary | None = None
     locations: list[ProductLocationSummary]
     stock_lots: list["StockLotSummary"]
 

@@ -13,6 +13,7 @@ from app.models.location_group import LocationGroup
 from app.models.membership import Membership
 from app.models.product import Product
 from app.models.product_alias import ProductAlias
+from app.models.product_enrichment import ProductEnrichment
 from app.models.recipe import Recipe
 from app.models.recipe_ingredient import RecipeIngredient
 from app.models.recipe_url_import import RecipeURLImport
@@ -38,6 +39,7 @@ __all__ = [
     "Membership",
     "Product",
     "ProductAlias",
+    "ProductEnrichment",
     "Recipe",
     "RecipeIngredient",
     "RecipeURLImport",

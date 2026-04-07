@@ -26,6 +26,7 @@ class Product(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     household = relationship("Household", back_populates="products")
     aliases = relationship("ProductAlias", back_populates="product")
     barcodes = relationship("Barcode", back_populates="product")
+    enrichments = relationship("ProductEnrichment", back_populates="product")
     stock_lots = relationship("StockLot", back_populates="product")
     recipe_ingredients = relationship("RecipeIngredient", back_populates="product")
     import_lines = relationship("ImportLine", back_populates="product", foreign_keys="ImportLine.product_id")

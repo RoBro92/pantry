@@ -20,6 +20,7 @@ class Household(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     location_groups = relationship("LocationGroup", back_populates="household")
     locations = relationship("Location", back_populates="household")
     products = relationship("Product", back_populates="household")
+    product_enrichments = relationship("ProductEnrichment", back_populates="household")
     product_aliases = relationship("ProductAlias", back_populates="household")
     barcodes = relationship("Barcode", back_populates="household")
     stock_lots = relationship("StockLot", back_populates="household")
