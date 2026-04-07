@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { SMTPConfigResponse, SMTPTestResponse } from "../lib/api-types";
+import { getConfigSourceLabel } from "../lib/admin-display";
 import { postToApi, putToApi } from "../lib/client-api";
 
 type AdminSMTPConfigFormProps = {
@@ -70,6 +71,9 @@ export function AdminSMTPConfigForm({ initialConfig }: AdminSMTPConfigFormProps)
         <p>
           This stores installation-level SMTP readiness for future recovery and notification flows.
           Passwords are saved encrypted at rest and are never returned in plaintext after save.
+        </p>
+        <p className="section-copy">
+          Effective source: <strong>{getConfigSourceLabel(config.effective_source)}</strong>
         </p>
         {config.effective_source === "environment" ? (
           <p className="status-note">

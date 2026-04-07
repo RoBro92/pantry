@@ -2,40 +2,18 @@ import Link from "next/link";
 import { AdminStatCard } from "../../../components/admin-stat-card";
 import { StatusCard } from "../../../components/status-card";
 import {
+  formatAdminDateTime,
+  getAIProviderLabel,
+  getConfigSourceLabel,
+  getReleaseStatusLabel
+} from "../../../lib/admin-display";
+import {
   getAIProviderConfig,
   getAdminOverview,
   getPublicBaseURL,
   getReleaseStatus,
   getSMTPConfig
 } from "../../../lib/server-auth";
-
-function formatDateTime(value: string | null) {
-  if (!value) {
-    return "Unavailable";
-  }
-  return new Date(value).toLocaleString("en-GB", {
-    dateStyle: "medium",
-    timeStyle: "short"
-  });
-}
-
-function formatReleaseStatusValue(status: Awaited<ReturnType<typeof getReleaseStatus>>["status"]) {
-  switch (status) {
-    case "update_available":
-      return "update available";
-    case "up_to_date":
-      return "up to date";
-    case "ahead_of_latest_release":
-      return "ahead";
-    case "comparison_unavailable":
-      return "unknown";
-    case "unavailable":
-      return "unavailable";
-    case "not_configured":
-      return "not configured";
-  }
-  return status;
-}
 
 export default async function AdminOverviewPage() {
   const [overview, aiConfig, smtpConfig, publicBaseUrl, releaseStatus] = await Promise.all([
@@ -74,10 +52,10 @@ export default async function AdminOverviewPage() {
       <section className="status-grid">
         <StatusCard
           title="AI Provider"
-          value={aiConfig.config?.provider_type ?? "none"}
+          value={getAIProviderLabel(aiConfig.config?.provider_type)}
           detail={
             aiConfig.config
-              ? `Configured as ${aiConfig.config.provider_type} with ${aiConfig.config.health_status} health.`
+              ? `${getAIProviderLabel(aiConfig.config.provider_type)} is ${aiConfig.config.health_status}.`
               : "No instance AI provider is configured."
           }
         />
@@ -92,12 +70,12 @@ export default async function AdminOverviewPage() {
         />
         <StatusCard
           title="Browser URL"
-          value={publicBaseUrl.effective_source}
+          value={getConfigSourceLabel(publicBaseUrl.effective_source)}
           detail={`Location QR links currently use ${publicBaseUrl.effective_value}.`}
         />
         <StatusCard
           title="Update Check"
-          value={formatReleaseStatusValue(releaseStatus.status)}
+          value={getReleaseStatusLabel(releaseStatus.status)}
           detail={
             releaseStatus.latest_version
               ? `Current ${releaseStatus.current_version} · latest ${releaseStatus.latest_version}`
@@ -140,11 +118,11 @@ export default async function AdminOverviewPage() {
             </li>
             <li>
               <strong>Status</strong>
-              <span>{formatReleaseStatusValue(releaseStatus.status)}</span>
+              <span>{getReleaseStatusLabel(releaseStatus.status)}</span>
             </li>
             <li>
               <strong>Checked</strong>
-              <span>{formatDateTime(releaseStatus.checked_at)}</span>
+              <span>{formatAdminDateTime(releaseStatus.checked_at)}</span>
             </li>
           </ul>
           <p>
@@ -158,14 +136,6 @@ export default async function AdminOverviewPage() {
               </a>
             </div>
           ) : null}
-        </article>
-        <article className="panel">
-          <p className="eyebrow">Real Data Policy</p>
-          <h2>Measured only</h2>
-          <p>
-            Admin diagnostics intentionally omit host CPU, memory, and disk metrics because the
-            app cannot observe them directly in a portable self-hosted deployment.
-          </p>
         </article>
       </section>
     </div>

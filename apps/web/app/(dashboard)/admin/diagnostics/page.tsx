@@ -1,46 +1,27 @@
 import { StatusCard } from "../../../../components/status-card";
+import {
+  formatAdminDateTime,
+  formatLatencyMs,
+  formatSecondsAsDuration,
+  formatUptime,
+  getAIProviderLabel,
+  getConfigSourceLabel,
+  getDeploymentModeLabel,
+  getReleaseStatusLabel
+} from "../../../../lib/admin-display";
 import { getDiagnostics } from "../../../../lib/server-auth";
-
-function formatDateTime(value: string | null) {
-  if (!value) {
-    return "Unavailable";
-  }
-  return new Date(value).toLocaleString("en-GB", {
-    dateStyle: "medium",
-    timeStyle: "short"
-  });
-}
 
 export default async function AdminDiagnosticsPage() {
   const diagnostics = await getDiagnostics();
   const updateCheck = diagnostics.release_check;
 
-  function formatUpdateStatus() {
-    switch (updateCheck.status) {
-      case "update_available":
-        return "update available";
-      case "up_to_date":
-        return "up to date";
-      case "ahead_of_latest_release":
-        return "ahead";
-      case "comparison_unavailable":
-        return "unknown";
-      case "unavailable":
-        return "unavailable";
-      case "not_configured":
-        return "not configured";
-    }
-    return updateCheck.status;
-  }
-
   return (
     <div className="stack">
       <section className="panel">
         <p className="eyebrow">Instance Diagnostics</p>
-        <h1>Measured Runtime State</h1>
+        <h1>Runtime State</h1>
         <p>
-          These values come from the running application process, database, Redis, and worker
-          heartbeat. Unavailable fields are left unavailable instead of estimated.
+          This page provides a snapshot of the current runtime state of your Pantry instance, including connectivity, configuration, and operational status of key components. Use this information for troubleshooting, monitoring, and ensuring your instance is healthy and up to date.
         </p>
       </section>
 
@@ -48,7 +29,7 @@ export default async function AdminDiagnosticsPage() {
         <StatusCard
           title="App Version"
           value={diagnostics.app.version}
-          detail={`Deployment mode ${diagnostics.app.deployment_mode} · uptime ${diagnostics.app.uptime_seconds}s`}
+          detail={`Deployment ${getDeploymentModeLabel(diagnostics.app.deployment_mode)} · uptime ${formatUptime(diagnostics.app.uptime_seconds)}`}
         />
         <StatusCard
           title="API"
@@ -58,14 +39,21 @@ export default async function AdminDiagnosticsPage() {
         <StatusCard
           title="Worker"
           value={diagnostics.worker.status}
-          detail={diagnostics.worker.message ?? `Last seen ${formatDateTime(diagnostics.worker.last_seen_at)}`}
+          detail={
+            diagnostics.worker.message ??
+            `Last heartbeat ${formatAdminDateTime(diagnostics.worker.last_seen_at)}${
+              diagnostics.worker.poll_interval_seconds !== null
+                ? ` · every ${formatSecondsAsDuration(diagnostics.worker.poll_interval_seconds).toLowerCase()}`
+                : ""
+            }`
+          }
         />
         <StatusCard
           title="Redis"
           value={diagnostics.redis.status}
           detail={
             diagnostics.redis.latency_ms !== null
-              ? `${diagnostics.redis.latency_ms}ms ping`
+              ? `${formatLatencyMs(diagnostics.redis.latency_ms)} ping`
               : diagnostics.redis.message ?? "Redis unavailable."
           }
         />
@@ -74,8 +62,9 @@ export default async function AdminDiagnosticsPage() {
           value={diagnostics.database.status}
           detail={
             diagnostics.database.size_pretty
-              ? `${diagnostics.database.engine} · ${diagnostics.database.size_pretty}`
-              : diagnostics.database.note ?? diagnostics.database.engine
+              ? `${diagnostics.database.engine} · ${diagnostics.database.size_pretty} · ${formatLatencyMs(diagnostics.database.latency_ms)}`
+              : diagnostics.database.note ??
+                `${diagnostics.database.engine} · ${formatLatencyMs(diagnostics.database.latency_ms)}`
           }
         />
         <StatusCard
@@ -83,13 +72,13 @@ export default async function AdminDiagnosticsPage() {
           value={diagnostics.smtp.last_test_status}
           detail={
             diagnostics.smtp.configured
-              ? `Configured via ${diagnostics.smtp.effective_source}`
+              ? `Configured via ${getConfigSourceLabel(diagnostics.smtp.effective_source)}`
               : "Not configured yet."
           }
         />
         <StatusCard
           title="Update Check"
-          value={formatUpdateStatus()}
+          value={getReleaseStatusLabel(updateCheck.status)}
           detail={
             updateCheck.latest_version
               ? `Current ${updateCheck.current_version} · latest ${updateCheck.latest_version}`
@@ -156,9 +145,17 @@ export default async function AdminDiagnosticsPage() {
               <strong>Worker poll interval</strong>
               <span>
                 {diagnostics.worker.poll_interval_seconds !== null
-                  ? `${diagnostics.worker.poll_interval_seconds}s`
+                  ? formatSecondsAsDuration(diagnostics.worker.poll_interval_seconds)
                   : "Unavailable"}
               </span>
+            </li>
+            <li>
+              <strong>Last heartbeat</strong>
+              <span>{formatAdminDateTime(diagnostics.worker.last_seen_at)}</span>
+            </li>
+            <li>
+              <strong>Heartbeat age</strong>
+              <span>{formatSecondsAsDuration(diagnostics.worker.heartbeat_age_seconds)}</span>
             </li>
           </ul>
         </article>
@@ -171,16 +168,20 @@ export default async function AdminDiagnosticsPage() {
               <span>{diagnostics.public_base_url.effective_value}</span>
             </li>
             <li>
+              <strong>Browser URL source</strong>
+              <span>{getConfigSourceLabel(diagnostics.public_base_url.effective_source)}</span>
+            </li>
+            <li>
               <strong>AI provider</strong>
               <span>
                 {diagnostics.ai_provider.configured
-                  ? `${diagnostics.ai_provider.provider_type} · ${diagnostics.ai_provider.health_status}`
+                  ? `${getAIProviderLabel(diagnostics.ai_provider.provider_type)} · ${diagnostics.ai_provider.health_status}`
                   : "Unconfigured"}
               </span>
             </li>
             <li>
               <strong>SMTP source</strong>
-              <span>{diagnostics.smtp.effective_source}</span>
+              <span>{getConfigSourceLabel(diagnostics.smtp.effective_source)}</span>
             </li>
             <li>
               <strong>SMTP test</strong>
@@ -188,7 +189,7 @@ export default async function AdminDiagnosticsPage() {
             </li>
             <li>
               <strong>Generated</strong>
-              <span>{formatDateTime(diagnostics.generated_at)}</span>
+              <span>{formatAdminDateTime(diagnostics.generated_at)}</span>
             </li>
           </ul>
         </article>
@@ -210,11 +211,15 @@ export default async function AdminDiagnosticsPage() {
             </li>
             <li>
               <strong>Repository</strong>
-              <span>{updateCheck.repository ?? "Not configured"}</span>
+              <span>{updateCheck.repository ?? "Unavailable"}</span>
             </li>
             <li>
               <strong>Checked</strong>
-              <span>{formatDateTime(updateCheck.checked_at)}</span>
+              <span>{formatAdminDateTime(updateCheck.checked_at)}</span>
+            </li>
+            <li>
+              <strong>Published</strong>
+              <span>{formatAdminDateTime(updateCheck.published_at)}</span>
             </li>
           </ul>
           <p>{updateCheck.message ?? "Release metadata check completed."}</p>
@@ -224,18 +229,6 @@ export default async function AdminDiagnosticsPage() {
             </p>
           ) : null}
         </article>
-      </section>
-
-      <section className="panel">
-        <p className="eyebrow">Diagnostics Limitations</p>
-        <ul className="detail-list">
-          {diagnostics.limitations.map((item) => (
-            <li key={item}>
-              <strong>Note</strong>
-              <span>{item}</span>
-            </li>
-          ))}
-        </ul>
       </section>
     </div>
   );

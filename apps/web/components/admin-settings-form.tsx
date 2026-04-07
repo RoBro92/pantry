@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { PublicBaseURLSummary } from "../lib/api-types";
+import { getConfigSourceLabel } from "../lib/admin-display";
 import { putToApi } from "../lib/client-api";
 
 type AdminSettingsFormProps = {
@@ -42,7 +43,8 @@ export function AdminSettingsForm({ initialPublicBaseUrl }: AdminSettingsFormPro
         <h1>Public Base URL</h1>
         <p>
           Pantry uses this base URL when it generates QR links and other browser-facing deep links.
-          The effective value currently resolves from <strong>{summary.effective_source}</strong>.
+          The effective value currently resolves from{" "}
+          <strong>{getConfigSourceLabel(summary.effective_source)}</strong>.
         </p>
         {summary.effective_source === "environment" ? (
           <p className="status-note">

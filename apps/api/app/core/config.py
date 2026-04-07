@@ -1,6 +1,8 @@
+import configparser
 import os
 from dataclasses import dataclass
 from functools import lru_cache
+from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
 from app.core.version import read_repo_version
@@ -48,6 +50,70 @@ def _parse_deployment_mode(value: str | None) -> str:
             "DEPLOYMENT_MODE must be one of self_hosted, demo, or saas."
         )
     return mode
+
+
+def _resolve_git_config_path(repo_root: Path) -> Path | None:
+    git_path = repo_root / ".git"
+    if git_path.is_dir():
+        return git_path / "config"
+
+    if git_path.is_file():
+        try:
+            contents = git_path.read_text(encoding="utf-8").strip()
+        except OSError:
+            return None
+        if contents.startswith("gitdir:"):
+            git_dir = contents.split(":", 1)[1].strip()
+            return (git_path.parent / git_dir).resolve() / "config"
+
+    return None
+
+
+def _extract_github_repository(remote_url: str | None) -> str | None:
+    if not remote_url:
+        return None
+
+    candidate = remote_url.strip()
+    if "github.com" not in candidate:
+        return None
+
+    normalized = candidate.replace("git@github.com:", "https://github.com/").rstrip("/")
+    if normalized.endswith(".git"):
+        normalized = normalized[:-4]
+
+    parsed = urlsplit(normalized)
+    path = parsed.path.strip("/")
+    parts = [part for part in path.split("/") if part]
+    if len(parts) < 2:
+        return None
+    return f"{parts[0]}/{parts[1]}"
+
+
+@lru_cache
+def infer_release_check_repository() -> str | None:
+    repo_root = Path(__file__).resolve().parents[4]
+    config_path = _resolve_git_config_path(repo_root)
+    if config_path is None or not config_path.exists():
+        return None
+
+    parser = configparser.RawConfigParser()
+    try:
+        parser.read(config_path, encoding="utf-8")
+    except (configparser.Error, OSError):
+        return None
+
+    remote_url = None
+    if parser.has_section('remote "origin"'):
+        remote_url = parser.get('remote "origin"', "url", fallback=None)
+
+    if not remote_url:
+        for section_name in parser.sections():
+            if section_name.startswith('remote "'):
+                remote_url = parser.get(section_name, "url", fallback=None)
+                if remote_url:
+                    break
+
+    return _extract_github_repository(remote_url)
 
 
 @dataclass(frozen=True)
@@ -143,7 +209,7 @@ def get_settings() -> AppSettings:
         smtp_security=os.getenv("SMTP_SECURITY") or None,
         smtp_enabled=_parse_optional_bool(os.getenv("SMTP_ENABLED")),
         smtp_timeout_seconds=int(os.getenv("SMTP_TIMEOUT_SECONDS", "5")),
-        release_check_repository=os.getenv("RELEASE_CHECK_REPOSITORY") or None,
+        release_check_repository=os.getenv("RELEASE_CHECK_REPOSITORY") or infer_release_check_repository(),
         release_check_metadata_url=os.getenv("RELEASE_CHECK_METADATA_URL") or None,
         release_check_timeout_seconds=int(os.getenv("RELEASE_CHECK_TIMEOUT_SECONDS", "5")),
     )
