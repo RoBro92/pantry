@@ -73,15 +73,6 @@ export default async function AdminOverviewPage() {
           value={getConfigSourceLabel(publicBaseUrl.effective_source)}
           detail={`Location QR links currently use ${publicBaseUrl.effective_value}.`}
         />
-        <StatusCard
-          title="Update Check"
-          value={getReleaseStatusLabel(releaseStatus.status)}
-          detail={
-            releaseStatus.latest_version
-              ? `Current ${releaseStatus.current_version} · latest ${releaseStatus.latest_version}`
-              : releaseStatus.message ?? "Release metadata is unavailable."
-          }
-        />
       </section>
 
       <section className="content-grid">
@@ -89,8 +80,7 @@ export default async function AdminOverviewPage() {
           <p className="eyebrow">Lifecycle</p>
           <h2>Updates and recovery</h2>
           <p>
-            Review advisory release metadata, acknowledge changelog notes after upgrades, and use
-            the backup tools to export or restore Pantry data deliberately.
+            Review updates
           </p>
           <div className="page-actions">
             <Link href="/admin/updates" className="primary-link">

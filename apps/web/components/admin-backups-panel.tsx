@@ -122,11 +122,11 @@ export function AdminBackupsPanel({ households }: AdminBackupsPanelProps) {
     <div className="stack">
       <section className="content-grid">
         <article className="panel">
-          <p className="eyebrow">Export</p>
+          <p className="eyebrow">Full</p>
           <h2>Full instance backup</h2>
           <p className="section-copy">
-            Export a Pantry-native JSON bundle containing the full instance database content for
-            operator-controlled recovery.
+            Export a Pantry native JSON bundle containing the full instance database content for
+            system admin controlled recovery.
           </p>
           <div className="page-actions">
             <button
@@ -141,10 +141,10 @@ export function AdminBackupsPanel({ households }: AdminBackupsPanelProps) {
         </article>
 
         <article className="panel">
-          <p className="eyebrow">Export</p>
+          <p className="eyebrow">Partial</p>
           <h2>Household pantry backup</h2>
           <p className="section-copy">
-            Export a single household snapshot for operator retention. Restore currently supports
+            Export a single household snapshot for system admin retention. Restore currently supports
             full instance bundles only.
           </p>
           <label className="field">

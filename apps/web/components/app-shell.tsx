@@ -17,13 +17,10 @@ export function AppShell({ session, releaseStatus, children }: AppShellProps) {
       {releaseStatus ? <AdminReleaseNotesDialog initialReleaseStatus={releaseStatus} /> : null}
       <div className="shell-grid">
         <aside className="sidebar panel">
-          <p className="eyebrow">Pantry</p>
-          <h1 className="shell-title">Household Console</h1>
+          <p className="eyebrow">Pantry {appConfig.version}</p>
+          <h1 className="shell-title">Home</h1>
           <p className="sidebar-copy">
-            Logged in as {session.user.display_name ?? session.user.email}
-          </p>
-          <p className="sidebar-copy">
-            Version {appConfig.version} · {session.memberships.length} household
+            {session.memberships.length} household
             {session.memberships.length === 1 ? "" : "s"} visible
           </p>
           <nav className="nav-list">

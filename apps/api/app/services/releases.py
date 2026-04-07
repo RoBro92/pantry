@@ -361,7 +361,7 @@ def build_release_check_summary(db: Session | None = None) -> dict[str, object]:
     summary: dict[str, object] = {
         "configured": settings.release_check_enabled,
         "source_type": "github_releases_latest" if settings.release_check_enabled else None,
-        "source_strategy": "GitHub Releases latest metadata with optional release.json asset enrichment. GHCR is image hosting only.",
+        "source_strategy": "Images hosted on GHCR",
         "repository": repository,
         "metadata_status": "not_configured",
         "current_version": settings.app_version,

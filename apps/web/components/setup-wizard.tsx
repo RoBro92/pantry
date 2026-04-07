@@ -1070,23 +1070,6 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
               )}
             </div>
           )}
-
-          <div className="setup-highlight-grid">
-            <article className="setup-highlight">
-              <strong>Operator control</strong>
-              <p>
-                Nothing is auto-imported or auto-updated. Pantry keeps restore and setup explicit
-                and reviewable.
-              </p>
-            </article>
-            <article className="setup-highlight">
-              <strong>What happens next</strong>
-              <p>
-                Fresh installs continue into user setup. Restore mode jumps straight to review once
-                the backup is validated.
-              </p>
-            </article>
-          </div>
         </section>
       );
     }

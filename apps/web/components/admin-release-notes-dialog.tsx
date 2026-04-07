@@ -49,11 +49,7 @@ export function AdminReleaseNotesDialog({
         data-testid="admin-whats-new-dialog"
       >
         <p className="eyebrow">What Changed</p>
-        <h2 id="whats-new-title">Pantry {currentRelease.version} is now running</h2>
-        <p className="section-copy">
-          Review the latest release notes once, then Pantry will stop prompting this installation
-          until the next update.
-        </p>
+        <h2 id="whats-new-title">Pantry {currentRelease.version}</h2>
         {currentRelease.changelog_summary ? (
           <div className="info-callout">
             <strong>Release summary</strong>
