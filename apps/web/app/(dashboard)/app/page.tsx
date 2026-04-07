@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { StatusCard } from "../../../components/status-card";
-import { getHouseholdRoleLabel } from "../../../lib/role-labels";
+import { getHouseholdRoleLabel, getPlatformRoleLabel } from "../../../lib/role-labels";
 import { requireSession } from "../../../lib/server-auth";
 
 export default async function SessionPage() {
@@ -23,8 +23,8 @@ export default async function SessionPage() {
         />
         <StatusCard
           title="Platform Role"
-          value={session.user.platform_role ?? "none"}
-          detail="Platform-wide role assignment from the API session."
+          value={getPlatformRoleLabel(session.user.platform_role)}
+          detail="Platform-wide access for this signed-in account."
         />
         <StatusCard
           title="Memberships"
@@ -53,7 +53,7 @@ export default async function SessionPage() {
             </div>
           ) : (
             <p>
-              No active household memberships yet. Ask a admin to assign this account to a
+              No active household memberships yet. Ask an admin to assign this account to a
               household.
             </p>
           )
@@ -95,7 +95,8 @@ export default async function SessionPage() {
         <section className="panel">
           <p className="eyebrow">Platform Admin</p>
           <p>
-            The platform admin dashboard provides tools for managing households, users, and memberships across the entire Pantry installation. Use the admin dashboard to set up new households, assign user roles, and oversee platform activity.
+            The admin dashboard provides installation-level tools for managing households, users,
+            and memberships across Pantry.
           </p>
           <Link href="/admin" className="primary-link">
             Open admin dashboard

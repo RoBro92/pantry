@@ -43,13 +43,7 @@ export function AppShell({ session, children }: AppShellProps) {
             {session.user.platform_role === "platform_admin" ? (
               <div className="nav-group">
                 <span className="nav-group-title">Platform Admin</span>
-                <Link href="/admin">Overview</Link>
-                <Link href="/admin/users">Users</Link>
-                <Link href="/admin/households">Households</Link>
-                <Link href="/admin/ai">AI</Link>
-                <Link href="/admin/smtp">SMTP</Link>
-                <Link href="/admin/diagnostics">Diagnostics</Link>
-                <Link href="/admin/settings">Settings</Link>
+                <Link href="/admin">Dashboard</Link>
               </div>
             ) : null}
           </nav>

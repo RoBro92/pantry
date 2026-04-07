@@ -393,6 +393,95 @@ code {
   text-decoration: underline;
 }
 
+.table-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.data-table {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: collapse;
+}
+
+.data-table th,
+.data-table td {
+  padding: 0.9rem 0.85rem;
+  border-top: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.data-table th {
+  color: var(--accent-strong);
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.data-table td code {
+  word-break: break-all;
+}
+
+.households-table {
+  table-layout: fixed;
+}
+
+.household-name-cell {
+  width: 18%;
+}
+
+.household-external-id-cell {
+  width: 22%;
+}
+
+.household-count-cell,
+.household-link-cell {
+  width: 10%;
+  white-space: nowrap;
+}
+
+.household-members-cell {
+  width: 40%;
+}
+
+.table-member-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.85rem;
+  padding: 0.2rem 0;
+}
+
+.table-member-role {
+  flex: 0 0 auto;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.detail-list {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 0.8rem;
+}
+
+.detail-list li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.detail-list strong {
+  flex: 0 0 auto;
+}
+
+.detail-list span {
+  min-width: 0;
+  text-align: right;
+}
+
 .auth-stage-shell {
   display: grid;
   gap: 1.25rem;
@@ -629,12 +718,24 @@ code {
 }
 
 .wizard-actions {
+  align-items: center;
   justify-content: space-between;
   padding: 0.3rem 0;
 }
 
+.wizard-actions > .ghost-button,
+.wizard-actions-group > .ghost-button,
+.wizard-actions-group > .primary-button {
+  width: 10rem;
+  flex: 0 0 10rem;
+  min-height: 2.45rem;
+  padding: 0.55rem 0.95rem;
+  border-radius: 18px;
+}
+
 .wizard-actions-group {
   display: flex;
+  align-items: center;
   gap: 0.75rem;
   justify-content: flex-end;
 }
@@ -686,6 +787,13 @@ code {
     gap: 0.75rem;
   }
 
+  .wizard-actions > .ghost-button,
+  .wizard-actions-group > .ghost-button,
+  .wizard-actions-group > .primary-button {
+    width: 100%;
+    flex-basis: auto;
+  }
+
   .primary-link,
   .secondary-link,
   .primary-button,
@@ -695,5 +803,41 @@ code {
 
   .token-input-row {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .data-table {
+    min-width: 100%;
+  }
+
+  .households-table,
+  .households-table tbody,
+  .households-table tr,
+  .households-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .households-table thead {
+    display: none;
+  }
+
+  .households-table tr {
+    padding: 0.85rem 0;
+    border-top: 1px solid var(--border);
+  }
+
+  .households-table td {
+    padding: 0.35rem 0;
+    border-top: none;
+  }
+
+  .table-member-row,
+  .detail-list li {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .detail-list span {
+    text-align: left;
   }
 }

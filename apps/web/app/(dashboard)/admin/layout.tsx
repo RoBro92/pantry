@@ -15,8 +15,7 @@ export default async function AdminLayout({
         <p className="eyebrow">Platform Admin</p>
         <h1>Installation Console</h1>
         <p>
-          Installation-level controls stay separate from household workflows. Diagnostics and
-          configuration surfaces only show data the running application can actually measure.
+          This dashboard provides administrative tools for managing your Pantry install.
         </p>
         <AdminSectionNav />
       </section>

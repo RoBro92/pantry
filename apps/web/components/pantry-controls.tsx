@@ -196,9 +196,9 @@ export function PantryControls({
           <p className="eyebrow">Structure</p>
           <h2>Household-admin actions only</h2>
           <p className="section-copy">
-            Creating location groups, locations, and catalog products requires the
-            <code>household_admin</code> role. You can still add, move, and remove stock in the
-            locations and products that already exist.
+            Creating location groups, locations, and catalog products requires the Household
+            Admin role. You can still add, move, and remove stock in the locations and products
+            that already exist.
           </p>
         </article>
       )}

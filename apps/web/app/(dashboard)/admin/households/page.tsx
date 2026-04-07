@@ -13,23 +13,30 @@ export default async function AdminHouseholdsPage() {
       <DataTable
         title="Households"
         columns={["Name", "External ID", "Memberships", "Current Members", "Pantry"]}
+        tableClassName="households-table"
       >
         {households.map((household) => (
           <tr key={household.external_id}>
-            <td>{household.name}</td>
-            <td>{household.external_id}</td>
-            <td>{household.membership_count}</td>
-            <td>
+            <td className="household-name-cell">
+              <strong>{household.name}</strong>
+            </td>
+            <td className="household-external-id-cell">
+              <code>{household.external_id}</code>
+            </td>
+            <td className="household-count-cell">{household.membership_count}</td>
+            <td className="household-members-cell">
               {household.memberships.length === 0
                 ? "None"
-                : household.memberships
-                    .map(
-                      (membership) =>
-                        `${membership.display_name ?? membership.email} (${getHouseholdRoleLabel(membership.role)})`,
-                    )
-                    .join(", ")}
+                : household.memberships.map((membership) => (
+                    <div key={membership.membership_external_id} className="table-member-row">
+                      <span>{membership.display_name ?? membership.email}</span>
+                      <span className="table-member-role">
+                        {getHouseholdRoleLabel(membership.role)}
+                      </span>
+                    </div>
+                  ))}
             </td>
-            <td>
+            <td className="household-link-cell">
               <Link href={`/app/households/${household.external_id}`} className="inline-link">
                 Open pantry
               </Link>

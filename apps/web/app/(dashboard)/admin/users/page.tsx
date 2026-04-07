@@ -1,5 +1,6 @@
 import { AdminUserCreationForm } from "../../../../components/admin-user-creation-form";
 import { DataTable } from "../../../../components/data-table";
+import { getPlatformRoleLabel } from "../../../../lib/role-labels";
 import { getAdminUsers } from "../../../../lib/server-auth";
 
 export default async function AdminUsersPage() {
@@ -16,9 +17,9 @@ export default async function AdminUsersPage() {
           <tr key={user.external_id}>
             <td>{user.email}</td>
             <td>{user.display_name ?? "Unspecified"}</td>
-            <td>{user.platform_role ?? "None"}</td>
+            <td>{getPlatformRoleLabel(user.platform_role, { detailed: true })}</td>
             <td>{user.membership_count}</td>
-            <td>{user.is_active ? "active" : "inactive"}</td>
+            <td>{user.is_active ? "Active" : "Inactive"}</td>
           </tr>
         ))}
       </DataTable>

@@ -4,14 +4,15 @@ type DataTableProps = {
   title: string;
   columns: string[];
   children: ReactNode;
+  tableClassName?: string;
 };
 
-export function DataTable({ title, columns, children }: DataTableProps) {
+export function DataTable({ title, columns, children, tableClassName }: DataTableProps) {
   return (
     <section className="panel">
       <p className="eyebrow">{title}</p>
       <div className="table-wrap">
-        <table className="data-table">
+        <table className={tableClassName ? `data-table ${tableClassName}` : "data-table"}>
           <thead>
             <tr>
               {columns.map((column) => (
@@ -25,4 +26,3 @@ export function DataTable({ title, columns, children }: DataTableProps) {
     </section>
   );
 }
-

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const adminLinks = [
-  { href: "/admin", label: "Overview" },
+  { href: "/admin", label: "Dashboard" },
   { href: "/admin/users", label: "Users" },
   { href: "/admin/households", label: "Households" },
   { href: "/admin/ai", label: "AI" },
