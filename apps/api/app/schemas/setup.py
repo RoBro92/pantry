@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field, model_validator
 
 SetupStepKey = Literal[
     "welcome",
+    "restore",
     "users",
     "household",
     "public_url",
@@ -74,7 +75,9 @@ class StagedSetupSMTPConfigSummary(BaseModel):
 
 class SetupWizardStateResponse(BaseModel):
     status: SetupStatusResponse
+    installation_mode: Literal["fresh_install", "restore_backup"] = "fresh_install"
     welcome_acknowledged: bool
+    staged_restore: "SetupStagedRestoreSummary | None" = None
     admin_user: StagedSetupUserSummary
     initial_users: list[StagedSetupUserSummary] = Field(default_factory=list)
     household_name: str | None = None
@@ -100,6 +103,10 @@ class SetupWizardUserInput(BaseModel):
 
 class SetupWelcomeUpdateRequest(BaseModel):
     acknowledged: bool = True
+
+
+class SetupModeUpdateRequest(BaseModel):
+    installation_mode: Literal["fresh_install", "restore_backup"]
 
 
 class SetupUsersUpdateRequest(BaseModel):
@@ -168,3 +175,26 @@ class LoginCompatibilityRequest(BaseModel):
         if not (self.identifier or self.email):
             raise ValueError("A username or email is required.")
         return self
+
+
+class SetupStagedRestoreBundleSummary(BaseModel):
+    format: str
+    format_version: int
+    scope: Literal["instance", "household"]
+    app_version: str
+    schema_revision: str | None = None
+    exported_at: datetime
+    household_external_id: str | None = None
+    household_name: str | None = None
+    table_counts: dict[str, int] = Field(default_factory=dict)
+
+
+class SetupStagedRestoreSummary(BaseModel):
+    stage_id: str
+    original_filename: str
+    size_bytes: int
+    uploaded_at: datetime
+    quarantine_path: str
+    supported_for_restore: bool
+    warnings: list[str] = Field(default_factory=list)
+    bundle: SetupStagedRestoreBundleSummary

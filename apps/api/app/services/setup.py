@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.core.security import hash_password, normalize_email
 from app.domain.ai import AI_HEALTH_UNKNOWN, AI_PROVIDER_OLLAMA, AI_PROVIDER_OPENAI_COMPATIBLE, AI_PROVIDER_TYPES, AI_SCOPE_INSTANCE, AI_SCOPE_KEY_INSTANCE
 from app.domain.roles import HOUSEHOLD_ADMIN_ROLE, HOUSEHOLD_USER_ROLE, PLATFORM_ADMIN_ROLE
@@ -21,9 +22,11 @@ from app.schemas.setup import (
     SetupAIConfigUpdateRequest,
     SetupDietaryUpdateRequest,
     SetupHouseholdUpdateRequest,
+    SetupModeUpdateRequest,
     SetupPublicURLUpdateRequest,
     SetupSMTPConfigUpdateRequest,
     SetupStatusResponse,
+    SetupStagedRestoreSummary,
     SetupStepState,
     SetupUsersUpdateRequest,
     SetupWelcomeUpdateRequest,
@@ -34,6 +37,7 @@ from app.schemas.setup import (
     StagedSetupSMTPConfigSummary,
     StagedSetupUserSummary,
 )
+from app.services.backups import clear_staged_backup, load_staged_backup, restore_instance_backup_bundle, stage_backup_upload
 from app.services.ai_config import _normalize_base_url, get_instance_provider_config
 from app.services.audit import record_audit_event
 from app.services.auth import count_platform_admins, get_user_by_email, get_user_by_external_id
@@ -56,6 +60,7 @@ SETUP_STATUS_COMPLETED = "completed"
 DIETARY_NONE_OPTION = "None"
 SETUP_STEP_TITLES = {
     "welcome": "Welcome",
+    "restore": "Fresh install or restore",
     "users": "Admin and users",
     "household": "Household and storage",
     "public_url": "Public URL",
@@ -64,10 +69,24 @@ SETUP_STEP_TITLES = {
     "smtp": "SMTP configuration",
     "review": "Review and complete",
 }
-REQUIRED_STEPS = {"welcome", "users", "household"}
+FRESH_INSTALL_STEP_ORDER = [
+    "welcome",
+    "restore",
+    "users",
+    "household",
+    "public_url",
+    "dietary",
+    "ai",
+    "smtp",
+    "review",
+]
+RESTORE_STEP_ORDER = ["welcome", "restore", "review"]
+REQUIRED_STEPS = {"welcome", "restore", "users", "household"}
 OPTIONAL_STEPS = {"public_url", "dietary", "ai", "smtp"}
 DEFAULT_LOCATION_GROUP_NAME = "Kitchen"
 DEFAULT_ADMIN_STAGE_ID = "platform-admin"
+SETUP_MODE_FRESH_INSTALL = "fresh_install"
+SETUP_MODE_RESTORE_BACKUP = "restore_backup"
 
 
 def _utc_now() -> datetime:
@@ -77,6 +96,8 @@ def _utc_now() -> datetime:
 def _default_payload() -> dict[str, object]:
     return {
         "welcome_acknowledged": False,
+        "installation_mode": SETUP_MODE_FRESH_INSTALL,
+        "staged_restore": None,
         "admin_user": {
             "stage_id": DEFAULT_ADMIN_STAGE_ID,
             "login": "",
@@ -133,6 +154,10 @@ def _merged_payload(payload: dict[str, object] | None) -> dict[str, object]:
 
     if "welcome_acknowledged" in source:
         merged["welcome_acknowledged"] = bool(source.get("welcome_acknowledged"))
+    if source.get("installation_mode") in {SETUP_MODE_FRESH_INSTALL, SETUP_MODE_RESTORE_BACKUP}:
+        merged["installation_mode"] = source.get("installation_mode")
+    if isinstance(source.get("staged_restore"), dict):
+        merged["staged_restore"] = source.get("staged_restore")
 
     if isinstance(source.get("admin_user"), dict):
         merged["admin_user"].update(source["admin_user"])  # type: ignore[arg-type]
@@ -213,6 +238,34 @@ def _serialize_user(user: dict[str, object], *, is_platform_admin: bool) -> Stag
     )
 
 
+def _current_step_keys(payload: dict[str, object]) -> list[str]:
+    if payload.get("installation_mode") == SETUP_MODE_RESTORE_BACKUP:
+        return RESTORE_STEP_ORDER
+    return FRESH_INSTALL_STEP_ORDER
+
+
+def _serialize_staged_restore(payload: dict[str, object]) -> SetupStagedRestoreSummary | None:
+    staged_restore = payload.get("staged_restore")
+    if not isinstance(staged_restore, dict):
+        return None
+    bundle = staged_restore.get("bundle")
+    if not isinstance(bundle, dict):
+        return None
+
+    return SetupStagedRestoreSummary.model_validate(
+        {
+            "stage_id": staged_restore.get("stage_id"),
+            "original_filename": staged_restore.get("original_filename"),
+            "size_bytes": staged_restore.get("size_bytes"),
+            "uploaded_at": staged_restore.get("uploaded_at"),
+            "quarantine_path": staged_restore.get("quarantine_path"),
+            "supported_for_restore": staged_restore.get("supported_for_restore"),
+            "warnings": staged_restore.get("warnings") or [],
+            "bundle": bundle,
+        }
+    )
+
+
 def _serialize_steps(payload: dict[str, object]) -> list[SetupStepState]:
     steps = _compute_step_completion(payload)
     return [
@@ -222,18 +275,25 @@ def _serialize_steps(payload: dict[str, object]) -> list[SetupStepState]:
             required=key in REQUIRED_STEPS or key == "review",
             is_complete=is_complete,
         )
-        for key, is_complete in steps.items()
+        for key in _current_step_keys(payload)
+        for is_complete in [steps[key]]
     ]
 
 
 def _compute_step_completion(payload: dict[str, object]) -> dict[str, bool]:
+    installation_mode = payload.get("installation_mode")
     admin_user = payload["admin_user"]
     initial_users = payload["initial_users"]
     household = payload["household"]
     dietary = payload["dietary"]
     ai = payload["ai"]
     smtp = payload["smtp"]
+    staged_restore = payload.get("staged_restore") if isinstance(payload.get("staged_restore"), dict) else None
     skipped_optional_steps = set(payload.get("skipped_optional_steps") or [])
+    restore_complete = bool(
+        installation_mode == SETUP_MODE_FRESH_INSTALL
+        or (staged_restore and staged_restore.get("supported_for_restore"))
+    )
 
     users_complete = (
         bool(admin_user.get("login"))
@@ -255,10 +315,21 @@ def _compute_step_completion(payload: dict[str, object]) -> dict[str, bool]:
     ) or "ai" in skipped_optional_steps
     smtp_enabled = bool(smtp.get("is_enabled"))
     smtp_complete = (smtp_enabled and bool(smtp.get("host"))) or "smtp" in skipped_optional_steps
-    review_complete = all([bool(payload.get("welcome_acknowledged")), users_complete, household_complete])
+    if installation_mode == SETUP_MODE_RESTORE_BACKUP:
+        users_complete = True
+        household_complete = True
+        public_url_complete = True
+        dietary_complete = True
+        ai_complete = True
+        smtp_complete = True
+
+    review_complete = all(
+        [bool(payload.get("welcome_acknowledged")), restore_complete, users_complete, household_complete]
+    )
 
     return {
         "welcome": bool(payload.get("welcome_acknowledged")),
+        "restore": restore_complete,
         "users": users_complete,
         "household": household_complete,
         "public_url": public_url_complete,
@@ -274,6 +345,10 @@ def _missing_requirements(payload: dict[str, object]) -> list[str]:
     completion = _compute_step_completion(payload)
     if not completion["welcome"]:
         missing.append("Acknowledge the welcome step.")
+    if payload.get("installation_mode") == SETUP_MODE_RESTORE_BACKUP:
+        if not completion["restore"]:
+            missing.append("Upload and validate a full instance Pantry backup before restoring.")
+        return missing
     if not completion["users"]:
         missing.append("Create a platform admin login and save a password.")
     if not completion["household"]:
@@ -314,6 +389,8 @@ def get_setup_status(db: Session) -> SetupStatusResponse:
         and any(
             [
                 payload.get("welcome_acknowledged"),
+                payload.get("installation_mode") == SETUP_MODE_RESTORE_BACKUP,
+                payload.get("staged_restore"),
                 payload["admin_user"].get("login"),
                 payload["initial_users"],
                 payload["household"].get("name"),
@@ -358,7 +435,9 @@ def get_setup_wizard_state(db: Session) -> SetupWizardStateResponse:
 
     return SetupWizardStateResponse(
         status=get_setup_status(db),
+        installation_mode=payload.get("installation_mode") or SETUP_MODE_FRESH_INSTALL,
         welcome_acknowledged=bool(payload.get("welcome_acknowledged")),
+        staged_restore=_serialize_staged_restore(payload),
         admin_user=_serialize_user(admin_user, is_platform_admin=True),
         initial_users=[_serialize_user(user, is_platform_admin=False) for user in initial_users],
         household_name=_normalize_optional_text(str(household.get("name") or "")),
@@ -412,6 +491,63 @@ def update_setup_welcome(db: Session, payload: SetupWelcomeUpdateRequest) -> Set
     state.payload = merged
     db.add(state)
     db.commit()
+    return get_setup_wizard_state(db)
+
+
+def update_setup_mode(db: Session, payload: SetupModeUpdateRequest) -> SetupWizardStateResponse:
+    state = _get_or_create_setup_state(db)
+    merged = _merged_payload(state.payload)
+    previous_stage_id = None
+    if isinstance(merged.get("staged_restore"), dict):
+        previous_stage_id = merged["staged_restore"].get("stage_id")
+
+    merged["installation_mode"] = payload.installation_mode
+    if payload.installation_mode == SETUP_MODE_FRESH_INSTALL:
+        merged["staged_restore"] = None
+        if previous_stage_id:
+            clear_staged_backup(get_settings(), stage_id=str(previous_stage_id))
+
+    state.payload = merged
+    db.add(state)
+    db.commit()
+    return get_setup_wizard_state(db)
+
+
+async def stage_setup_restore_upload(db: Session, upload) -> SetupWizardStateResponse:
+    state = _get_or_create_setup_state(db)
+    merged = _merged_payload(state.payload)
+    previous_stage_id = None
+    if isinstance(merged.get("staged_restore"), dict):
+        previous_stage_id = merged["staged_restore"].get("stage_id")
+
+    staged = await stage_backup_upload(
+        db,
+        settings=get_settings(),
+        upload=upload,
+        allowed_restore_scopes={"instance"},
+    )
+
+    merged["installation_mode"] = SETUP_MODE_RESTORE_BACKUP
+    merged["staged_restore"] = {
+        "stage_id": staged.stage_id,
+        "original_filename": staged.original_filename,
+        "size_bytes": staged.size_bytes,
+        "uploaded_at": staged.uploaded_at.isoformat(),
+        "quarantine_path": staged.quarantine_path,
+        "supported_for_restore": staged.supported_for_restore,
+        "warnings": list(staged.warnings),
+        "bundle": {
+            **staged.bundle,
+            "exported_at": staged.bundle["exported_at"],
+        },
+    }
+    state.payload = merged
+    db.add(state)
+    db.commit()
+
+    if previous_stage_id:
+        clear_staged_backup(get_settings(), stage_id=str(previous_stage_id))
+
     return get_setup_wizard_state(db)
 
 
@@ -645,6 +781,13 @@ def _role_or_error(db: Session, code: str):
     return role
 
 
+def _get_first_platform_admin_user(db: Session) -> User | None:
+    platform_admin_role = get_role_by_code(db, PLATFORM_ADMIN_ROLE)
+    if platform_admin_role is None:
+        return None
+    return db.scalar(select(User).where(User.platform_role_id == platform_admin_role.id).order_by(User.email))
+
+
 def finalize_setup(db: Session) -> User:
     if is_setup_complete(db):
         raise ValueError("Initial setup has already been completed.")
@@ -654,6 +797,20 @@ def finalize_setup(db: Session) -> User:
     missing = _missing_requirements(payload)
     if missing:
         raise ValueError("Setup is incomplete. " + " ".join(missing))
+
+    if payload.get("installation_mode") == SETUP_MODE_RESTORE_BACKUP:
+        staged_restore = payload.get("staged_restore")
+        if not isinstance(staged_restore, dict) or not staged_restore.get("stage_id"):
+            raise ValueError("A staged restore backup is required before finishing setup.")
+
+        bundle = load_staged_backup(get_settings(), stage_id=str(staged_restore["stage_id"]))
+        restore_instance_backup_bundle(db, bundle=bundle, actor_external_id=None)
+        clear_staged_backup(get_settings(), stage_id=str(staged_restore["stage_id"]))
+
+        admin_user = _get_first_platform_admin_user(db)
+        if admin_user is None:
+            raise ValueError("The restored backup did not include a platform admin account.")
+        return get_user_by_external_id(db, admin_user.external_id) or admin_user
 
     platform_admin_role = _role_or_error(db, PLATFORM_ADMIN_ROLE)
     household_admin_role = _role_or_error(db, HOUSEHOLD_ADMIN_ROLE)

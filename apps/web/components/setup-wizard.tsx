@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useRef, useState } from "react";
+import { type FormEvent, useRef, useState } from "react";
 import type {
   SetupStatusResponse,
   SetupWizardAssignmentSummary,
@@ -11,7 +11,7 @@ import type {
   SessionResponse
 } from "../lib/api-types";
 import { getHouseholdRoleLabel, type HouseholdRole } from "../lib/role-labels";
-import { postToApi, putToApi } from "../lib/client-api";
+import { postFormToApi, postToApi, putToApi } from "../lib/client-api";
 import { SetupProgress } from "./setup-progress";
 
 type SetupStepKey = SetupStatusResponse["steps"][number]["key"];
@@ -29,8 +29,10 @@ type PasswordDraft = {
 type AutoCapitalizeMode = "none" | "sentences" | "words" | "characters";
 type AutoCorrectMode = "off" | "on";
 
-const STEP_ORDER: SetupStepKey[] = [
+const OPTIONAL_STEPS = new Set<SetupStepKey>(["public_url", "dietary", "ai", "smtp"]);
+const FRESH_INSTALL_STEPS: SetupStepKey[] = [
   "welcome",
+  "restore",
   "users",
   "household",
   "public_url",
@@ -39,7 +41,7 @@ const STEP_ORDER: SetupStepKey[] = [
   "smtp",
   "review"
 ];
-const OPTIONAL_STEPS = new Set<SetupStepKey>(["public_url", "dietary", "ai", "smtp"]);
+const RESTORE_STEPS: SetupStepKey[] = ["welcome", "restore", "review"];
 
 const LOCATION_SUGGESTIONS = ["Fridge", "Freezer", "Cupboard", "Pantry shelf"];
 const DIETARY_SUGGESTIONS = [
@@ -58,14 +60,18 @@ const EMPTY_PASSWORD_DRAFT: PasswordDraft = {
 };
 const DIETARY_NONE_OPTION = "None";
 
-function nextStep(currentStep: SetupStepKey): SetupStepKey {
-  const currentIndex = STEP_ORDER.indexOf(currentStep);
-  return STEP_ORDER[Math.min(currentIndex + 1, STEP_ORDER.length - 1)];
+function getStepOrder(mode: SetupWizardStateResponse["installation_mode"]) {
+  return mode === "restore_backup" ? RESTORE_STEPS : FRESH_INSTALL_STEPS;
 }
 
-function previousStep(currentStep: SetupStepKey): SetupStepKey {
-  const currentIndex = STEP_ORDER.indexOf(currentStep);
-  return STEP_ORDER[Math.max(currentIndex - 1, 0)];
+function nextStep(currentStep: SetupStepKey, stepOrder: SetupStepKey[]): SetupStepKey {
+  const currentIndex = stepOrder.indexOf(currentStep);
+  return stepOrder[Math.min(currentIndex + 1, stepOrder.length - 1)];
+}
+
+function previousStep(currentStep: SetupStepKey, stepOrder: SetupStepKey[]): SetupStepKey {
+  const currentIndex = stepOrder.indexOf(currentStep);
+  return stepOrder[Math.max(currentIndex - 1, 0)];
 }
 
 function createStageId() {
@@ -372,7 +378,9 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
   const allUsers = [wizard.admin_user, ...wizard.initial_users];
   const configuredUsers = allUsers.filter((user) => Boolean(user.login.trim()));
   const usersValidation = getUsersStepValidation(wizard, adminPasswordDraft, userPasswordDrafts);
-  const canSkipCurrentStep = OPTIONAL_STEPS.has(currentStep);
+  const stepOrder = getStepOrder(wizard.installation_mode);
+  const canSkipCurrentStep =
+    wizard.installation_mode === "fresh_install" && OPTIONAL_STEPS.has(currentStep);
 
   function moveToStep(step: SetupStepKey) {
     setCurrentStep(step);
@@ -491,6 +499,27 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
         );
       }
 
+      if (step === "restore") {
+        if (
+          snapshot.installation_mode === "restore_backup" &&
+          !snapshot.staged_restore?.supported_for_restore
+        ) {
+          if (!suppressErrors) {
+            setError("Upload and validate a full instance Pantry backup before continuing.");
+          }
+          return false;
+        }
+        updateWizard(
+          await putToApi<SetupWizardStateResponse>("/api/setup/wizard/mode", {
+            installation_mode: snapshot.installation_mode
+          }),
+          snapshot.installation_mode === "restore_backup"
+            ? "Restore mode saved."
+            : "Fresh install selected.",
+          saveId
+        );
+      }
+
       if (step === "users") {
         return await persistUsersSnapshot(snapshot, {
           suppressErrors,
@@ -583,14 +612,14 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
     if (currentStep !== "review") {
       const saved = await persistStep(currentStep);
       if (saved) {
-        moveToStep(nextStep(currentStep));
+        moveToStep(nextStep(currentStep, stepOrder));
       }
     }
   }
 
   async function handleBack() {
     await persistStep(currentStep, { suppressErrors: true });
-    moveToStep(previousStep(currentStep));
+    moveToStep(previousStep(currentStep, stepOrder));
   }
 
   async function handleStepJump(step: SetupStepKey) {
@@ -667,7 +696,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
     if (saved) {
       setAiApiKey("");
       setSmtpPassword("");
-      moveToStep(nextStep(currentStep));
+      moveToStep(nextStep(currentStep, stepOrder));
     }
   }
 
@@ -777,6 +806,47 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
     void persistHouseholdSnapshot(nextWizard);
   }
 
+  async function handleInstallModeChange(mode: SetupWizardStateResponse["installation_mode"]) {
+    setError(null);
+    setStatusMessage(null);
+    setIsSaving(true);
+    try {
+      const nextState = await putToApi<SetupWizardStateResponse>("/api/setup/wizard/mode", {
+        installation_mode: mode
+      });
+      updateWizard(
+        nextState,
+        mode === "restore_backup" ? "Restore mode selected." : "Fresh install selected."
+      );
+      if (!getStepOrder(mode).includes(currentStep)) {
+        moveToStep("restore");
+      }
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Could not update setup mode.");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function handleRestoreUpload(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    setStatusMessage(null);
+    setIsSaving(true);
+    try {
+      const formData = new FormData(event.currentTarget);
+      const nextState = await postFormToApi<SetupWizardStateResponse>(
+        "/api/setup/wizard/restore-upload",
+        formData
+      );
+      updateWizard(nextState, "Restore backup staged safely.");
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Restore upload failed.");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   function addStorageLocation(value: string) {
     const trimmed = value.trim();
     if (!trimmed) {
@@ -880,22 +950,114 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
           <p className="eyebrow">First Run</p>
           <h1>Complete Pantry setup once to proceed to dashboard</h1>
           <p className="lede compact">
-            Follow the guided setup to create Users, a Household, and other key details. You can always adjust these later, but this will get you up and running with the best experience out of the box.
+            Start with either a fresh install or a full instance restore. Pantry keeps setup staged
+            until the final confirmation step so operators stay in control.
           </p>
           <div className="setup-highlight-grid">
             <article className="setup-highlight">
-              <strong>Create Users</strong>
-              <p>Create your primary platform user and then add additional household users with individual dietary preferences.</p>
+              <strong>Fresh install</strong>
+              <p>Create users, a household, storage locations, and optional integrations from scratch.</p>
             </article>
             <article className="setup-highlight">
-              <strong>AI Integration</strong>
-              <p>Currently supports Ollama and OpenAI API integrations for smart recipe suggestions based on pantry contents</p>
+              <strong>Restore from backup</strong>
+              <p>Upload a Pantry backup bundle, validate it safely, and only apply it when finalizing setup.</p>
             </article>
             <article className="setup-highlight">
-              <strong>SMTP Setup</strong>
-              <p>Optional SMTP setup for emailed shopping lists, password resets and notifications</p>
+              <strong>Operator control</strong>
+              <p>Nothing is auto-imported or auto-updated. Pantry keeps restore and setup explicit and reviewable.</p>
             </article>
           </div>
+        </section>
+      );
+    }
+
+    if (currentStep === "restore") {
+      return (
+        <section className="setup-step-card" data-testid="setup-restore-step">
+          <p className="eyebrow">Step {stepOrder.indexOf("restore") + 1}</p>
+          <h1>Fresh install or restore from backup</h1>
+          <p className="step-copy">
+            Choose how this Pantry instance should be initialized. Fresh install keeps the staged
+            forms you already know. Restore accepts Pantry-native full instance backup bundles only.
+          </p>
+
+          <div className="content-grid">
+            <article className="setup-highlight">
+              <strong>Fresh install</strong>
+              <p>Set up users, a household, storage locations, and optional integrations manually.</p>
+              <div className="page-actions">
+                <button
+                  type="button"
+                  className={
+                    wizard.installation_mode === "fresh_install" ? "primary-button" : "ghost-button"
+                  }
+                  onClick={() => void handleInstallModeChange("fresh_install")}
+                  disabled={isSaving}
+                >
+                  {wizard.installation_mode === "fresh_install" ? "Selected" : "Choose fresh install"}
+                </button>
+              </div>
+            </article>
+
+            <article className="setup-highlight">
+              <strong>Restore from backup</strong>
+              <p>Upload a full instance backup bundle. Pantry validates the file, stages it in quarantine, and only restores it when setup is finalized.</p>
+              <div className="page-actions">
+                <button
+                  type="button"
+                  className={
+                    wizard.installation_mode === "restore_backup" ? "primary-button" : "ghost-button"
+                  }
+                  onClick={() => void handleInstallModeChange("restore_backup")}
+                  disabled={isSaving}
+                >
+                  {wizard.installation_mode === "restore_backup" ? "Selected" : "Choose restore"}
+                </button>
+              </div>
+            </article>
+          </div>
+
+          {wizard.installation_mode === "fresh_install" ? (
+            <div className="info-callout">
+              <strong>Fresh install selected</strong>
+              <p>Continue to create your platform admin, first household, and optional instance settings.</p>
+            </div>
+          ) : (
+            <div className="stack">
+              <form className="stack" onSubmit={handleRestoreUpload}>
+                <label className="field">
+                  <span>Pantry backup bundle</span>
+                  <input type="file" name="file" accept=".json,application/json" required />
+                </label>
+                <div className="page-actions">
+                  <button type="submit" className="primary-button" disabled={isSaving}>
+                    {isSaving ? "Uploading..." : "Upload and validate"}
+                  </button>
+                </div>
+              </form>
+
+              {wizard.staged_restore ? (
+                <div className="stack">
+                  <div className="info-callout">
+                    <strong>Staged restore bundle</strong>
+                    <p>
+                      {wizard.staged_restore.original_filename} · {wizard.staged_restore.bundle.scope} · exported from Pantry {wizard.staged_restore.bundle.app_version}
+                    </p>
+                  </div>
+                  <ul className="callout-list">
+                    {wizard.staged_restore.warnings.map((warning) => (
+                      <li key={warning}>{warning}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : (
+                <div className="warning-callout">
+                  <strong>Restore upload required</strong>
+                  <p>Upload and validate a full instance Pantry backup before continuing.</p>
+                </div>
+              )}
+            </div>
+          )}
         </section>
       );
     }
@@ -903,7 +1065,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
     if (currentStep === "users") {
       return (
         <section className="setup-step-card" data-testid="setup-users-step">
-          <p className="eyebrow">Step 2</p>
+          <p className="eyebrow">Step {stepOrder.indexOf("users") + 1}</p>
           <h1>Admin account and initial users</h1>
           <p className="step-copy">
             Create the main Pantry admin first, then stage any additional users you want available
@@ -1071,7 +1233,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
     if (currentStep === "household") {
       return (
         <section className="setup-step-card" data-testid="setup-household-step">
-          <p className="eyebrow">Step 3</p>
+          <p className="eyebrow">Step {stepOrder.indexOf("household") + 1}</p>
           <h1>Household and storage locations</h1>
           <p className="step-copy">
             Create the first household, select the storage locations you want available,
@@ -1174,7 +1336,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
     if (currentStep === "public_url") {
       return (
         <section className="setup-step-card">
-          <p className="eyebrow">Step 4</p>
+          <p className="eyebrow">Step {stepOrder.indexOf("public_url") + 1}</p>
           <h1>Public browser URL</h1>
           <p className="step-copy">
             Pantry uses this for QR codes and browser links, so it should match the address people
@@ -1220,7 +1382,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
     if (currentStep === "dietary") {
       return (
         <section className="setup-step-card">
-          <p className="eyebrow">Step 5</p>
+          <p className="eyebrow">Step {stepOrder.indexOf("dietary") + 1}</p>
           <h1>Dietary preferences</h1>
           <p className="step-copy">
             Select household dietary preferences and assign individual preferences to users. This will help Pantry make better meal suggestions and warnings about expiring goods.
@@ -1275,7 +1437,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
     if (currentStep === "ai") {
       return (
         <section className="setup-step-card">
-          <p className="eyebrow">Step 6</p>
+          <p className="eyebrow">Step {stepOrder.indexOf("ai") + 1}</p>
           <h1>AI configuration</h1>
           <p className="step-copy">
             Optional. Configure Pantry’s instance level AI provider now if you want meal and pantry
@@ -1392,7 +1554,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
     if (currentStep === "smtp") {
       return (
         <section className="setup-step-card">
-          <p className="eyebrow">Step 7</p>
+          <p className="eyebrow">Step {stepOrder.indexOf("smtp") + 1}</p>
           <h1>SMTP configuration</h1>
           <p className="step-copy">
             Optional. Save email delivery settings now for notifications and other outbound mail
@@ -1575,152 +1737,194 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
 
     return (
       <section className="setup-step-card" data-testid="setup-review-step">
-        <p className="eyebrow">Step 8</p>
+        <p className="eyebrow">Step {stepOrder.indexOf("review") + 1}</p>
         <h1>Review and complete</h1>
         <p className="step-copy">
-          Check everything looks right, then complete the setup. Pantry will only write this staged
-          data into the live application once you confirm.
+          Check everything looks right, then complete the setup. Pantry will only write staged
+          fresh-install data or apply the staged restore bundle once you confirm.
         </p>
 
-        <div className="review-grid">
-          <article className="review-card">
-            <div className="setup-card-toolbar">
-              <strong>Users</strong>
-              <button type="button" className="ghost-button" onClick={() => void handleStepJump("users")}>
-                Edit
-              </button>
-            </div>
-            <p>{summarizeUser(wizard.admin_user)}</p>
-            {wizard.initial_users.map((user) => (
-              <p key={user.stage_id}>{summarizeUser(user)}</p>
-            ))}
-          </article>
-          <article className="review-card">
-            <div className="setup-card-toolbar">
-              <strong>Household</strong>
-              <button
-                type="button"
-                className="ghost-button"
-                onClick={() => void handleStepJump("household")}
-              >
-                Edit
-              </button>
-            </div>
-            <p>{wizard.household_name || "Not configured yet"}</p>
-            <p>
-              {wizard.location_group_name}:{" "}
-              {wizard.storage_locations.length > 0 ? wizard.storage_locations.join(", ") : "No storage locations yet"}
-            </p>
-            <p>
-              Members:{" "}
-              {configuredUsers
-                .map((user) => {
-                  if (user.is_platform_admin) {
-                    return `${summarizeUser(user)} (${getHouseholdRoleLabel("household_admin")})`;
-                  }
-                  const assignment = findAssignment(wizard.household_assignments, user.stage_id);
-                  if (!assignment) {
-                    return null;
-                  }
-                  return `${summarizeUser(user)} (${getHouseholdRoleLabel(assignment.role)})`;
-                })
-                .filter(Boolean)
-                .join(", ") || "No household members selected yet"}
-            </p>
-          </article>
-          <article className="review-card">
-            <div className="setup-card-toolbar">
-              <strong>Public URL</strong>
-              <button
-                type="button"
-                className="ghost-button"
-                onClick={() => void handleStepJump("public_url")}
-              >
-                Edit
-              </button>
-            </div>
-            <p>
-              {wizard.public_base_url
-                ? wizard.public_base_url
-                : wizard.skipped_optional_steps.includes("public_url")
-                  ? "Skipped for now"
-                  : "Not configured"}
-            </p>
-          </article>
-          <article className="review-card">
-            <div className="setup-card-toolbar">
-              <strong>Dietary preferences</strong>
-              <button
-                type="button"
-                className="ghost-button"
-                onClick={() => void handleStepJump("dietary")}
-              >
-                Edit
-              </button>
-            </div>
-            <p>
-              {wizard.household_dietary_preferences.includes(DIETARY_NONE_OPTION)
-                ? "None selected"
-                : wizard.household_dietary_preferences.length > 0
-                  ? wizard.household_dietary_preferences.join(", ")
+        {wizard.installation_mode === "restore_backup" ? (
+          <div className="review-grid">
+            <article className="review-card">
+              <div className="setup-card-toolbar">
+                <strong>Restore bundle</strong>
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() => void handleStepJump("restore")}
+                >
+                  Edit
+                </button>
+              </div>
+              <p>{wizard.staged_restore?.original_filename ?? "No staged restore uploaded yet"}</p>
+              <p>
+                {wizard.staged_restore
+                  ? `${wizard.staged_restore.bundle.scope} · Pantry ${wizard.staged_restore.bundle.app_version}`
+                  : "Upload a full instance backup bundle."}
+              </p>
+              <p>
+                {wizard.staged_restore?.supported_for_restore
+                  ? "Validated and ready to apply during finalization."
+                  : "The staged backup is not ready to restore yet."}
+              </p>
+            </article>
+            <article className="review-card">
+              <div className="setup-card-toolbar">
+                <strong>Safety checks</strong>
+              </div>
+              {wizard.staged_restore ? (
+                <ul className="callout-list">
+                  {wizard.staged_restore.warnings.map((warning) => (
+                    <li key={warning}>{warning}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p>Restore validation warnings will appear here after upload.</p>
+              )}
+            </article>
+          </div>
+        ) : (
+          <div className="review-grid">
+            <article className="review-card">
+              <div className="setup-card-toolbar">
+                <strong>Users</strong>
+                <button type="button" className="ghost-button" onClick={() => void handleStepJump("users")}>
+                  Edit
+                </button>
+              </div>
+              <p>{summarizeUser(wizard.admin_user)}</p>
+              {wizard.initial_users.map((user) => (
+                <p key={user.stage_id}>{summarizeUser(user)}</p>
+              ))}
+            </article>
+            <article className="review-card">
+              <div className="setup-card-toolbar">
+                <strong>Household</strong>
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() => void handleStepJump("household")}
+                >
+                  Edit
+                </button>
+              </div>
+              <p>{wizard.household_name || "Not configured yet"}</p>
+              <p>
+                {wizard.location_group_name}:{" "}
+                {wizard.storage_locations.length > 0 ? wizard.storage_locations.join(", ") : "No storage locations yet"}
+              </p>
+              <p>
+                Members:{" "}
+                {configuredUsers
+                  .map((user) => {
+                    if (user.is_platform_admin) {
+                      return `${summarizeUser(user)} (${getHouseholdRoleLabel("household_admin")})`;
+                    }
+                    const assignment = findAssignment(wizard.household_assignments, user.stage_id);
+                    if (!assignment) {
+                      return null;
+                    }
+                    return `${summarizeUser(user)} (${getHouseholdRoleLabel(assignment.role)})`;
+                  })
+                  .filter(Boolean)
+                  .join(", ") || "No household members selected yet"}
+              </p>
+            </article>
+            <article className="review-card">
+              <div className="setup-card-toolbar">
+                <strong>Public URL</strong>
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() => void handleStepJump("public_url")}
+                >
+                  Edit
+                </button>
+              </div>
+              <p>
+                {wizard.public_base_url
+                  ? wizard.public_base_url
+                  : wizard.skipped_optional_steps.includes("public_url")
+                    ? "Skipped for now"
+                    : "Not configured"}
+              </p>
+            </article>
+            <article className="review-card">
+              <div className="setup-card-toolbar">
+                <strong>Dietary preferences</strong>
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() => void handleStepJump("dietary")}
+                >
+                  Edit
+                </button>
+              </div>
+              <p>
+                {wizard.household_dietary_preferences.includes(DIETARY_NONE_OPTION)
+                  ? "None selected"
+                  : wizard.household_dietary_preferences.length > 0
+                    ? wizard.household_dietary_preferences.join(", ")
+                    : wizard.skipped_optional_steps.includes("dietary")
+                      ? "Skipped for now"
+                      : "Not configured"}
+              </p>
+              <p>
+                Personal preferences:{" "}
+                {wizard.user_dietary_preferences.length > 0
+                  ? wizard.user_dietary_preferences
+                      .map((preference) => {
+                        const user = allUsers.find(
+                          (candidate) => candidate.stage_id === preference.stage_user_id
+                        );
+                        const summary = preference.preferences.includes(DIETARY_NONE_OPTION)
+                          ? "None selected"
+                          : preference.preferences.join(", ");
+                        return `${user ? summarizeUser(user) : "Staged user"} (${summary})`;
+                      })
+                      .join(", ")
                   : wizard.skipped_optional_steps.includes("dietary")
                     ? "Skipped for now"
                     : "Not configured"}
-            </p>
-            <p>
-              Personal preferences:{" "}
-              {wizard.user_dietary_preferences.length > 0
-                ? wizard.user_dietary_preferences
-                    .map((preference) => {
-                      const user = allUsers.find(
-                        (candidate) => candidate.stage_id === preference.stage_user_id
-                      );
-                      const summary = preference.preferences.includes(DIETARY_NONE_OPTION)
-                        ? "None selected"
-                        : preference.preferences.join(", ");
-                      return `${user ? summarizeUser(user) : "Staged user"} (${summary})`;
-                    })
-                    .join(", ")
-                : wizard.skipped_optional_steps.includes("dietary")
-                  ? "Skipped for now"
-                  : "Not configured"}
-            </p>
-          </article>
-          <article className="review-card">
-            <div className="setup-card-toolbar">
-              <strong>AI</strong>
-              <button type="button" className="ghost-button" onClick={() => void handleStepJump("ai")}>
-                Edit
-              </button>
-            </div>
-            <p>
-              {wizard.ai_config.is_enabled
-                ? `${wizard.ai_config.provider_type} · ${wizard.ai_config.base_url} · ${wizard.ai_config.default_model}`
-                : wizard.skipped_optional_steps.includes("ai")
-                  ? "Skipped for now"
-                  : "Not configured"}
-            </p>
-          </article>
-          <article className="review-card">
-            <div className="setup-card-toolbar">
-              <strong>SMTP</strong>
-              <button
-                type="button"
-                className="ghost-button"
-                onClick={() => void handleStepJump("smtp")}
-              >
-                Edit
-              </button>
-            </div>
-            <p>
-              {wizard.smtp_config.is_enabled
-                ? `${wizard.smtp_config.host}:${wizard.smtp_config.port ?? ""}`
-                : wizard.skipped_optional_steps.includes("smtp")
-                  ? "Skipped for now"
-                  : "Not configured"}
-            </p>
-          </article>
-        </div>
+              </p>
+            </article>
+            <article className="review-card">
+              <div className="setup-card-toolbar">
+                <strong>AI</strong>
+                <button type="button" className="ghost-button" onClick={() => void handleStepJump("ai")}>
+                  Edit
+                </button>
+              </div>
+              <p>
+                {wizard.ai_config.is_enabled
+                  ? `${wizard.ai_config.provider_type} · ${wizard.ai_config.base_url} · ${wizard.ai_config.default_model}`
+                  : wizard.skipped_optional_steps.includes("ai")
+                    ? "Skipped for now"
+                    : "Not configured"}
+              </p>
+            </article>
+            <article className="review-card">
+              <div className="setup-card-toolbar">
+                <strong>SMTP</strong>
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() => void handleStepJump("smtp")}
+                >
+                  Edit
+                </button>
+              </div>
+              <p>
+                {wizard.smtp_config.is_enabled
+                  ? `${wizard.smtp_config.host}:${wizard.smtp_config.port ?? ""}`
+                  : wizard.skipped_optional_steps.includes("smtp")
+                    ? "Skipped for now"
+                    : "Not configured"}
+              </p>
+            </article>
+          </div>
+        )}
 
         {wizard.missing_requirements.length > 0 ? (
           <div className="setup-alert is-error">
@@ -1735,8 +1939,9 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
           <div className="setup-alert">
             <strong>Ready to finalize.</strong>
             <p>
-              Pantry will create users, the first household, memberships, locations, settings, and
-              any optional integrations in one final step.
+              {wizard.installation_mode === "restore_backup"
+                ? "Pantry will restore the staged full instance backup in one final step."
+                : "Pantry will create users, the first household, memberships, locations, settings, and any optional integrations in one final step."}
             </p>
           </div>
         )}

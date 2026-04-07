@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db_session
@@ -9,6 +9,7 @@ from app.schemas.setup import (
     SetupAIConfigUpdateRequest,
     SetupDietaryUpdateRequest,
     SetupHouseholdUpdateRequest,
+    SetupModeUpdateRequest,
     SetupPublicURLUpdateRequest,
     SetupSMTPConfigUpdateRequest,
     SetupStatusResponse,
@@ -21,9 +22,11 @@ from app.services.setup import (
     finalize_setup,
     get_setup_status,
     get_setup_wizard_state,
+    stage_setup_restore_upload,
     update_setup_ai,
     update_setup_dietary,
     update_setup_household,
+    update_setup_mode,
     update_setup_public_url,
     update_setup_smtp,
     update_setup_users,
@@ -50,6 +53,22 @@ def get_wizard_state(db: Session = Depends(get_db_session)):
 @router.put("/wizard/welcome", response_model=SetupWizardStateResponse)
 def put_welcome(payload: SetupWelcomeUpdateRequest, db: Session = Depends(get_db_session)):
     return update_setup_welcome(db, payload)
+
+
+@router.put("/wizard/mode", response_model=SetupWizardStateResponse)
+def put_mode(payload: SetupModeUpdateRequest, db: Session = Depends(get_db_session)):
+    return update_setup_mode(db, payload)
+
+
+@router.post("/wizard/restore-upload", response_model=SetupWizardStateResponse)
+async def post_restore_upload(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db_session),
+):
+    try:
+        return await stage_setup_restore_upload(db, file)
+    except ValueError as exc:
+        raise _handle_setup_error(exc) from exc
 
 
 @router.put("/wizard/users", response_model=SetupWizardStateResponse)
