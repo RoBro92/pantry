@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 import httpx
 
-from app.core.config import get_settings
+from app.core.config import get_settings, infer_release_check_repository
 from app.services.auth import create_platform_admin
 from app.services.releases import (
     ReleaseMetadata,
@@ -27,6 +27,21 @@ def test_compare_versions_handles_semver_shapes():
     assert compare_versions("0.1.0", "v0.1.0") == 0
     assert compare_versions("0.1.0-rc.1", "0.1.0") == -1
     assert compare_versions("0.1.0", "bad-version") is None
+
+
+def test_infer_release_check_repository_reads_origin_remote(monkeypatch, tmp_path):
+    config_path = tmp_path / "config"
+    config_path.write_text(
+        '[remote "origin"]\n\turl = https://github.com/example/pantry.git\n',
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr("app.core.config._resolve_git_config_path", lambda _: config_path)
+    infer_release_check_repository.cache_clear()
+    try:
+        assert infer_release_check_repository() == "example/pantry"
+    finally:
+        infer_release_check_repository.cache_clear()
 
 
 def test_build_release_check_summary_reports_update_available(monkeypatch):

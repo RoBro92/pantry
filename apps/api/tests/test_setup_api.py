@@ -125,6 +125,95 @@ def test_setup_public_url_can_be_cleared_without_marking_step_complete(client):
     assert step_states["public_url"] is False
 
 
+def test_setup_optional_steps_can_be_marked_skipped_and_report_complete(client):
+    response = client.put(
+        "/api/setup/wizard/public-url",
+        json={"public_base_url": "", "mark_skipped": True},
+    )
+    assert response.status_code == 200
+
+    response = client.put(
+        "/api/setup/wizard/dietary",
+        json={
+            "household_preferences": [],
+            "user_preferences": [],
+            "mark_skipped": True,
+        },
+    )
+    assert response.status_code == 200
+
+    response = client.put(
+        "/api/setup/wizard/ai",
+        json={
+            "provider_type": None,
+            "base_url": None,
+            "default_model": None,
+            "api_key": None,
+            "is_enabled": False,
+            "mark_skipped": True,
+        },
+    )
+    assert response.status_code == 200
+
+    response = client.put(
+        "/api/setup/wizard/smtp",
+        json={
+            "host": None,
+            "port": None,
+            "username": None,
+            "password": None,
+            "from_email": None,
+            "from_name": None,
+            "security": None,
+            "is_enabled": False,
+            "mark_skipped": True,
+        },
+    )
+    assert response.status_code == 200
+
+    payload = response.json()
+    assert sorted(payload["skipped_optional_steps"]) == ["ai", "dietary", "public_url", "smtp"]
+    step_states = {step["key"]: step["is_complete"] for step in payload["status"]["steps"]}
+    assert step_states["public_url"] is True
+    assert step_states["dietary"] is True
+    assert step_states["ai"] is True
+    assert step_states["smtp"] is True
+
+
+def test_setup_dietary_none_counts_as_complete_without_persisting_fake_preferences(client, db_session):
+    _save_required_setup_steps(client)
+
+    response = client.put(
+        "/api/setup/wizard/dietary",
+        json={
+            "household_preferences": ["None", "Vegan"],
+            "user_preferences": [{"stage_user_id": "user-1", "preferences": ["None", "Dairy-free"]}],
+        },
+    )
+    assert response.status_code == 200
+
+    payload = response.json()
+    assert payload["household_dietary_preferences"] == ["None"]
+    assert payload["user_dietary_preferences"] == [
+        {
+            "stage_user_id": "user-1",
+            "preferences": ["None"],
+        }
+    ]
+    step_states = {step["key"]: step["is_complete"] for step in payload["status"]["steps"]}
+    assert step_states["dietary"] is True
+
+    finalize_response = client.post("/api/setup/wizard/finalize")
+    assert finalize_response.status_code == 200
+
+    users = db_session.scalars(select(User).order_by(User.email)).all()
+    assert users[0].dietary_preferences is None
+
+    household = db_session.scalar(select(Household))
+    assert household is not None
+    assert household.dietary_preferences is None
+
+
 def test_setup_finalize_commits_all_staged_data_and_authenticates(client, db_session):
     _save_required_setup_steps(client)
 

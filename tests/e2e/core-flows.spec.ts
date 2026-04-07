@@ -56,6 +56,12 @@ test("first-run setup handles staged users, skips optional steps, and completes 
   await expect(wizard.getByRole("button", { name: "Next" })).toBeDisabled();
   await adminFields.getByLabel("Password", { exact: true }).fill("correct horse battery");
   await adminFields.getByLabel("Confirm password").fill("correct horse battery");
+  await page.getByRole("heading", { name: "Admin account and initial users" }).click();
+  await expect(page.getByTestId("setup-admin-password-status")).toContainText("Password saved");
+  await expect(adminFields.getByLabel("Password", { exact: true })).toHaveValue(
+    "correct horse battery",
+  );
+  await expect(adminFields.getByLabel("Confirm password")).toHaveValue("correct horse battery");
 
   await usersStep.getByRole("button", { name: "Add additional user" }).click();
   await usersStep.getByRole("button", { name: "Add additional user" }).click();
@@ -130,10 +136,10 @@ test("first-run setup handles staged users, skips optional steps, and completes 
 
   await expect(page.getByRole("heading", { name: "Review and complete" })).toBeVisible();
   await expect(progressItems.nth(2).locator(".setup-progress-count")).toHaveText("✓");
-  await expect(progressItems.nth(3).locator(".setup-progress-count")).toHaveText("4");
-  await expect(progressItems.nth(4).locator(".setup-progress-count")).toHaveText("5");
-  await expect(progressItems.nth(5).locator(".setup-progress-count")).toHaveText("6");
-  await expect(progressItems.nth(6).locator(".setup-progress-count")).toHaveText("7");
+  await expect(progressItems.nth(3).locator(".setup-progress-count")).toHaveText("✓");
+  await expect(progressItems.nth(4).locator(".setup-progress-count")).toHaveText("✓");
+  await expect(progressItems.nth(5).locator(".setup-progress-count")).toHaveText("✓");
+  await expect(progressItems.nth(6).locator(".setup-progress-count")).toHaveText("✓");
   await expect(page.getByText("Skipped for now")).toHaveCount(4);
   await expect(page.getByText(/Alex \(alex\) \(User\)/)).toBeVisible();
   await wizard.getByRole("button", { name: "Complete Setup" }).click();
@@ -141,6 +147,40 @@ test("first-run setup handles staged users, skips optional steps, and completes 
   await expect(page).toHaveURL(/\/app$/);
   await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
   await expect(page.locator(".household-card").getByText("Brown Household")).toBeVisible();
+});
+
+test("dietary none selection persists and marks the step complete", async ({ page }) => {
+  resetToUninitialized();
+
+  await page.goto("/setup");
+  const wizard = page.getByTestId("setup-wizard");
+  await wizard.getByRole("button", { name: "Next" }).click();
+
+  const usersStep = page.getByTestId("setup-users-step");
+  await usersStep.getByLabel("Username or email").fill("owner");
+  await usersStep.getByLabel("Password", { exact: true }).fill("correct horse battery");
+  await usersStep.getByLabel("Confirm password").fill("correct horse battery");
+  await wizard.getByRole("button", { name: "Next" }).click();
+
+  await page.getByLabel("Household name").fill("Brown Household");
+  await page.getByLabel("Additional storage locations").fill("Fridge");
+  await page.getByRole("button", { name: "Add" }).first().click();
+  await wizard.getByRole("button", { name: "Next" }).click();
+  await wizard.getByRole("button", { name: "Skip for now" }).click();
+
+  await expect(page.getByRole("heading", { name: "Dietary preferences" })).toBeVisible();
+  await page.getByRole("button", { name: "None" }).first().click();
+  await expect(page.getByRole("button", { name: "None Remove" })).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Dietary preferences" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "None Remove" })).toBeVisible();
+
+  await wizard.getByRole("button", { name: "Next" }).click();
+  await expect(page.getByRole("heading", { name: "AI configuration" })).toBeVisible();
+  await expect(wizard.locator(".setup-progress-item").nth(4).locator(".setup-progress-count")).toHaveText(
+    "✓",
+  );
 });
 
 test("setup and login forms render explicit autofill-safe field metadata", async ({ page }) => {
@@ -216,10 +256,12 @@ test("platform admin diagnostics page loads against the docker stack", async ({ 
 
   await page.goto("/admin/diagnostics");
 
-  await expect(page.getByRole("heading", { name: "Measured Runtime State" })).toBeVisible();
-  await expect(page.getByText("Deployment mode self_hosted")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Runtime State" })).toBeVisible();
+  await expect(page.getByText(/Deployment Self-hosted/i)).toBeVisible();
+  await expect(page.getByText(/uptime .*minute/i)).toBeVisible();
   await expect(page.getByText("Update Check")).toBeVisible();
   await expect(page.getByText("Queue And Worker")).toBeVisible();
+  await expect(page.getByText("Default")).toBeVisible();
 });
 
 test("pantry flow covers create location, add stock, move stock, and remove stock", async ({
