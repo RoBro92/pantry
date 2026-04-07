@@ -43,6 +43,8 @@ Pantry is a small monorepo with three runtime services, a staged first-run setup
 
 - Household scoping is enforced server-side
 - Imports remain review-first
+- External food data enrichment is confirmation-first, source-attributed, and stored separately from Pantry product identity
+- Open Food Facts is the first external enrichment source; provider-specific logic stays isolated in a dedicated service module
 - Uploaded files are treated as hostile input
 - Backup uploads are validated as data only, staged in quarantine, and never executed
 - Secrets are encrypted before being stored in database-backed configuration or staged setup state

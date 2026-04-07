@@ -5,6 +5,7 @@ Pantry is a self-hosted household inventory and meal management application for 
 ## Features
 
 - Pantry inventory with rooms, storage locations, stock lots, and expiry tracking
+- Optional Open Food Facts product enrichment with confirmation-first linking
 - Recipe management with pantry coverage insights
 - Review-first import flows
 - QR location access
@@ -58,7 +59,9 @@ Restore currently accepts Pantry-native full instance JSON backup bundles only. 
 
 ## Pantry Workflow
 
-The household pantry page is built as one searchable pantry view. Use `Search` to find products by name or alias, review every stock lot with its room, storage location, dates, and notes, and use `Add product` to create a product and its first stock lot in one flow.
+The household pantry page is built as one searchable pantry view. Use `Search` to find products by name, alias, or barcode, review every stock lot with its room, storage location, dates, and notes, and use `Add product` to create a product and its first stock lot in one flow.
+
+When adding a product, Pantry can optionally preview Open Food Facts details such as image, ingredients, allergens, traces, labels, and a compact nutrition summary. This data is advisory only, must be confirmed before it is linked, and does not replace the Pantry product's own name or stock records.
 
 ## Updating Pantry
 

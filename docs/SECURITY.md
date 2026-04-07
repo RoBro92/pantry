@@ -26,3 +26,10 @@ Pantry treats lifecycle and recovery inputs as hostile until proven otherwise.
 ## Scope
 
 This milestone does not add SaaS backup automation or self-updating behaviour. Recovery remains operator-driven and local-installation focused.
+
+## External Data Handling
+
+- Pantry may fetch optional product enrichment data from Open Food Facts for barcode and name-based lookups.
+- Open Food Facts data is community-contributed and treated as advisory metadata, not Pantry's canonical product identity.
+- Pantry validates external URLs and stores only selected, product-facing fields instead of logging or persisting whole upstream payloads.
+- Enrichment must be explicitly confirmed by a user before Pantry links it to a product.

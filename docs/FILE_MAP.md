@@ -5,7 +5,7 @@ Quick reference for the public repository layout.
 ## Application Code
 
 - `apps/web/`: Next.js frontend
-- `apps/api/`: FastAPI backend, Alembic migrations, API tests, release metadata logic, backup/restore services, and setup finalisation logic
+- `apps/api/`: FastAPI backend, Alembic migrations, API tests, pantry enrichment services, release metadata logic, backup/restore services, and setup finalisation logic
 - `apps/worker/`: background worker
 - `packages/shared-types/`: shared TypeScript constants and types
 
