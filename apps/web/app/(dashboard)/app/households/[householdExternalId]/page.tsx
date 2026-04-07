@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { LocationQRCodeCard } from "../../../../../components/location-qr-card";
 import { PantryControls } from "../../../../../components/pantry-controls";
-import { PantryLotActions } from "../../../../../components/pantry-lot-actions";
+import { PantryProductCard } from "../../../../../components/pantry-product-card";
 import { StatusCard } from "../../../../../components/status-card";
 import {
   getNearExpiry,
@@ -40,8 +40,8 @@ export default async function HouseholdPantryPage({
         <p className="eyebrow">Household Pantry</p>
         <h1>{overview.household_name}</h1>
         <p>
-          Household role: <strong>{overview.effective_role}</strong>. Stock totals are aggregated
-          from active lots, and lot moves preserve identity when the entire lot moves intact.
+          Household role: <strong>{overview.effective_role}</strong>. Browse the pantry as one
+          searchable list of products, with each stock lot shown where it is stored.
         </p>
         <div className="page-actions">
           <Link
@@ -67,19 +67,19 @@ export default async function HouseholdPantryPage({
 
       <section className="status-grid">
         <StatusCard
-          title="Location Groups"
+          title="Rooms"
           value={String(overview.counts.location_group_count)}
-          detail="Storage zones such as pantry, freezer, garage, or cellar."
+          detail="High-level spaces such as Kitchen, Garage, or Utility room."
         />
         <StatusCard
-          title="Locations"
+          title="Storage Locations"
           value={String(overview.counts.location_count)}
-          detail="Concrete shelves, drawers, bins, or racks within this household."
+          detail="Shelves, drawers, bins, fridges, or racks inside each room."
         />
         <StatusCard
           title="Products"
           value={String(overview.counts.product_count)}
-          detail="Normalized household products with deterministic aliases and barcodes."
+          detail="Named pantry products that can carry one or more active stock lots."
         />
         <StatusCard
           title="Near Expiry"
@@ -88,179 +88,73 @@ export default async function HouseholdPantryPage({
         />
       </section>
 
-      <section className="panel">
-        <p className="eyebrow">Search And Filters</p>
-        <form className="filter-form" method="GET">
-          <label className="field">
-            <span>Search</span>
-            <input
-              name="q"
-              defaultValue={overview.filters.q ?? ""}
-              placeholder="Product, alias, barcode, or location"
-            />
-          </label>
-          <label className="field">
-            <span>Location group</span>
-            <select
-              name="location_group_external_id"
-              defaultValue={overview.filters.location_group_external_id ?? ""}
-            >
-              <option value="">All groups</option>
-              {overview.location_groups.map((group) => (
-                <option key={group.external_id} value={group.external_id}>
-                  {group.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="field">
-            <span>Location</span>
-            <select
-              name="location_external_id"
-              defaultValue={overview.filters.location_external_id ?? ""}
-            >
-              <option value="">All locations</option>
-              {overview.locations.map((location) => (
-                <option key={location.external_id} value={location.external_id}>
-                  {location.location_group_name} / {location.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="filter-actions">
-            <button type="submit" className="primary-button">
-              Apply filters
-            </button>
-            <Link
-              href={`/app/households/${overview.household_external_id}`}
-              className="secondary-link"
-            >
-              Clear
-            </Link>
-          </div>
-        </form>
-      </section>
-
       <PantryControls
         householdExternalId={overview.household_external_id}
         canAdminister={overview.can_administer}
         locationGroups={overview.location_groups}
         locations={overview.locations}
-        products={overview.catalog_products}
+        filters={overview.filters}
       />
 
       <section className="panel">
-        <p className="eyebrow">Location QR Links</p>
+        <p className="eyebrow">Pantry overview</p>
+        <div className="setup-card-toolbar">
+          <div className="stack compact-stack">
+            <h2>
+              {overview.filters.q
+                ? `Search results for “${overview.filters.q}”`
+                : "Everything currently in the pantry"}
+            </h2>
+            <p className="section-copy">
+              {overview.products.length} product
+              {overview.products.length === 1 ? "" : "s"} currently match the active search.
+            </p>
+          </div>
+          {(overview.filters.q ||
+            overview.filters.location_group_external_id ||
+            overview.filters.location_external_id) ? (
+            <Link href={`/app/households/${overview.household_external_id}`} className="secondary-link">
+              Clear search
+            </Link>
+          ) : null}
+        </div>
+        {overview.products.length === 0 ? (
+          <div className="empty-state">
+            <p>
+              {overview.filters.q ||
+              overview.filters.location_group_external_id ||
+              overview.filters.location_external_id
+                ? "No pantry items match this search yet. Try a different product name or room."
+                : "No pantry items have been added yet. Use Add product to create the first item and stock lot."}
+            </p>
+          </div>
+        ) : (
+          <div className="pantry-product-list">
+            {overview.products.map((product) => (
+              <PantryProductCard
+                key={product.product_external_id}
+                householdExternalId={overview.household_external_id}
+                product={product}
+                locations={overview.locations}
+              />
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="panel">
+        <p className="eyebrow">Location QR links</p>
         <p>
-          QR codes resolve to an authenticated browser route for each location and use the current
+          QR codes resolve to an authenticated route for each storage location and use the current
           configured public browser URL.
         </p>
         {overview.locations.length === 0 ? (
-          <p>Create a location to generate its QR link.</p>
+          <p>Create a storage location to generate its QR link.</p>
         ) : (
           <div className="location-link-grid">
             {overview.locations.map((location) => (
               <LocationQRCodeCard key={location.external_id} location={location} />
             ))}
-          </div>
-        )}
-      </section>
-
-      <section className="panel">
-        <p className="eyebrow">Aggregated Pantry View</p>
-        {overview.products.length === 0 ? (
-          <p>
-            No active pantry totals match the current filter set. Clear the filters, add stock, or
-            ask a household admin to create the missing locations and products.
-          </p>
-        ) : (
-          <div className="product-list">
-            {overview.products.map((product) => (
-              <article key={product.product_external_id} className="product-card">
-                <div className="product-card-header">
-                  <div>
-                    <h2>{product.product_name}</h2>
-                    <p>
-                      {product.total_quantity} {product.unit} across {product.lot_count} lot
-                      {product.lot_count === 1 ? "" : "s"}.
-                    </p>
-                  </div>
-                  <div className="tag-row">
-                    {product.aliases.map((alias) => (
-                      <span key={alias} className="tag">
-                        {alias}
-                      </span>
-                    ))}
-                    {product.barcodes.map((barcode) => (
-                      <span key={barcode} className="tag subtle-tag">
-                        {barcode}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-                <ul className="detail-list">
-                  {product.locations.map((location) => (
-                    <li key={location.location_external_id}>
-                      <strong>
-                        {location.location_group_name} / {location.location_name}
-                      </strong>
-                      <span>
-                        {location.total_quantity} {product.unit} in {location.lot_count} lot
-                        {location.lot_count === 1 ? "" : "s"}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </article>
-            ))}
-          </div>
-        )}
-      </section>
-
-      <section className="panel">
-        <p className="eyebrow">Stock Lots</p>
-        {overview.stock_lots.length === 0 ? (
-          <p>
-            No active stock lots match the current filter set. Add stock once the right product and
-            location exist.
-          </p>
-        ) : (
-          <div className="table-wrap">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Product</th>
-                  <th>Location</th>
-                  <th>Quantity</th>
-                  <th>Expiry</th>
-                  <th>Note</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {overview.stock_lots.map((lot) => (
-                  <tr key={lot.external_id} data-testid={`stock-lot-row-${lot.external_id}`}>
-                    <td>{lot.product_name}</td>
-                    <td>
-                      {lot.location_group_name} / {lot.location_name}
-                    </td>
-                    <td>
-                      {lot.quantity} {lot.unit}
-                    </td>
-                    <td>{lot.expires_on ?? "None"}</td>
-                    <td>{lot.note ?? "None"}</td>
-                    <td className="table-action-cell">
-                      <PantryLotActions
-                        householdExternalId={overview.household_external_id}
-                        lotExternalId={lot.external_id}
-                        currentLocationExternalId={lot.location_external_id}
-                        locations={overview.locations}
-                      />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
           </div>
         )}
       </section>
