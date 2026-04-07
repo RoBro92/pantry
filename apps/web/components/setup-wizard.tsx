@@ -154,6 +154,21 @@ function getPersistablePassword(draft: PasswordDraft | undefined) {
   return draft.password ? draft.password : null;
 }
 
+function getRestoreValidationIssues(wizard: SetupWizardStateResponse) {
+  if (wizard.installation_mode !== "restore_backup") {
+    return [];
+  }
+  if (!wizard.staged_restore) {
+    return ["Upload and validate a full instance Pantry backup before continuing."];
+  }
+  if (wizard.staged_restore.supported_for_restore) {
+    return [];
+  }
+  return wizard.staged_restore.warnings.length > 0
+    ? wizard.staged_restore.warnings
+    : ["This staged backup does not meet the current restore requirements."];
+}
+
 function getUsersStepValidation(
   wizard: SetupWizardStateResponse,
   adminPasswordDraft: PasswordDraft,
@@ -380,6 +395,11 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
   const stepOrder = getStepOrder(wizard.installation_mode);
   const canSkipCurrentStep =
     wizard.installation_mode === "fresh_install" && OPTIONAL_STEPS.has(currentStep);
+  const restoreValidationIssues = getRestoreValidationIssues(wizard);
+  const restoreCannotContinue =
+    currentStep === "welcome" &&
+    wizard.installation_mode === "restore_backup" &&
+    restoreValidationIssues.length > 0;
 
   function moveToStep(step: SetupStepKey) {
     setCurrentStep(step);
@@ -494,7 +514,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
           !snapshot.staged_restore?.supported_for_restore
         ) {
           if (!suppressErrors) {
-            setError("Upload and validate a full instance Pantry backup before continuing.");
+            setError(getRestoreValidationIssues(snapshot).join(" "));
           }
           return false;
         }
@@ -831,7 +851,12 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
         "/api/setup/wizard/restore-upload",
         formData
       );
-      updateWizard(nextState, "Restore backup staged safely.");
+      updateWizard(
+        nextState,
+        nextState.staged_restore?.supported_for_restore
+          ? "Restore backup staged safely."
+          : "Backup uploaded, but Pantry cannot restore it on this installation."
+      );
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Restore upload failed.");
     } finally {
@@ -1012,10 +1037,23 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
 
               {wizard.staged_restore ? (
                 <div className="stack">
-                  <div className="info-callout">
-                    <strong>Staged restore bundle</strong>
+                  <div
+                    className={
+                      wizard.staged_restore.supported_for_restore ? "info-callout" : "warning-callout"
+                    }
+                  >
+                    <strong>
+                      {wizard.staged_restore.supported_for_restore
+                        ? "Staged restore bundle"
+                        : "Restore blocked for this backup"}
+                    </strong>
                     <p>
                       {wizard.staged_restore.original_filename} · {wizard.staged_restore.bundle.scope} · exported from Pantry {wizard.staged_restore.bundle.app_version}
+                    </p>
+                    <p>
+                      {wizard.staged_restore.supported_for_restore
+                        ? "Validated and ready to continue to review."
+                        : "Pantry staged the file safely, but this backup does not meet the current restore requirements."}
                     </p>
                   </div>
                   <ul className="callout-list">
@@ -1977,6 +2015,16 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
       <div className="setup-main">
         {statusMessage ? <p className="status-note">{statusMessage}</p> : null}
         {error ? <p className="error-text">{error}</p> : null}
+        {restoreCannotContinue ? (
+          <div className="setup-alert is-error" data-testid="setup-restore-blocked">
+            <strong>This backup cannot be restored yet.</strong>
+            <ul>
+              {restoreValidationIssues.map((issue) => (
+                <li key={issue}>{issue}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
         {renderStep()}
 
         <div className="wizard-actions">
@@ -2012,7 +2060,11 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
               <button
                 type="button"
                 className="primary-button"
-                disabled={isSaving || (currentStep === "users" && !usersValidation.canContinue)}
+                disabled={
+                  isSaving ||
+                  (currentStep === "users" && !usersValidation.canContinue) ||
+                  restoreCannotContinue
+                }
                 onClick={handleNext}
               >
                 {isSaving ? "Saving..." : "Next"}

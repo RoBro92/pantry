@@ -203,6 +203,47 @@ test("setup can restore from a staged Pantry backup bundle", async ({ page }) =>
   await expect(page.getByRole("cell", { name: manifest.household_name })).toBeVisible();
 });
 
+test("setup shows a clear restore error when a backup cannot be restored on this schema", async ({
+  page
+}) => {
+  await loginThroughApi(page, {
+    email: manifest.admin_email,
+    password: manifest.password
+  });
+
+  const exportResponse = await page.request.get(
+    "http://localhost:8000/api/platform-admin/backups/export/instance"
+  );
+  expect(exportResponse.ok()).toBeTruthy();
+  const backup = JSON.parse(await exportResponse.text()) as {
+    schema_revision: string | null;
+  };
+  backup.schema_revision = "mismatched-schema-revision";
+
+  resetToUninitialized();
+  await page.context().clearCookies();
+
+  await page.goto("/setup");
+  const wizard = page.getByTestId("setup-wizard");
+
+  await page.getByRole("button", { name: "Choose restore" }).click();
+  await page.locator('input[type="file"][name="file"]').setInputFiles({
+    name: "pantry-instance-backup.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify(backup), "utf-8")
+  });
+  await page.getByRole("button", { name: "Upload and validate" }).click();
+
+  await expect(
+    page.getByText("Backup uploaded, but Pantry cannot restore it on this installation.")
+  ).toBeVisible();
+  await expect(page.getByTestId("setup-restore-blocked")).toContainText(
+    "Cross-version restore is not supported yet."
+  );
+  await expect(page.getByText("Restore blocked for this backup")).toBeVisible();
+  await expect(wizard.getByRole("button", { name: "Next" })).toBeDisabled();
+});
+
 test("dietary none selection persists and marks the step complete", async ({ page }) => {
   resetToUninitialized();
 
