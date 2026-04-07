@@ -386,3 +386,78 @@ def test_setup_restore_path_stages_backup_and_only_completes_on_success(client, 
     restored_household = db_session.scalar(select(Household))
     assert restored_household is not None
     assert restored_household.name == "Brown Household"
+
+
+def test_setup_restore_accepts_known_compatible_previous_schema_bundle(client, db_session):
+    _save_required_setup_steps(client)
+    finalize_response = client.post("/api/setup/wizard/finalize")
+    assert finalize_response.status_code == 200
+
+    export_response = client.get("/api/platform-admin/backups/export/instance")
+    assert export_response.status_code == 200
+    bundle = json.loads(export_response.text)
+    bundle["schema_revision"] = "20260407_000009"
+    bundle["tables"].pop("product_enrichments", None)
+
+    for table in reversed(Base.metadata.sorted_tables):
+        if table.name == Role.__tablename__:
+            continue
+        db_session.execute(delete(table))
+    db_session.commit()
+
+    welcome_response = client.put("/api/setup/wizard/welcome", json={"acknowledged": True})
+    assert welcome_response.status_code == 200
+
+    upload_response = client.post(
+        "/api/setup/wizard/restore-upload",
+        files={"file": ("restore-bundle.json", json.dumps(bundle), "application/json")},
+    )
+    assert upload_response.status_code == 200
+    staged_payload = upload_response.json()
+    assert staged_payload["installation_mode"] == "restore_backup"
+    assert staged_payload["staged_restore"]["supported_for_restore"] is True
+    assert (
+        "This backup predates product enrichment support. Product enrichment records will restore as empty."
+        in staged_payload["staged_restore"]["warnings"]
+    )
+    assert staged_payload["can_complete"] is True
+
+    restored_finalize = client.post("/api/setup/wizard/finalize")
+    assert restored_finalize.status_code == 200
+    assert restored_finalize.json()["user"]["email"] == "owner"
+
+    restored_users = db_session.scalars(select(User).order_by(User.email)).all()
+    assert [user.email for user in restored_users] == ["alex", "owner"]
+
+
+def test_setup_restore_rejects_unknown_previous_schema_bundle(client, db_session):
+    _save_required_setup_steps(client)
+    finalize_response = client.post("/api/setup/wizard/finalize")
+    assert finalize_response.status_code == 200
+
+    export_response = client.get("/api/platform-admin/backups/export/instance")
+    assert export_response.status_code == 200
+    bundle = json.loads(export_response.text)
+    bundle["schema_revision"] = "20260406_000008"
+    bundle["tables"].pop("product_enrichments", None)
+
+    for table in reversed(Base.metadata.sorted_tables):
+        if table.name == Role.__tablename__:
+            continue
+        db_session.execute(delete(table))
+    db_session.commit()
+
+    welcome_response = client.put("/api/setup/wizard/welcome", json={"acknowledged": True})
+    assert welcome_response.status_code == 200
+
+    upload_response = client.post(
+        "/api/setup/wizard/restore-upload",
+        files={"file": ("restore-bundle.json", json.dumps(bundle), "application/json")},
+    )
+    assert upload_response.status_code == 200
+    staged_payload = upload_response.json()
+    assert staged_payload["staged_restore"]["supported_for_restore"] is False
+    assert (
+        "This backup was created from a different Pantry schema revision, and this version gap is not restore-compatible yet."
+        in staged_payload["staged_restore"]["warnings"]
+    )

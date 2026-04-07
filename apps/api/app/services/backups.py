@@ -62,6 +62,27 @@ class StagedBackupUpload:
     warnings: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class RestoreCompatibility:
+    supported: bool
+    allowed_missing_tables: frozenset[str]
+    warnings: tuple[str, ...]
+
+
+_SCHEMA_COMPATIBILITY: dict[tuple[str | None, str | None], RestoreCompatibility] = {
+    (
+        "20260407_000010",
+        "20260407_000009",
+    ): RestoreCompatibility(
+        supported=True,
+        allowed_missing_tables=frozenset({"product_enrichments"}),
+        warnings=(
+            "This backup predates product enrichment support. Product enrichment records will restore as empty.",
+        ),
+    ),
+}
+
+
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -219,6 +240,23 @@ def _validate_bundle_payload(payload: dict[str, Any]) -> dict[str, Any]:
     return payload
 
 
+def _restore_compatibility(*, current_revision: str | None, bundle_revision: str | None) -> RestoreCompatibility:
+    if current_revision == bundle_revision:
+        return RestoreCompatibility(
+            supported=True,
+            allowed_missing_tables=frozenset(),
+            warnings=(),
+        )
+    return _SCHEMA_COMPATIBILITY.get(
+        (current_revision, bundle_revision),
+        RestoreCompatibility(
+            supported=False,
+            allowed_missing_tables=frozenset(),
+            warnings=(),
+        ),
+    )
+
+
 def _validate_restore_bundle(db: Session, bundle: dict[str, Any]) -> None:
     payload = _validate_bundle_payload(bundle)
     if payload["scope"] != "instance":
@@ -226,16 +264,20 @@ def _validate_restore_bundle(db: Session, bundle: dict[str, Any]) -> None:
 
     current_revision = _current_schema_revision(db)
     bundle_revision = payload.get("schema_revision")
-    if current_revision != bundle_revision:
+    compatibility = _restore_compatibility(current_revision=current_revision, bundle_revision=bundle_revision)
+    if not compatibility.supported:
         raise ValueError(
-            "Backup schema revision does not match the running Pantry schema. Export and restore must currently use the same migrated schema revision."
+            "Backup schema revision does not match the running Pantry schema, and this older revision is not marked restore-compatible."
         )
 
     expected_tables = {table.name for table in Base.metadata.sorted_tables}
     actual_tables = set((payload.get("tables") or {}).keys())
-    if expected_tables != actual_tables:
-        missing_tables = sorted(expected_tables - actual_tables)
-        unexpected_tables = sorted(actual_tables - expected_tables)
+    missing_tables = expected_tables - actual_tables
+    unexpected_tables = actual_tables - expected_tables
+    disallowed_missing_tables = missing_tables - compatibility.allowed_missing_tables
+    if disallowed_missing_tables or unexpected_tables:
+        missing_tables = sorted(disallowed_missing_tables)
+        unexpected_tables = sorted(unexpected_tables)
         details: list[str] = []
         if missing_tables:
             details.append(f"missing tables: {', '.join(missing_tables)}")
@@ -348,15 +390,20 @@ async def stage_backup_upload(
     ]
 
     current_revision = _current_schema_revision(db)
-    supported_for_restore = True
+    compatibility = _restore_compatibility(
+        current_revision=current_revision,
+        bundle_revision=bundle.get("schema_revision"),
+    )
+    supported_for_restore = compatibility.supported
     if bundle["scope"] not in allowed_restore_scopes:
         supported_for_restore = False
         warnings.append("This backup scope can be exported, but it is not restorable through this flow.")
-    if bundle.get("schema_revision") != current_revision:
-        supported_for_restore = False
+    if not compatibility.supported:
         warnings.append(
-            "This backup was created from a different Pantry schema revision. Cross-version restore is not supported yet."
+            "This backup was created from a different Pantry schema revision, and this version gap is not restore-compatible yet."
         )
+    else:
+        warnings.extend(compatibility.warnings)
 
     stage_id = secrets.token_hex(16)
     uploaded_at = _utc_now()
