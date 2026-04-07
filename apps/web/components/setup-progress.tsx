@@ -7,13 +7,11 @@ type SetupProgressProps = {
 };
 
 export function SetupProgress({ steps, currentStep, onJump }: SetupProgressProps) {
-  const currentIndex = steps.findIndex((step) => step.key === currentStep);
-
   return (
     <nav className="setup-progress" aria-label="Setup progress">
       {steps.map((step, index) => {
         const isCurrent = step.key === currentStep;
-        const isCompleted = step.is_complete && index < currentIndex;
+        const isCompleted = step.is_complete && !isCurrent;
         const stateClass = isCurrent ? "is-current" : isCompleted ? "is-complete" : "is-upcoming";
         return (
           <button

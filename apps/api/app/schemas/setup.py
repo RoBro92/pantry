@@ -82,6 +82,7 @@ class SetupWizardStateResponse(BaseModel):
     storage_locations: list[str] = Field(default_factory=list)
     household_assignments: list[StagedSetupAssignmentSummary] = Field(default_factory=list)
     public_base_url: str | None = None
+    skipped_optional_steps: list[SetupStepKey] = Field(default_factory=list)
     household_dietary_preferences: list[str] = Field(default_factory=list)
     user_dietary_preferences: list[StagedSetupDietaryUserSummary] = Field(default_factory=list)
     ai_config: StagedSetupAIConfigSummary = Field(default_factory=StagedSetupAIConfigSummary)
@@ -122,6 +123,7 @@ class SetupHouseholdUpdateRequest(BaseModel):
 
 class SetupPublicURLUpdateRequest(BaseModel):
     public_base_url: str
+    mark_skipped: bool = False
 
 
 class SetupDietaryUserInput(BaseModel):
@@ -132,6 +134,7 @@ class SetupDietaryUserInput(BaseModel):
 class SetupDietaryUpdateRequest(BaseModel):
     household_preferences: list[str] = Field(default_factory=list)
     user_preferences: list[SetupDietaryUserInput] = Field(default_factory=list)
+    mark_skipped: bool = False
 
 
 class SetupAIConfigUpdateRequest(BaseModel):
@@ -140,6 +143,7 @@ class SetupAIConfigUpdateRequest(BaseModel):
     default_model: str | None = None
     api_key: str | None = None
     is_enabled: bool = False
+    mark_skipped: bool = False
 
 
 class SetupSMTPConfigUpdateRequest(BaseModel):
@@ -151,6 +155,7 @@ class SetupSMTPConfigUpdateRequest(BaseModel):
     from_name: str | None = None
     security: str | None = None
     is_enabled: bool = False
+    mark_skipped: bool = False
 
 
 class LoginCompatibilityRequest(BaseModel):

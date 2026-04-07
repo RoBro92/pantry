@@ -53,6 +53,7 @@ from app.services.secrets import encrypt_secret
 SETUP_SCOPE_KEY = "instance"
 SETUP_STATUS_IN_PROGRESS = "in_progress"
 SETUP_STATUS_COMPLETED = "completed"
+DIETARY_NONE_OPTION = "None"
 SETUP_STEP_TITLES = {
     "welcome": "Welcome",
     "users": "Admin and users",
@@ -64,6 +65,7 @@ SETUP_STEP_TITLES = {
     "review": "Review and complete",
 }
 REQUIRED_STEPS = {"welcome", "users", "household"}
+OPTIONAL_STEPS = {"public_url", "dietary", "ai", "smtp"}
 DEFAULT_LOCATION_GROUP_NAME = "Kitchen"
 DEFAULT_ADMIN_STAGE_ID = "platform-admin"
 
@@ -89,6 +91,7 @@ def _default_payload() -> dict[str, object]:
             "assignments": [],
         },
         "public_base_url": "",
+        "skipped_optional_steps": [],
         "dietary": {
             "household_preferences": [],
             "user_preferences": {},
@@ -139,6 +142,12 @@ def _merged_payload(payload: dict[str, object] | None) -> dict[str, object]:
         merged["household"].update(source["household"])  # type: ignore[arg-type]
     if isinstance(source.get("public_base_url"), str):
         merged["public_base_url"] = source["public_base_url"]
+    if isinstance(source.get("skipped_optional_steps"), list):
+        merged["skipped_optional_steps"] = [
+            str(step)
+            for step in source["skipped_optional_steps"]
+            if str(step) in OPTIONAL_STEPS
+        ]
     if isinstance(source.get("dietary"), dict):
         merged["dietary"].update(source["dietary"])  # type: ignore[arg-type]
     if isinstance(source.get("ai"), dict):
@@ -170,6 +179,21 @@ def _normalize_password_hash(password: str | None, *, existing_hash: str | None)
 
 def _normalize_preferences(values: list[str]) -> list[str]:
     return dedupe_preserving_order([item.strip() for item in values if item.strip()])
+
+
+def _normalize_setup_dietary_preferences(values: list[str]) -> list[str]:
+    normalized = _normalize_preferences(values)
+    if any(value.casefold() == DIETARY_NONE_OPTION.casefold() for value in normalized):
+        return [DIETARY_NONE_OPTION]
+    return normalized
+
+
+def _normalize_final_dietary_preferences(values: list[str]) -> list[str]:
+    return [
+        value
+        for value in _normalize_setup_dietary_preferences(values)
+        if value.casefold() != DIETARY_NONE_OPTION.casefold()
+    ]
 
 
 def _normalize_optional_public_base_url(value: str | None) -> str | None:
@@ -209,6 +233,7 @@ def _compute_step_completion(payload: dict[str, object]) -> dict[str, bool]:
     dietary = payload["dietary"]
     ai = payload["ai"]
     smtp = payload["smtp"]
+    skipped_optional_steps = set(payload.get("skipped_optional_steps") or [])
 
     users_complete = (
         bool(admin_user.get("login"))
@@ -216,14 +241,20 @@ def _compute_step_completion(payload: dict[str, object]) -> dict[str, bool]:
         and all(bool(user.get("login")) and bool(user.get("password_hash")) for user in initial_users)
     )
     household_complete = bool(str(household.get("name") or "").strip()) and len(household.get("storage_locations") or []) > 0
-    public_url_complete = bool(str(payload.get("public_base_url") or "").strip())
-    dietary_complete = bool(dietary.get("household_preferences") or dietary.get("user_preferences"))
-    ai_enabled = bool(ai.get("is_enabled"))
-    ai_complete = ai_enabled and (
-        bool(ai.get("provider_type")) and bool(ai.get("base_url")) and bool(ai.get("default_model"))
+    public_url_complete = bool(str(payload.get("public_base_url") or "").strip()) or "public_url" in skipped_optional_steps
+    dietary_complete = (
+        bool(dietary.get("household_preferences") or dietary.get("user_preferences"))
+        or "dietary" in skipped_optional_steps
     )
+    ai_enabled = bool(ai.get("is_enabled"))
+    ai_complete = (
+        ai_enabled
+        and bool(ai.get("provider_type"))
+        and bool(ai.get("base_url"))
+        and bool(ai.get("default_model"))
+    ) or "ai" in skipped_optional_steps
     smtp_enabled = bool(smtp.get("is_enabled"))
-    smtp_complete = smtp_enabled and bool(smtp.get("host"))
+    smtp_complete = (smtp_enabled and bool(smtp.get("host"))) or "smtp" in skipped_optional_steps
     review_complete = all([bool(payload.get("welcome_acknowledged")), users_complete, household_complete])
 
     return {
@@ -342,6 +373,11 @@ def get_setup_wizard_state(db: Session) -> SetupWizardStateResponse:
             if item.get("stage_user_id")
         ],
         public_base_url=_normalize_optional_text(str(payload.get("public_base_url") or "")),
+        skipped_optional_steps=[
+            str(step)
+            for step in payload.get("skipped_optional_steps") or []
+            if str(step) in OPTIONAL_STEPS
+        ],
         household_dietary_preferences=[str(item) for item in dietary.get("household_preferences") or []],
         user_dietary_preferences=[
             StagedSetupDietaryUserSummary(stage_user_id=stage_user_id, preferences=[str(item) for item in preferences])
@@ -454,6 +490,12 @@ def update_setup_public_url(db: Session, payload: SetupPublicURLUpdateRequest) -
     state = _get_or_create_setup_state(db)
     merged = _merged_payload(state.payload)
     merged["public_base_url"] = _normalize_optional_public_base_url(payload.public_base_url) or ""
+    skipped_steps = set(merged.get("skipped_optional_steps") or [])
+    if merged["public_base_url"]:
+        skipped_steps.discard("public_url")
+    elif payload.mark_skipped:
+        skipped_steps.add("public_url")
+    merged["skipped_optional_steps"] = sorted(skipped_steps)
     state.payload = merged
     db.add(state)
     db.commit()
@@ -464,13 +506,19 @@ def update_setup_dietary(db: Session, payload: SetupDietaryUpdateRequest) -> Set
     state = _get_or_create_setup_state(db)
     merged = _merged_payload(state.payload)
     merged["dietary"] = {
-        "household_preferences": _normalize_preferences(payload.household_preferences),
+        "household_preferences": _normalize_setup_dietary_preferences(payload.household_preferences),
         "user_preferences": {
-            item.stage_user_id: _normalize_preferences(item.preferences)
+            item.stage_user_id: _normalize_setup_dietary_preferences(item.preferences)
             for item in payload.user_preferences
-            if _normalize_preferences(item.preferences)
+            if _normalize_setup_dietary_preferences(item.preferences)
         },
     }
+    skipped_steps = set(merged.get("skipped_optional_steps") or [])
+    if merged["dietary"]["household_preferences"] or merged["dietary"]["user_preferences"]:
+        skipped_steps.discard("dietary")
+    elif payload.mark_skipped:
+        skipped_steps.add("dietary")
+    merged["skipped_optional_steps"] = sorted(skipped_steps)
     state.payload = merged
     db.add(state)
     db.commit()
@@ -504,6 +552,18 @@ def update_setup_ai(db: Session, payload: SetupAIConfigUpdateRequest) -> SetupWi
         }
         if api_key:
             state.encrypted_ai_api_key = encrypt_secret(api_key)
+
+    skipped_steps = set(merged.get("skipped_optional_steps") or [])
+    if (
+        merged["ai"].get("is_enabled")
+        and merged["ai"].get("provider_type")
+        and merged["ai"].get("base_url")
+        and merged["ai"].get("default_model")
+    ):
+        skipped_steps.discard("ai")
+    elif payload.mark_skipped:
+        skipped_steps.add("ai")
+    merged["skipped_optional_steps"] = sorted(skipped_steps)
 
     state.payload = merged
     db.add(state)
@@ -565,6 +625,13 @@ def update_setup_smtp(db: Session, payload: SetupSMTPConfigUpdateRequest) -> Set
         if password:
             state.encrypted_smtp_password = encrypt_secret(password)
 
+    skipped_steps = set(merged.get("skipped_optional_steps") or [])
+    if merged["smtp"].get("host"):
+        skipped_steps.discard("smtp")
+    elif payload.mark_skipped:
+        skipped_steps.add("smtp")
+    merged["skipped_optional_steps"] = sorted(skipped_steps)
+
     state.payload = merged
     db.add(state)
     db.commit()
@@ -614,7 +681,10 @@ def finalize_setup(db: Session) -> User:
                 password_hash=str(password_hash),
                 display_name=_normalize_optional_display_name(staged_user.get("display_name") if isinstance(staged_user.get("display_name"), str) else None),
                 platform_role_id=platform_admin_role.id if str(staged_user.get("stage_id")) == DEFAULT_ADMIN_STAGE_ID else None,
-                dietary_preferences=_normalize_preferences(user_preferences.get(str(staged_user.get("stage_id")), [])) or None,
+                dietary_preferences=_normalize_final_dietary_preferences(
+                    user_preferences.get(str(staged_user.get("stage_id")), [])
+                )
+                or None,
             )
             db.add(user)
             db.flush()
@@ -623,7 +693,10 @@ def finalize_setup(db: Session) -> User:
         household_data = payload["household"]
         household = Household(
             name=require_text(str(household_data.get("name") or ""), field_name="Household name"),
-            dietary_preferences=_normalize_preferences(dietary.get("household_preferences", [])) or None,
+            dietary_preferences=_normalize_final_dietary_preferences(
+                dietary.get("household_preferences", [])
+            )
+            or None,
         )
         db.add(household)
         db.flush()

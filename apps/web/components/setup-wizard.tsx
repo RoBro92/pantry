@@ -43,6 +43,7 @@ const OPTIONAL_STEPS = new Set<SetupStepKey>(["public_url", "dietary", "ai", "sm
 
 const LOCATION_SUGGESTIONS = ["Fridge", "Freezer", "Cupboard", "Pantry shelf"];
 const DIETARY_SUGGESTIONS = [
+  "None",
   "Vegan",
   "Vegetarian",
   "Pescatarian",
@@ -55,6 +56,7 @@ const EMPTY_PASSWORD_DRAFT: PasswordDraft = {
   password: "",
   confirm: ""
 };
+const DIETARY_NONE_OPTION = "None";
 
 function nextStep(currentStep: SetupStepKey): SetupStepKey {
   const currentIndex = STEP_ORDER.indexOf(currentStep);
@@ -99,6 +101,20 @@ function summarizeUser(user: SetupWizardUserSummary) {
 
 function renderSavedPasswordHint(user: SetupWizardUserSummary) {
   return user.password_saved ? "Password saved" : "Password not saved yet";
+}
+
+function normalizeDietarySelection(values: string[]) {
+  const normalized = Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
+  return normalized.includes(DIETARY_NONE_OPTION)
+    ? [DIETARY_NONE_OPTION]
+    : normalized.filter((value) => value !== DIETARY_NONE_OPTION);
+}
+
+function addSkippedOptionalStep(
+  steps: SetupWizardStateResponse["skipped_optional_steps"],
+  step: SetupWizardStateResponse["skipped_optional_steps"][number]
+) {
+  return Array.from(new Set([...steps, step]));
 }
 
 function buildAutocomplete(section: string, field: string) {
@@ -381,21 +397,9 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
     setStatusMessage(savedMessage ?? "Progress saved.");
   }
 
-  function clearSavedPasswordDrafts() {
-    const adminPassword = getPersistablePassword(adminPasswordDraft);
-    if (adminPassword) {
-      setAdminPasswordDraft(EMPTY_PASSWORD_DRAFT);
-    }
-    setUserPasswordDrafts((current) =>
-      Object.fromEntries(
-        Object.entries(current).filter(([, draft]) => !getPersistablePassword(draft))
-      )
-    );
-  }
-
   async function persistUsersSnapshot(
     snapshot: SetupWizardStateResponse,
-    options?: { suppressErrors?: boolean; clearPasswordDrafts?: boolean; saveId?: number }
+    options?: { suppressErrors?: boolean; saveId?: number }
   ) {
     const suppressErrors = Boolean(options?.suppressErrors);
     const validation = getUsersStepValidation(snapshot, adminPasswordDraft, userPasswordDrafts);
@@ -419,10 +423,6 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
       "Users saved.",
       options?.saveId
     );
-
-    if (options?.clearPasswordDrafts) {
-      clearSavedPasswordDrafts();
-    }
     return true;
   }
 
@@ -450,7 +450,8 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
       updateWizard(
         await putToApi<SetupWizardStateResponse>("/api/setup/wizard/dietary", {
           household_preferences: snapshot.household_dietary_preferences,
-          user_preferences: snapshot.user_dietary_preferences
+          user_preferences: snapshot.user_dietary_preferences,
+          mark_skipped: snapshot.skipped_optional_steps.includes("dietary")
         }),
         "Dietary preferences saved.",
         saveId
@@ -464,7 +465,6 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
     step: SetupStepKey,
     options?: {
       suppressErrors?: boolean;
-      clearPasswordDrafts?: boolean;
       stateSnapshot?: SetupWizardStateResponse;
       aiApiKeyOverride?: string;
       smtpPasswordOverride?: string;
@@ -494,7 +494,6 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
       if (step === "users") {
         return await persistUsersSnapshot(snapshot, {
           suppressErrors,
-          clearPasswordDrafts: options?.clearPasswordDrafts ?? true,
           saveId
         });
       }
@@ -515,7 +514,8 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
       if (step === "public_url") {
         updateWizard(
           await putToApi<SetupWizardStateResponse>("/api/setup/wizard/public-url", {
-            public_base_url: snapshot.public_base_url ?? ""
+            public_base_url: snapshot.public_base_url ?? "",
+            mark_skipped: snapshot.skipped_optional_steps.includes("public_url")
           }),
           "Public browser URL saved.",
           saveId
@@ -526,7 +526,8 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
         updateWizard(
           await putToApi<SetupWizardStateResponse>("/api/setup/wizard/dietary", {
             household_preferences: snapshot.household_dietary_preferences,
-            user_preferences: snapshot.user_dietary_preferences
+            user_preferences: snapshot.user_dietary_preferences,
+            mark_skipped: snapshot.skipped_optional_steps.includes("dietary")
           }),
           "Dietary preferences saved.",
           saveId
@@ -540,7 +541,8 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
             base_url: snapshot.ai_config.base_url,
             default_model: snapshot.ai_config.default_model,
             api_key: (options?.aiApiKeyOverride ?? aiApiKey) || null,
-            is_enabled: snapshot.ai_config.is_enabled
+            is_enabled: snapshot.ai_config.is_enabled,
+            mark_skipped: snapshot.skipped_optional_steps.includes("ai")
           }),
           "AI settings saved.",
           saveId
@@ -558,7 +560,8 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
             from_email: snapshot.smtp_config.from_email,
             from_name: snapshot.smtp_config.from_name,
             security: snapshot.smtp_config.security,
-            is_enabled: snapshot.smtp_config.is_enabled
+            is_enabled: snapshot.smtp_config.is_enabled,
+            mark_skipped: snapshot.skipped_optional_steps.includes("smtp")
           }),
           "SMTP settings saved.",
           saveId
@@ -586,7 +589,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
   }
 
   async function handleBack() {
-    await persistStep(currentStep, { suppressErrors: true, clearPasswordDrafts: true });
+    await persistStep(currentStep, { suppressErrors: true });
     moveToStep(previousStep(currentStep));
   }
 
@@ -594,7 +597,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
     if (step === currentStep) {
       return;
     }
-    await persistStep(currentStep, { suppressErrors: true, clearPasswordDrafts: true });
+    await persistStep(currentStep, { suppressErrors: true });
     moveToStep(step);
   }
 
@@ -605,16 +608,31 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
 
     const nextWizard =
       currentStep === "public_url"
-        ? { ...wizard, public_base_url: "" }
+        ? {
+            ...wizard,
+            public_base_url: "",
+            skipped_optional_steps: addSkippedOptionalStep(
+              wizard.skipped_optional_steps,
+              "public_url"
+            )
+          }
         : currentStep === "dietary"
           ? {
               ...wizard,
+              skipped_optional_steps: addSkippedOptionalStep(
+                wizard.skipped_optional_steps,
+                "dietary"
+              ),
               household_dietary_preferences: [],
               user_dietary_preferences: []
             }
           : currentStep === "ai"
             ? {
                 ...wizard,
+                skipped_optional_steps: addSkippedOptionalStep(
+                  wizard.skipped_optional_steps,
+                  "ai"
+                ),
                 ai_config: {
                   provider_type: null,
                   base_url: "",
@@ -625,6 +643,10 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
               }
             : {
                 ...wizard,
+                skipped_optional_steps: addSkippedOptionalStep(
+                  wizard.skipped_optional_steps,
+                  "smtp"
+                ),
                 smtp_config: {
                   host: "",
                   port: null,
@@ -640,8 +662,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
     const saved = await persistStep(currentStep, {
       stateSnapshot: nextWizard,
       aiApiKeyOverride: "",
-      smtpPasswordOverride: "",
-      clearPasswordDrafts: true
+      smtpPasswordOverride: ""
     });
     if (saved) {
       setAiApiKey("");
@@ -707,7 +728,6 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
     setWizard(nextWizard);
     void persistStep("users", {
       suppressErrors: true,
-      clearPasswordDrafts: false,
       stateSnapshot: nextWizard
     });
   }
@@ -731,7 +751,6 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
     });
     void persistStep("users", {
       suppressErrors: true,
-      clearPasswordDrafts: false,
       stateSnapshot: nextWizard
     });
   }
@@ -788,9 +807,11 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
     }
     const nextWizard = {
       ...wizard,
-      household_dietary_preferences: Array.from(
-        new Set([...wizard.household_dietary_preferences, trimmed])
-      )
+      skipped_optional_steps: wizard.skipped_optional_steps.filter((step) => step !== "dietary"),
+      household_dietary_preferences: normalizeDietarySelection([
+        ...wizard.household_dietary_preferences,
+        trimmed
+      ])
     };
     setWizard(nextWizard);
     setNewHouseholdDietaryPreference("");
@@ -814,12 +835,13 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
       return;
     }
     const existing = findUserPreferences(wizard.user_dietary_preferences, stageUserId);
-    const nextPreferences = Array.from(new Set([...existing, trimmed]));
+    const nextPreferences = normalizeDietarySelection([...existing, trimmed]);
     const others = wizard.user_dietary_preferences.filter(
       (item) => item.stage_user_id !== stageUserId
     );
     const nextWizard = {
       ...wizard,
+      skipped_optional_steps: wizard.skipped_optional_steps.filter((step) => step !== "dietary"),
       user_dietary_preferences: [
         ...others,
         {
@@ -905,9 +927,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                   autoCorrect="off"
                   spellCheck={false}
                   onChange={(event) => updateAdmin({ login: event.target.value })}
-                  onBlur={() =>
-                    void persistStep("users", { suppressErrors: true, clearPasswordDrafts: false })
-                  }
+                  onBlur={() => void persistStep("users", { suppressErrors: true })}
                   placeholder="owner"
                 />
               </label>
@@ -922,23 +942,23 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                   autoCorrect="off"
                   spellCheck={false}
                   onChange={(event) => updateAdmin({ display_name: event.target.value })}
-                  onBlur={() =>
-                    void persistStep("users", { suppressErrors: true, clearPasswordDrafts: false })
-                  }
+                  onBlur={() => void persistStep("users", { suppressErrors: true })}
                   placeholder="Pantry owner"
                 />
               </label>
             </div>
             <PasswordFields
-              label={wizard.admin_user.password_saved ? "Replace password" : "Password"}
+              label={
+                wizard.admin_user.password_saved && !adminPasswordDraft.password
+                  ? "Replace password"
+                  : "Password"
+              }
               draft={adminPasswordDraft}
               onChange={setAdminPasswordDraft}
               passwordName="setup_admin_password"
               confirmName="setup_admin_confirm_password"
               autoCompleteSection="setup-admin"
-              onBlur={() =>
-                void persistStep("users", { suppressErrors: true, clearPasswordDrafts: true })
-              }
+              onBlur={() => void persistStep("users", { suppressErrors: true })}
             />
             <p
               className={`helper-text${usersValidation.adminMessage ? " is-error" : ""}`}
@@ -994,12 +1014,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                         onChange={(event) =>
                           updateInitialUser(user.stage_id, { login: event.target.value })
                         }
-                        onBlur={() =>
-                          void persistStep("users", {
-                            suppressErrors: true,
-                            clearPasswordDrafts: false
-                          })
-                        }
+                        onBlur={() => void persistStep("users", { suppressErrors: true })}
                         placeholder="alex"
                       />
                     </label>
@@ -1016,18 +1031,17 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                         onChange={(event) =>
                           updateInitialUser(user.stage_id, { display_name: event.target.value })
                         }
-                        onBlur={() =>
-                          void persistStep("users", {
-                            suppressErrors: true,
-                            clearPasswordDrafts: false
-                          })
-                        }
+                        onBlur={() => void persistStep("users", { suppressErrors: true })}
                         placeholder="Alex"
                       />
                     </label>
                   </div>
                   <PasswordFields
-                    label={user.password_saved ? "Replace password" : "Password"}
+                    label={
+                      user.password_saved && !(userPasswordDrafts[user.stage_id] ?? EMPTY_PASSWORD_DRAFT).password
+                        ? "Replace password"
+                        : "Password"
+                    }
                     draft={userPasswordDrafts[user.stage_id] ?? EMPTY_PASSWORD_DRAFT}
                     onChange={(draft) =>
                       setUserPasswordDrafts((current) => ({ ...current, [user.stage_id]: draft }))
@@ -1035,9 +1049,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                     passwordName={`setup_user_${user.stage_id}_password`}
                     confirmName={`setup_user_${user.stage_id}_confirm_password`}
                     autoCompleteSection={`setup-user-${user.stage_id}`}
-                    onBlur={() =>
-                      void persistStep("users", { suppressErrors: true, clearPasswordDrafts: true })
-                    }
+                    onBlur={() => void persistStep("users", { suppressErrors: true })}
                   />
                   <p className="helper-text">Assign this user’s household role in the next step.</p>
                   <p
@@ -1180,7 +1192,13 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
               inputMode="url"
               spellCheck={false}
               onChange={(event) =>
-                setWizard((current) => ({ ...current, public_base_url: event.target.value }))
+                setWizard((current) => ({
+                  ...current,
+                  public_base_url: event.target.value,
+                  skipped_optional_steps: current.skipped_optional_steps.filter(
+                    (step) => step !== "public_url"
+                  )
+                }))
               }
               onBlur={() => void persistStep("public_url", { suppressErrors: true })}
               placeholder="https://pantry.example.com"
@@ -1271,6 +1289,9 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
               onChange={(event) =>
                 setWizard((current) => ({
                   ...current,
+                  skipped_optional_steps: current.skipped_optional_steps.filter(
+                    (step) => step !== "ai"
+                  ),
                   ai_config: { ...current.ai_config, is_enabled: event.target.checked }
                 }))
               }
@@ -1286,6 +1307,9 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                 onChange={(event) =>
                   setWizard((current) => ({
                     ...current,
+                    skipped_optional_steps: current.skipped_optional_steps.filter(
+                      (step) => step !== "ai"
+                    ),
                     ai_config: {
                       ...current.ai_config,
                       provider_type: event.target.value as "ollama" | "openai_compatible"
@@ -1311,6 +1335,9 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                 onChange={(event) =>
                   setWizard((current) => ({
                     ...current,
+                    skipped_optional_steps: current.skipped_optional_steps.filter(
+                      (step) => step !== "ai"
+                    ),
                     ai_config: { ...current.ai_config, base_url: event.target.value }
                   }))
                 }
@@ -1330,6 +1357,9 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                 onChange={(event) =>
                   setWizard((current) => ({
                     ...current,
+                    skipped_optional_steps: current.skipped_optional_steps.filter(
+                      (step) => step !== "ai"
+                    ),
                     ai_config: { ...current.ai_config, default_model: event.target.value }
                   }))
                 }
@@ -1376,6 +1406,9 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
               onChange={(event) =>
                 setWizard((current) => ({
                   ...current,
+                  skipped_optional_steps: current.skipped_optional_steps.filter(
+                    (step) => step !== "smtp"
+                  ),
                   smtp_config: { ...current.smtp_config, is_enabled: event.target.checked }
                 }))
               }
@@ -1396,6 +1429,9 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                 onChange={(event) =>
                   setWizard((current) => ({
                     ...current,
+                    skipped_optional_steps: current.skipped_optional_steps.filter(
+                      (step) => step !== "smtp"
+                    ),
                     smtp_config: { ...current.smtp_config, host: event.target.value }
                   }))
                 }
@@ -1416,6 +1452,9 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                 onChange={(event) =>
                   setWizard((current) => ({
                     ...current,
+                    skipped_optional_steps: current.skipped_optional_steps.filter(
+                      (step) => step !== "smtp"
+                    ),
                     smtp_config: {
                       ...current.smtp_config,
                       port: event.target.value ? Number(event.target.value) : null
@@ -1438,6 +1477,9 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                 onChange={(event) =>
                   setWizard((current) => ({
                     ...current,
+                    skipped_optional_steps: current.skipped_optional_steps.filter(
+                      (step) => step !== "smtp"
+                    ),
                     smtp_config: { ...current.smtp_config, username: event.target.value }
                   }))
                 }
@@ -1475,6 +1517,9 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                 onChange={(event) =>
                   setWizard((current) => ({
                     ...current,
+                    skipped_optional_steps: current.skipped_optional_steps.filter(
+                      (step) => step !== "smtp"
+                    ),
                     smtp_config: { ...current.smtp_config, from_email: event.target.value }
                   }))
                 }
@@ -1494,6 +1539,9 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                 onChange={(event) =>
                   setWizard((current) => ({
                     ...current,
+                    skipped_optional_steps: current.skipped_optional_steps.filter(
+                      (step) => step !== "smtp"
+                    ),
                     smtp_config: { ...current.smtp_config, from_name: event.target.value }
                   }))
                 }
@@ -1508,6 +1556,9 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                 onChange={(event) =>
                   setWizard((current) => ({
                     ...current,
+                    skipped_optional_steps: current.skipped_optional_steps.filter(
+                      (step) => step !== "smtp"
+                    ),
                     smtp_config: { ...current.smtp_config, security: event.target.value }
                   }))
                 }
@@ -1588,7 +1639,13 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                 Edit
               </button>
             </div>
-            <p>{wizard.public_base_url || "Skipped for now"}</p>
+            <p>
+              {wizard.public_base_url
+                ? wizard.public_base_url
+                : wizard.skipped_optional_steps.includes("public_url")
+                  ? "Skipped for now"
+                  : "Not configured"}
+            </p>
           </article>
           <article className="review-card">
             <div className="setup-card-toolbar">
@@ -1602,9 +1659,13 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
               </button>
             </div>
             <p>
-              {wizard.household_dietary_preferences.length > 0
-                ? wizard.household_dietary_preferences.join(", ")
-                : "Skipped for now"}
+              {wizard.household_dietary_preferences.includes(DIETARY_NONE_OPTION)
+                ? "None selected"
+                : wizard.household_dietary_preferences.length > 0
+                  ? wizard.household_dietary_preferences.join(", ")
+                  : wizard.skipped_optional_steps.includes("dietary")
+                    ? "Skipped for now"
+                    : "Not configured"}
             </p>
             <p>
               Personal preferences:{" "}
@@ -1614,10 +1675,15 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                       const user = allUsers.find(
                         (candidate) => candidate.stage_id === preference.stage_user_id
                       );
-                      return `${user ? summarizeUser(user) : "Staged user"} (${preference.preferences.join(", ")})`;
+                      const summary = preference.preferences.includes(DIETARY_NONE_OPTION)
+                        ? "None selected"
+                        : preference.preferences.join(", ");
+                      return `${user ? summarizeUser(user) : "Staged user"} (${summary})`;
                     })
                     .join(", ")
-                : "Not configured"}
+                : wizard.skipped_optional_steps.includes("dietary")
+                  ? "Skipped for now"
+                  : "Not configured"}
             </p>
           </article>
           <article className="review-card">
@@ -1630,7 +1696,9 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
             <p>
               {wizard.ai_config.is_enabled
                 ? `${wizard.ai_config.provider_type} · ${wizard.ai_config.base_url} · ${wizard.ai_config.default_model}`
-                : "Skipped for now"}
+                : wizard.skipped_optional_steps.includes("ai")
+                  ? "Skipped for now"
+                  : "Not configured"}
             </p>
           </article>
           <article className="review-card">
@@ -1647,7 +1715,9 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
             <p>
               {wizard.smtp_config.is_enabled
                 ? `${wizard.smtp_config.host}:${wizard.smtp_config.port ?? ""}`
-                : "Skipped for now"}
+                : wizard.skipped_optional_steps.includes("smtp")
+                  ? "Skipped for now"
+                  : "Not configured"}
             </p>
           </article>
         </div>

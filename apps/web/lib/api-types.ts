@@ -121,6 +121,7 @@ export type SetupWizardStateResponse = {
   storage_locations: string[];
   household_assignments: SetupWizardAssignmentSummary[];
   public_base_url: string | null;
+  skipped_optional_steps: Array<"public_url" | "dietary" | "ai" | "smtp">;
   household_dietary_preferences: string[];
   user_dietary_preferences: SetupWizardDietaryUserSummary[];
   ai_config: SetupWizardAIConfigSummary;
