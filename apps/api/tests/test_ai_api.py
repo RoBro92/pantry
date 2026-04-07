@@ -7,9 +7,12 @@ from sqlalchemy import select
 from app.domain.ai import AI_PROVIDER_OLLAMA
 from app.domain.roles import HOUSEHOLD_ADMIN_ROLE
 from app.models.audit_event import AuditEvent
+from app.models.product import Product
+from app.schemas.pantry import ConfirmedProductEnrichmentRequest
 from app.schemas.ai import AISuggestionRequest
 from app.services.ai_config import upsert_instance_provider_config
 from app.services.ai_context import build_household_ai_context
+from app.services.product_enrichment import apply_confirmed_product_enrichment
 from app.services.ai_providers import AIProviderHealth, StructuredCompletionResult
 from app.services.platform_features import FLAG_AI_SUGGESTIONS, upsert_feature_flag
 from app.services.auth import (
@@ -220,6 +223,114 @@ def test_household_ai_routes_degrade_cleanly_without_provider_config(client, db_
     )
     assert suggestion_response.status_code == 503
     assert "No AI provider" in suggestion_response.json()["detail"]
+
+
+def test_ai_context_includes_product_enrichment_when_available(client, db_session, monkeypatch):
+    user, household = create_member_household(
+        db_session,
+        email="ai-enrichment@example.com",
+        household_name="AI Enrichment Household",
+    )
+    login(client, email="ai-enrichment@example.com")
+
+    pantry_group = create_location_group(client, household.external_id, "Pantry")
+    shelf = create_location(client, household.external_id, pantry_group["external_id"], "Shelf")
+    product = create_product(
+        client,
+        household.external_id,
+        name="Brown sauce",
+        default_unit="bottle",
+        aliases=[],
+        barcodes=["5000111046244"],
+    )
+
+    class StubOpenFoodFactsClient:
+        def fetch_product_by_id(self, source_product_id: str):
+            from app.schemas.pantry import (
+                ProductEnrichmentAttribution,
+                ProductEnrichmentCandidate,
+                ProductNutritionSummaryItem,
+            )
+
+            return ProductEnrichmentCandidate(
+                source_name="open_food_facts",
+                source_product_id=source_product_id,
+                source_barcode=source_product_id,
+                source_product_name="HP Brown Sauce",
+                source_product_url=f"https://world.openfoodfacts.org/product/{source_product_id}",
+                product_image_url="https://images.example.test/product.jpg",
+                ingredients_text="Tomatoes, vinegar, barley malt",
+                allergens_text="Gluten",
+                traces_text="Mustard",
+                allergen_tags=["Gluten"],
+                trace_tags=["Mustard"],
+                nutrition_summary=[
+                    ProductNutritionSummaryItem(key="energy-kcal", label="Energy", value=100, unit="kcal")
+                ],
+                labels=["Vegetarian"],
+                categories=["Brown Sauces"],
+                match_status="barcode_exact",
+                match_confidence=1.0,
+                incomplete_fields=[],
+                warnings=[],
+                attribution=ProductEnrichmentAttribution(
+                    source_name="open_food_facts",
+                    source_label="Open Food Facts",
+                    source_url="https://world.openfoodfacts.org",
+                    product_url=f"https://world.openfoodfacts.org/product/{source_product_id}",
+                    data_notice="Community-contributed Open Food Facts data may be incomplete or inaccurate.",
+                    license_name="Open Database License",
+                    license_url="https://opendatacommons.org/licenses/odbl/",
+                ),
+            )
+
+    monkeypatch.setattr(
+        "app.services.product_enrichment.get_default_open_food_facts_client",
+        lambda: StubOpenFoodFactsClient(),
+    )
+
+    access = resolve_household_access(
+        db_session,
+        household_external_id=household.external_id,
+        user=user,
+    )
+    assert access is not None
+
+    stored_product = db_session.scalar(select(Product).where(Product.external_id == product["external_id"]))
+    assert stored_product is not None
+
+    apply_confirmed_product_enrichment(
+        db_session,
+        household=access.household,
+        actor=user,
+        product=stored_product,
+        confirmed_enrichment=ConfirmedProductEnrichmentRequest(
+            source_name="open_food_facts",
+            source_product_id="5000111046244",
+            match_status="barcode_exact",
+        ),
+    )
+    db_session.commit()
+
+    add_stock_lot(
+        client,
+        household.external_id,
+        product_external_id=product["external_id"],
+        location_external_id=shelf["external_id"],
+        quantity="1.000",
+    )
+
+    context_bundle = build_household_ai_context(
+        db_session,
+        access=access,
+        request=AISuggestionRequest(kind="meal_suggestions", limit=2),
+    )
+
+    enrichment = context_bundle.payload["pantry"]["products"][0]["enrichment"]
+    assert enrichment["ingredients_text"] == "Tomatoes, vinegar, barley malt"
+    assert enrichment["allergen_tags"] == ["Gluten"]
+    assert enrichment["labels"] == ["Vegetarian"]
+    assert context_bundle.payload["dietary_context"]["enriched_products"][0]["enrichment"]["traces_text"] == "Mustard"
 
 
 def test_household_ai_suggestions_use_provider_adapter_and_record_audit(

@@ -24,6 +24,15 @@ def build_household_ai_context(
     near_expiry = build_near_expiry_response(db, access=access, days=7)
     recipe_list = build_recipe_list_response(db, access=access)
     recipe_detail = None
+    enriched_products = [
+        {
+            "product_external_id": product.product_external_id,
+            "product_name": product.product_name,
+            "enrichment": product.enrichment.model_dump(mode="json"),
+        }
+        for product in pantry_overview.products
+        if product.enrichment is not None
+    ][:20]
 
     if request.recipe_external_id:
         recipe_detail = build_recipe_detail_response(
@@ -47,6 +56,9 @@ def build_household_ai_context(
         "recipes": {
             "items": [recipe.model_dump(mode="json") for recipe in recipe_list.recipes[:10]],
             "focused_recipe": recipe_detail.model_dump(mode="json") if recipe_detail is not None else None,
+        },
+        "dietary_context": {
+            "enriched_products": enriched_products,
         },
     }
 
