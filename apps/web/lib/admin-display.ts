@@ -11,6 +11,7 @@ const RELEASE_STATUS_LABELS: Record<ReleaseCheckResponse["status"], string> = {
   up_to_date: "Up to date",
   ahead_of_latest_release: "Ahead of latest release",
   comparison_unavailable: "Version unknown",
+  release_metadata_missing: "Metadata unavailable",
   unavailable: "Unavailable",
   not_configured: "Not configured"
 };

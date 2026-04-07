@@ -50,6 +50,36 @@ export type AdminHouseholdSummary = {
   memberships: AdminHouseholdMemberSummary[];
 };
 
+export type BackupBundleSummary = {
+  format: string;
+  format_version: number;
+  scope: "instance" | "household";
+  app_version: string;
+  schema_revision: string | null;
+  exported_at: string;
+  household_external_id: string | null;
+  household_name: string | null;
+  table_counts: Record<string, number>;
+};
+
+export type StagedBackupResponse = {
+  stage_id: string;
+  original_filename: string;
+  size_bytes: number;
+  uploaded_at: string;
+  quarantine_path: string;
+  supported_for_restore: boolean;
+  warnings: string[];
+  bundle: BackupBundleSummary;
+};
+
+export type BackupRestoreResponse = {
+  restored: boolean;
+  requires_reauthentication: boolean;
+  message: string;
+  bundle: BackupBundleSummary;
+};
+
 export type SetupStatusResponse = {
   is_initialized: boolean;
   platform_admin_count: number;
@@ -61,6 +91,7 @@ export type SetupStatusResponse = {
   steps: Array<{
     key:
       | "welcome"
+      | "restore"
       | "users"
       | "household"
       | "public_url"
@@ -113,7 +144,18 @@ export type SetupWizardSMTPConfigSummary = {
 
 export type SetupWizardStateResponse = {
   status: SetupStatusResponse;
+  installation_mode: "fresh_install" | "restore_backup";
   welcome_acknowledged: boolean;
+  staged_restore: {
+    stage_id: string;
+    original_filename: string;
+    size_bytes: number;
+    uploaded_at: string;
+    quarantine_path: string;
+    supported_for_restore: boolean;
+    warnings: string[];
+    bundle: BackupBundleSummary;
+  } | null;
   admin_user: SetupWizardUserSummary;
   initial_users: SetupWizardUserSummary[];
   household_name: string | null;
@@ -275,7 +317,13 @@ export type DiagnosticsResponse = {
 export type ReleaseCheckResponse = {
   configured: boolean;
   source_type: string | null;
+  source_strategy: string;
   repository: string | null;
+  metadata_status:
+    | "not_configured"
+    | "available"
+    | "release_missing"
+    | "request_failed";
   current_version: string;
   latest_version: string | null;
   release_tag: string | null;
@@ -285,6 +333,7 @@ export type ReleaseCheckResponse = {
   checked_at: string;
   status:
     | "not_configured"
+    | "release_metadata_missing"
     | "unavailable"
     | "comparison_unavailable"
     | "update_available"
@@ -292,6 +341,32 @@ export type ReleaseCheckResponse = {
     | "up_to_date";
   update_available: boolean | null;
   message: string | null;
+  latest_release: {
+    version: string;
+    release_tag: string;
+    release_name: string | null;
+    release_notes_url: string | null;
+    published_at: string | null;
+    changelog_summary: string | null;
+    breaking_change_notes: string[];
+    manual_update_commands: string[];
+    notes_source: "release_json_asset" | "github_release_body" | "default_commands" | null;
+  } | null;
+  current_release: {
+    version: string;
+    release_tag: string;
+    release_name: string | null;
+    release_notes_url: string | null;
+    published_at: string | null;
+    changelog_summary: string | null;
+    breaking_change_notes: string[];
+    manual_update_commands: string[];
+    notes_source: "release_json_asset" | "github_release_body" | "default_commands" | null;
+  } | null;
+  manual_update_commands: string[];
+  notes_seen_version: string | null;
+  notes_seen_at: string | null;
+  show_whats_new_prompt: boolean;
 };
 
 export type AIFeatureStatus = {

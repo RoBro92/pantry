@@ -201,7 +201,7 @@ def build_diagnostics_report(db: Session) -> dict[str, object]:
         "database": _database_diagnostics(db),
         "counts": _counts_summary(db),
         "ai_provider": _ai_summary(db),
-        "release_check": build_release_check_summary(),
+        "release_check": build_release_check_summary(db),
         "smtp": build_smtp_summary(db),
         "public_base_url": public_base_url,
         "limitations": [

@@ -66,6 +66,7 @@ def test_build_release_check_summary_reports_update_available(monkeypatch):
     summary = build_release_check_summary()
 
     assert summary["configured"] is True
+    assert summary["metadata_status"] == "available"
     assert summary["status"] == "update_available"
     assert summary["current_version"] == "0.1.0"
     assert summary["latest_version"] == "0.1.1"
@@ -96,10 +97,11 @@ def test_build_release_check_summary_fails_gracefully_when_metadata_unavailable(
     summary = build_release_check_summary()
 
     assert summary["configured"] is True
-    assert summary["status"] == "unavailable"
+    assert summary["metadata_status"] == "release_missing"
+    assert summary["status"] == "release_metadata_missing"
     assert summary["latest_version"] is None
     assert summary["update_available"] is None
-    assert "status 404" in str(summary["message"]).lower()
+    assert "github release metadata" in str(summary["message"]).lower()
 
 
 def test_platform_admin_release_status_endpoint_returns_advisory_update_state(
@@ -137,7 +139,58 @@ def test_platform_admin_release_status_endpoint_returns_advisory_update_state(
     assert response.status_code == 200
 
     payload = response.json()
+    assert payload["metadata_status"] == "available"
     assert payload["status"] == "update_available"
     assert payload["current_version"] == "0.1.0"
     assert payload["latest_version"] == "0.1.2"
     assert payload["update_available"] is True
+
+
+def test_platform_admin_can_mark_current_release_notes_seen(client, db_session, monkeypatch):
+    create_platform_admin(
+        db_session,
+        email="release-notes@example.com",
+        password=PASSWORD,
+        display_name="Release Notes Admin",
+    )
+    login(client, email="release-notes@example.com")
+
+    settings = replace(
+        get_settings(),
+        app_version="0.1.2",
+        release_check_repository="example/pantry",
+        release_check_metadata_url=None,
+    )
+    monkeypatch.setattr("app.services.releases.get_settings", lambda: settings)
+    monkeypatch.setattr(
+        "app.services.releases.fetch_latest_release_metadata",
+        lambda _: ReleaseMetadata(
+            tag_name="v0.1.2",
+            version="0.1.2",
+            name="Pantry v0.1.2",
+            html_url="https://github.com/example/pantry/releases/tag/v0.1.2",
+            published_at=datetime(2026, 4, 4, tzinfo=timezone.utc),
+        ),
+    )
+    monkeypatch.setattr(
+        "app.services.releases.fetch_release_metadata_by_tag",
+        lambda *_args, **_kwargs: ReleaseMetadata(
+            tag_name="v0.1.2",
+            version="0.1.2",
+            name="Pantry v0.1.2",
+            html_url="https://github.com/example/pantry/releases/tag/v0.1.2",
+            published_at=datetime(2026, 4, 4, tzinfo=timezone.utc),
+            body="## Breaking changes\n- Review this once\n",
+        ),
+    )
+
+    initial = client.get("/api/platform-admin/release-status")
+    assert initial.status_code == 200
+    assert initial.json()["show_whats_new_prompt"] is True
+    assert initial.json()["notes_seen_version"] is None
+
+    mark_seen = client.post("/api/platform-admin/release-status/mark-seen", json={})
+    assert mark_seen.status_code == 200
+    payload = mark_seen.json()
+    assert payload["show_whats_new_prompt"] is False
+    assert payload["notes_seen_version"] == "0.1.2"

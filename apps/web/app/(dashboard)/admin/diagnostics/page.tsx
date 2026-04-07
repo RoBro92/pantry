@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { StatusCard } from "../../../../components/status-card";
 import {
   formatAdminDateTime,
@@ -223,11 +224,53 @@ export default async function AdminDiagnosticsPage() {
             </li>
           </ul>
           <p>{updateCheck.message ?? "Release metadata check completed."}</p>
-          {updateCheck.release_notes_url ? (
+          <div className="page-actions">
+            <Link href="/admin/updates" className="primary-link">
+              Open updates
+            </Link>
+            {updateCheck.release_notes_url ? (
+              <a href={updateCheck.release_notes_url} className="secondary-link">
+                Release notes
+              </a>
+            ) : null}
+          </div>
+        </article>
+
+        <article className="panel">
+          <p className="eyebrow">Current Release Notes</p>
+          {updateCheck.current_release ? (
+            <div className="stack">
+              <ul className="detail-list">
+                <li>
+                  <strong>Version</strong>
+                  <span>{updateCheck.current_release.version}</span>
+                </li>
+                <li>
+                  <strong>Tag</strong>
+                  <span>{updateCheck.current_release.release_tag}</span>
+                </li>
+                <li>
+                  <strong>Published</strong>
+                  <span>{formatAdminDateTime(updateCheck.current_release.published_at)}</span>
+                </li>
+              </ul>
+              <p>
+                {updateCheck.current_release.changelog_summary ??
+                  "No current-version changelog summary is available."}
+              </p>
+              {updateCheck.current_release.breaking_change_notes.length > 0 ? (
+                <ul className="callout-list">
+                  {updateCheck.current_release.breaking_change_notes.map((note) => (
+                    <li key={note}>{note}</li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          ) : (
             <p>
-              <a href={updateCheck.release_notes_url}>Release notes</a>
+              No current-version GitHub Release entry is available for this running build yet.
             </p>
-          ) : null}
+          )}
         </article>
       </section>
     </div>

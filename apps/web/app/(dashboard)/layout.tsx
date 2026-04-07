@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { AppShell } from "../../components/app-shell";
-import { requireSession } from "../../lib/server-auth";
+import { getReleaseStatus, requireSession } from "../../lib/server-auth";
 
 export default async function DashboardLayout({
   children
@@ -8,6 +8,11 @@ export default async function DashboardLayout({
   children: ReactNode;
 }>) {
   const session = await requireSession();
-  return <AppShell session={session}>{children}</AppShell>;
+  const releaseStatus =
+    session.user.platform_role === "platform_admin" ? await getReleaseStatus() : null;
+  return (
+    <AppShell session={session} releaseStatus={releaseStatus}>
+      {children}
+    </AppShell>
+  );
 }
-

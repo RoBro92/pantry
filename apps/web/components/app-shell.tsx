@@ -1,17 +1,20 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import type { SessionResponse } from "../lib/api-types";
+import type { ReleaseCheckResponse, SessionResponse } from "../lib/api-types";
 import { appConfig } from "../lib/app-config";
+import { AdminReleaseNotesDialog } from "./admin-release-notes-dialog";
 import { LogoutButton } from "./logout-button";
 
 type AppShellProps = {
   session: SessionResponse;
+  releaseStatus?: ReleaseCheckResponse | null;
   children: ReactNode;
 };
 
-export function AppShell({ session, children }: AppShellProps) {
+export function AppShell({ session, releaseStatus, children }: AppShellProps) {
   return (
     <main className="page-shell">
+      {releaseStatus ? <AdminReleaseNotesDialog initialReleaseStatus={releaseStatus} /> : null}
       <div className="shell-grid">
         <aside className="sidebar panel">
           <p className="eyebrow">Pantry</p>

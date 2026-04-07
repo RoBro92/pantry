@@ -29,3 +29,5 @@ class InstanceSetting(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     smtp_last_test_status: Mapped[str] = mapped_column(String(32), nullable=False, default="never")
     smtp_last_tested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     smtp_last_test_error: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    release_notes_seen_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    release_notes_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
