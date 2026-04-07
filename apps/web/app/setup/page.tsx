@@ -30,7 +30,7 @@ export default async function SetupPage({ searchParams }: SetupPageProps) {
     <main className="page-shell setup-page">
       <section className="auth-stage-shell">
         <div className="auth-stage-intro">
-          <p className="eyebrow">Pantry</p>
+          <p className="eyebrow">Pantry {process.env.NEXT_PUBLIC_APP_VERSION ?? ""}</p>
           <h1>Setup Wizard</h1>
           <p className="lede">
             Welcome to Pantry! Let's get you set up with a few quick steps to start using your self hosted ingredient manager.

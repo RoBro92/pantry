@@ -9,12 +9,9 @@ export default async function SessionPage() {
   return (
     <div className="stack">
       <section className="panel">
-        <p className="eyebrow">Authenticated Session</p>
-        <h1>Welcome back</h1>
+        <h1>Welcome back {session.user.display_name ?? session.user.email}</h1>
         <p>
-          This shell is intentionally small. It confirms the current login,
-          role, and household memberships before later household workflows are
-          added.
+          This is your Pantry dashboard, where you can access your households, view your memberships, and manage your account. Use the links below to navigate to different sections of the app and start organizing your pantry!
         </p>
       </section>
 
@@ -43,7 +40,7 @@ export default async function SessionPage() {
             <div className="stack">
               <p>
                 No active household memberships yet. Create a household and assign at least one
-                membership from the installation console to start using pantry workflows.
+                membership from the installation console to start using pantry.
               </p>
               <div className="page-actions">
                 <Link href="/admin/households" className="primary-link">
@@ -56,7 +53,7 @@ export default async function SessionPage() {
             </div>
           ) : (
             <p>
-              No active household memberships yet. Ask a platform admin to assign this account to a
+              No active household memberships yet. Ask a admin to assign this account to a
               household.
             </p>
           )
@@ -73,7 +70,7 @@ export default async function SessionPage() {
                     href={`/app/households/${membership.household_external_id}`}
                     className="primary-link"
                   >
-                    Open pantry
+                    Open Pantry
                   </Link>
                   <Link
                     href={`/app/households/${membership.household_external_id}/recipes`}
@@ -98,8 +95,7 @@ export default async function SessionPage() {
         <section className="panel">
           <p className="eyebrow">Platform Admin</p>
           <p>
-            The platform admin dashboard is available for installation-level visibility and
-            direct links into household pantry views.
+            The platform admin dashboard provides tools for managing households, users, and memberships across the entire Pantry installation. Use the admin dashboard to set up new households, assign user roles, and oversee platform activity.
           </p>
           <Link href="/admin" className="primary-link">
             Open admin dashboard
