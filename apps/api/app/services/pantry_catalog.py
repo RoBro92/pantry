@@ -61,6 +61,84 @@ def get_product_by_external_id(
     )
 
 
+def get_product_by_lookup_name(
+    db: Session,
+    *,
+    household: Household,
+    lookup_name: str,
+) -> Product | None:
+    normalized_name = normalize_lookup_name(lookup_name)
+
+    product = db.scalar(
+        select(Product)
+        .where(Product.household_id == household.id)
+        .where(Product.normalized_name == normalized_name)
+        .options(selectinload(Product.aliases), selectinload(Product.barcodes))
+    )
+    if product is not None:
+        return product
+
+    alias = db.scalar(
+        select(ProductAlias)
+        .where(ProductAlias.household_id == household.id)
+        .where(ProductAlias.normalized_name == normalized_name)
+        .options(selectinload(ProductAlias.product).selectinload(Product.aliases))
+    )
+    if alias is None:
+        return None
+    return get_product_by_external_id(db, household=household, external_id=alias.product.external_id)
+
+
+def find_alias_conflicts(
+    db: Session,
+    *,
+    household: Household,
+    aliases: list[str],
+    ignore_product_id=None,
+) -> list[dict[str, str]]:
+    conflicts: list[dict[str, str]] = []
+    seen_normalized: set[str] = set()
+
+    for alias_name in dedupe_preserving_order([require_text(alias, field_name="Alias") for alias in aliases if alias.strip()]):
+        normalized_name = normalize_lookup_name(alias_name)
+        if normalized_name in seen_normalized:
+            continue
+        seen_normalized.add(normalized_name)
+
+        product = db.scalar(
+            select(Product)
+            .where(Product.household_id == household.id)
+            .where(Product.normalized_name == normalized_name)
+            .options(selectinload(Product.aliases), selectinload(Product.barcodes))
+        )
+        if product is not None and product.id != ignore_product_id:
+            conflicts.append(
+                {
+                    "alias": alias_name,
+                    "product_external_id": product.external_id,
+                    "product_name": product.name,
+                }
+            )
+            continue
+
+        existing_alias = db.scalar(
+            select(ProductAlias)
+            .where(ProductAlias.household_id == household.id)
+            .where(ProductAlias.normalized_name == normalized_name)
+            .options(selectinload(ProductAlias.product))
+        )
+        if existing_alias is not None and existing_alias.product_id != ignore_product_id:
+            conflicts.append(
+                {
+                    "alias": alias_name,
+                    "product_external_id": existing_alias.product.external_id,
+                    "product_name": existing_alias.product.name,
+                }
+            )
+
+    return conflicts
+
+
 def create_location_group(
     db: Session,
     *,
@@ -160,7 +238,7 @@ def _validate_product_names(
         select(Product).where(Product.household_id == household.id).where(Product.normalized_name.in_(normalized_names))
     )
     if existing_product_name is not None:
-        raise ValueError("A product with the same name or alias already exists.")
+        raise ValueError(f"{existing_product_name.name} already exists.")
 
     existing_alias = db.scalar(
         select(ProductAlias)
@@ -168,7 +246,7 @@ def _validate_product_names(
         .where(ProductAlias.normalized_name.in_(normalized_names))
     )
     if existing_alias is not None:
-        raise ValueError("A product with the same name or alias already exists.")
+        raise ValueError(f"{existing_alias.product.name} already uses that name or alias.")
 
 
 def _validate_barcodes(

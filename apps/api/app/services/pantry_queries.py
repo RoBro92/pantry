@@ -160,17 +160,13 @@ def _matches_query(lot: StockLot, *, query: str | None) -> bool:
     except ValueError:
         barcode_query = None
 
-    haystacks = [
-        lot.product.normalized_name,
-        lot.location.normalized_name,
-        lot.location.location_group.normalized_name,
-        *[alias.normalized_name for alias in lot.product.aliases],
-    ]
+    haystacks = [lot.product.normalized_name, *[alias.normalized_name for alias in lot.product.aliases]]
     if any(normalized_query in value for value in haystacks):
         return True
-    if barcode_query and any(barcode_query in barcode.normalized_value for barcode in lot.product.barcodes):
-        return True
-    return False
+    return bool(
+        barcode_query
+        and any(barcode_query in barcode.normalized_value for barcode in lot.product.barcodes)
+    )
 
 
 def _matches_filters(lot: StockLot, *, filters: PantryFilterOptions) -> bool:
@@ -204,11 +200,13 @@ def build_pantry_overview(
                 "lot_count": 0,
                 "aliases": [alias.name for alias in lot.product.aliases],
                 "barcodes": [barcode.value for barcode in lot.product.barcodes],
+                "stock_lots": [],
                 "locations": defaultdict(lambda: {"total_quantity": Decimal("0.000"), "lot_count": 0, "location": None}),
             },
         )
         product_bucket["total_quantity"] = product_bucket["total_quantity"] + lot.quantity
         product_bucket["lot_count"] = product_bucket["lot_count"] + 1
+        product_bucket["stock_lots"].append(_stock_lot_summary(lot, near_expiry_days=near_expiry_days))
 
         location_bucket = product_bucket["locations"][lot.location.external_id]
         location_bucket["total_quantity"] = location_bucket["total_quantity"] + lot.quantity
@@ -225,6 +223,15 @@ def build_pantry_overview(
                 lot_count=bucket["lot_count"],
                 aliases=bucket["aliases"],
                 barcodes=bucket["barcodes"],
+                stock_lots=sorted(
+                    bucket["stock_lots"],
+                    key=lambda stock_lot: (
+                        stock_lot.expires_on is None,
+                        stock_lot.expires_on or date.max,
+                        stock_lot.location_group_name.lower(),
+                        stock_lot.location_name.lower(),
+                    ),
+                ),
                 locations=sorted(
                     [
                         ProductLocationSummary(
