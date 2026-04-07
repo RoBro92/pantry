@@ -26,6 +26,9 @@ type PasswordDraft = {
   confirm: string;
 };
 
+type AutoCapitalizeMode = "none" | "sentences" | "words" | "characters";
+type AutoCorrectMode = "off" | "on";
+
 const STEP_ORDER: SetupStepKey[] = [
   "welcome",
   "users",
@@ -96,6 +99,10 @@ function summarizeUser(user: SetupWizardUserSummary) {
 
 function renderSavedPasswordHint(user: SetupWizardUserSummary) {
   return user.password_saved ? "Password saved" : "Password not saved yet";
+}
+
+function buildAutocomplete(section: string, field: string) {
+  return `section-${section} ${field}`;
 }
 
 function normalizeLoginKey(login: string) {
@@ -187,12 +194,18 @@ function PasswordFields({
   label,
   draft,
   onChange,
-  onBlur
+  onBlur,
+  passwordName,
+  confirmName,
+  autoCompleteSection
 }: {
   label: string;
   draft: PasswordDraft;
   onChange: (nextDraft: PasswordDraft) => void;
   onBlur?: () => void;
+  passwordName: string;
+  confirmName: string;
+  autoCompleteSection: string;
 }) {
   return (
     <div className="content-grid">
@@ -200,8 +213,13 @@ function PasswordFields({
         <span>{label}</span>
         <input
           type="password"
+          name={passwordName}
           value={draft.password}
           minLength={8}
+          autoComplete={buildAutocomplete(autoCompleteSection, "new-password")}
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
           onChange={(event) => onChange({ ...draft, password: event.target.value })}
           onBlur={onBlur}
           placeholder="At least 8 characters"
@@ -211,8 +229,13 @@ function PasswordFields({
         <span>Confirm password</span>
         <input
           type="password"
+          name={confirmName}
           value={draft.confirm}
           minLength={8}
+          autoComplete={buildAutocomplete(autoCompleteSection, "new-password")}
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
           onChange={(event) => onChange({ ...draft, confirm: event.target.value })}
           onBlur={onBlur}
           placeholder="Repeat the password"
@@ -230,7 +253,14 @@ function TokenEditor({
   onAddToken,
   onRemoveToken,
   label,
-  placeholder
+  placeholder,
+  inputName,
+  inputType = "text",
+  autoComplete = "off",
+  autoCapitalize = "words",
+  autoCorrect = "off",
+  inputMode,
+  spellCheck = false
 }: {
   tokens: string[];
   suggestions: string[];
@@ -240,6 +270,13 @@ function TokenEditor({
   onRemoveToken: (value: string) => void;
   label: string;
   placeholder: string;
+  inputName: string;
+  inputType?: "text" | "url";
+  autoComplete?: string;
+  autoCapitalize?: AutoCapitalizeMode;
+  autoCorrect?: AutoCorrectMode;
+  inputMode?: "text" | "search" | "email" | "url" | "numeric" | "decimal";
+  spellCheck?: boolean;
 }) {
   return (
     <div className="stack">
@@ -247,7 +284,14 @@ function TokenEditor({
         <span>{label}</span>
         <div className="token-input-row">
           <input
+            type={inputType}
+            name={inputName}
             value={newValue}
+            autoComplete={autoComplete}
+            autoCapitalize={autoCapitalize}
+            autoCorrect={autoCorrect}
+            inputMode={inputMode}
+            spellCheck={spellCheck}
             onChange={(event) => onNewValueChange(event.target.value)}
             placeholder={placeholder}
             onKeyDown={(event) => {
@@ -853,7 +897,13 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
               <label className="field">
                 <span>Username or email</span>
                 <input
+                  type="text"
+                  name="setup_admin_login"
                   value={wizard.admin_user.login}
+                  autoComplete={buildAutocomplete("setup-admin", "username")}
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
                   onChange={(event) => updateAdmin({ login: event.target.value })}
                   onBlur={() =>
                     void persistStep("users", { suppressErrors: true, clearPasswordDrafts: false })
@@ -864,7 +914,13 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
               <label className="field">
                 <span>Display name</span>
                 <input
+                  type="text"
+                  name="setup_admin_display_name"
                   value={wizard.admin_user.display_name ?? ""}
+                  autoComplete={buildAutocomplete("setup-admin", "name")}
+                  autoCapitalize="words"
+                  autoCorrect="off"
+                  spellCheck={false}
                   onChange={(event) => updateAdmin({ display_name: event.target.value })}
                   onBlur={() =>
                     void persistStep("users", { suppressErrors: true, clearPasswordDrafts: false })
@@ -877,6 +933,9 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
               label={wizard.admin_user.password_saved ? "Replace password" : "Password"}
               draft={adminPasswordDraft}
               onChange={setAdminPasswordDraft}
+              passwordName="setup_admin_password"
+              confirmName="setup_admin_confirm_password"
+              autoCompleteSection="setup-admin"
               onBlur={() =>
                 void persistStep("users", { suppressErrors: true, clearPasswordDrafts: true })
               }
@@ -925,7 +984,13 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                     <label className="field">
                       <span>Username or email</span>
                       <input
+                        type="text"
+                        name={`setup_user_${user.stage_id}_login`}
                         value={user.login}
+                        autoComplete={buildAutocomplete(`setup-user-${user.stage_id}`, "username")}
+                        autoCapitalize="none"
+                        autoCorrect="off"
+                        spellCheck={false}
                         onChange={(event) =>
                           updateInitialUser(user.stage_id, { login: event.target.value })
                         }
@@ -941,7 +1006,13 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                     <label className="field">
                       <span>Display name</span>
                       <input
+                        type="text"
+                        name={`setup_user_${user.stage_id}_display_name`}
                         value={user.display_name ?? ""}
+                        autoComplete={buildAutocomplete(`setup-user-${user.stage_id}`, "name")}
+                        autoCapitalize="words"
+                        autoCorrect="off"
+                        spellCheck={false}
                         onChange={(event) =>
                           updateInitialUser(user.stage_id, { display_name: event.target.value })
                         }
@@ -961,6 +1032,9 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                     onChange={(draft) =>
                       setUserPasswordDrafts((current) => ({ ...current, [user.stage_id]: draft }))
                     }
+                    passwordName={`setup_user_${user.stage_id}_password`}
+                    confirmName={`setup_user_${user.stage_id}_confirm_password`}
+                    autoCompleteSection={`setup-user-${user.stage_id}`}
                     onBlur={() =>
                       void persistStep("users", { suppressErrors: true, clearPasswordDrafts: true })
                     }
@@ -988,7 +1062,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
           <p className="eyebrow">Step 3</p>
           <h1>Household and storage locations</h1>
           <p className="step-copy">
-            Create the first household, stage the storage locations you want available on day one,
+            Create the first household, select the storage locations you want available,
             and choose who belongs to it.
           </p>
 
@@ -996,7 +1070,13 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
             <label className="field">
               <span>Household name</span>
               <input
+                type="text"
+                name="setup_household_name"
                 value={wizard.household_name ?? ""}
+                autoComplete="organization"
+                autoCapitalize="words"
+                autoCorrect="off"
+                spellCheck={false}
                 onChange={(event) =>
                   setWizard((current) => ({ ...current, household_name: event.target.value }))
                 }
@@ -1007,7 +1087,13 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
             <label className="field">
               <span>Default storage location</span>
               <input
+                type="text"
+                name="setup_location_group_name"
                 value={wizard.location_group_name ?? ""}
+                autoComplete="off"
+                autoCapitalize="words"
+                autoCorrect="off"
+                spellCheck={false}
                 onChange={(event) =>
                   setWizard((current) => ({ ...current, location_group_name: event.target.value }))
                 }
@@ -1026,6 +1112,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
             onRemoveToken={removeStorageLocation}
             label="Additional storage locations"
             placeholder="Add a storage location"
+            inputName="setup_storage_location"
           />
 
           <div className="setup-subsection">
@@ -1045,6 +1132,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                     <label className="field">
                       <span>Membership</span>
                       <select
+                        name={`setup_household_assignment_${user.stage_id}`}
                         aria-label={`Household membership for ${summarizeUser(user)}`}
                         disabled={isAdmin}
                         value={isAdmin ? "household_admin" : assignment?.role ?? "none"}
@@ -1083,7 +1171,14 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
           <label className="field">
             <span>Public Pantry URL</span>
             <input
+              type="url"
+              name="setup_public_base_url"
               value={wizard.public_base_url ?? ""}
+              autoComplete="url"
+              autoCapitalize="none"
+              autoCorrect="off"
+              inputMode="url"
+              spellCheck={false}
               onChange={(event) =>
                 setWizard((current) => ({ ...current, public_base_url: event.target.value }))
               }
@@ -1122,6 +1217,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
             onRemoveToken={removeHouseholdDietaryPreference}
             label="Household-wide preferences"
             placeholder="Add a preference"
+            inputName="setup_household_dietary_preference"
           />
 
           <div className="setup-subsection">
@@ -1148,6 +1244,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                     onRemoveToken={(value) => removeUserDietaryPreference(user.stage_id, value)}
                     label="Personal preferences"
                     placeholder="Add a preference"
+                    inputName={`setup_user_${user.stage_id}_dietary_preference`}
                   />
                 </article>
               ))}
@@ -1169,6 +1266,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
           <label className="checkbox-row">
             <input
               type="checkbox"
+              name="setup_ai_enabled"
               checked={wizard.ai_config.is_enabled}
               onChange={(event) =>
                 setWizard((current) => ({
@@ -1183,6 +1281,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
             <label className="field">
               <span>Provider type</span>
               <select
+                name="setup_ai_provider_type"
                 value={wizard.ai_config.provider_type ?? "ollama"}
                 onChange={(event) =>
                   setWizard((current) => ({
@@ -1201,7 +1300,14 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
             <label className="field">
               <span>Base URL</span>
               <input
+                type="url"
+                name="setup_ai_base_url"
                 value={wizard.ai_config.base_url ?? ""}
+                autoComplete="url"
+                autoCapitalize="none"
+                autoCorrect="off"
+                inputMode="url"
+                spellCheck={false}
                 onChange={(event) =>
                   setWizard((current) => ({
                     ...current,
@@ -1214,7 +1320,13 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
             <label className="field">
               <span>Default model</span>
               <input
+                type="text"
+                name="setup_ai_default_model"
                 value={wizard.ai_config.default_model ?? ""}
+                autoComplete="off"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
                 onChange={(event) =>
                   setWizard((current) => ({
                     ...current,
@@ -1228,7 +1340,12 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
               <span>API key</span>
               <input
                 type="password"
+                name="setup_ai_api_key"
                 value={aiApiKey}
+                autoComplete="off"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
                 onChange={(event) => setAiApiKey(event.target.value)}
                 placeholder={
                   wizard.ai_config.has_api_key
@@ -1254,6 +1371,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
           <label className="checkbox-row">
             <input
               type="checkbox"
+              name="setup_smtp_enabled"
               checked={wizard.smtp_config.is_enabled}
               onChange={(event) =>
                 setWizard((current) => ({
@@ -1268,7 +1386,13 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
             <label className="field">
               <span>SMTP host</span>
               <input
+                type="text"
+                name="setup_smtp_host"
                 value={wizard.smtp_config.host ?? ""}
+                autoComplete="off"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
                 onChange={(event) =>
                   setWizard((current) => ({
                     ...current,
@@ -1282,7 +1406,13 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
               <span>Port</span>
               <input
                 type="number"
+                name="setup_smtp_port"
                 value={wizard.smtp_config.port ?? ""}
+                autoComplete="off"
+                autoCapitalize="none"
+                autoCorrect="off"
+                inputMode="numeric"
+                spellCheck={false}
                 onChange={(event) =>
                   setWizard((current) => ({
                     ...current,
@@ -1298,7 +1428,13 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
             <label className="field">
               <span>Username</span>
               <input
+                type="text"
+                name="setup_smtp_username"
                 value={wizard.smtp_config.username ?? ""}
+                autoComplete="off"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
                 onChange={(event) =>
                   setWizard((current) => ({
                     ...current,
@@ -1311,7 +1447,12 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
               <span>Password</span>
               <input
                 type="password"
+                name="setup_smtp_password"
                 value={smtpPassword}
+                autoComplete="off"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
                 onChange={(event) => setSmtpPassword(event.target.value)}
                 placeholder={
                   wizard.smtp_config.has_password
@@ -1323,7 +1464,14 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
             <label className="field">
               <span>From email</span>
               <input
+                type="email"
+                name="setup_smtp_from_email"
                 value={wizard.smtp_config.from_email ?? ""}
+                autoComplete="email"
+                autoCapitalize="none"
+                autoCorrect="off"
+                inputMode="email"
+                spellCheck={false}
                 onChange={(event) =>
                   setWizard((current) => ({
                     ...current,
@@ -1336,7 +1484,13 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
             <label className="field">
               <span>From name</span>
               <input
+                type="text"
+                name="setup_smtp_from_name"
                 value={wizard.smtp_config.from_name ?? ""}
+                autoComplete="organization"
+                autoCapitalize="words"
+                autoCorrect="off"
+                spellCheck={false}
                 onChange={(event) =>
                   setWizard((current) => ({
                     ...current,
@@ -1349,6 +1503,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
             <label className="field">
               <span>Security</span>
               <select
+                name="setup_smtp_security"
                 value={wizard.smtp_config.security ?? "starttls"}
                 onChange={(event) =>
                   setWizard((current) => ({

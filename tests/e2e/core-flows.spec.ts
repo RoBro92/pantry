@@ -143,6 +143,55 @@ test("first-run setup handles staged users, skips optional steps, and completes 
   await expect(page.locator(".household-card").getByText("Brown Household")).toBeVisible();
 });
 
+test("setup and login forms render explicit autofill-safe field metadata", async ({ page }) => {
+  resetToUninitialized();
+
+  await page.goto("/setup");
+  const wizard = page.getByTestId("setup-wizard");
+  await wizard.getByRole("button", { name: "Next" }).click();
+
+  const usersStep = page.getByTestId("setup-users-step");
+  const adminLogin = usersStep.locator('input[name="setup_admin_login"]');
+  await expect(adminLogin).toHaveAttribute("type", "text");
+  await expect(adminLogin).toHaveAttribute("autocomplete", "section-setup-admin username");
+  await expect(adminLogin).toHaveAttribute("autocapitalize", "none");
+  await expect(adminLogin).toHaveAttribute("autocorrect", "off");
+
+  const adminPassword = usersStep.locator('input[name="setup_admin_password"]');
+  await expect(adminPassword).toHaveAttribute("type", "password");
+  await expect(adminPassword).toHaveAttribute(
+    "autocomplete",
+    "section-setup-admin new-password",
+  );
+
+  await usersStep.getByRole("button", { name: "Add additional user" }).click();
+  await expect(usersStep.locator('input[name^="setup_user_"][name$="_login"]').first()).toHaveAttribute(
+    "autocomplete",
+    /section-setup-user-.* username/,
+  );
+  await expect(
+    usersStep.locator('input[name^="setup_user_"][name$="_password"]').first(),
+  ).toHaveAttribute("autocomplete", /section-setup-user-.* new-password/);
+
+  await wizard.getByRole("button", { name: "Public URL Optional" }).click();
+  const publicUrl = page.locator('input[name="setup_public_base_url"]');
+  await expect(publicUrl).toHaveAttribute("type", "url");
+  await expect(publicUrl).toHaveAttribute("autocomplete", "url");
+  await expect(publicUrl).toHaveAttribute("inputmode", "url");
+
+  reseedE2E();
+  await page.goto("/login");
+  const loginForm = page.getByTestId("login-form");
+  await expect(loginForm.locator('input[name="identifier"]')).toHaveAttribute(
+    "autocomplete",
+    "section-login username",
+  );
+  await expect(loginForm.locator('input[name="password"]')).toHaveAttribute(
+    "autocomplete",
+    "section-login current-password",
+  );
+});
+
 test("completed installs use the login page as the default entry point", async ({ page }) => {
   await page.goto("/");
   await expect(page).toHaveURL(/\/login$/);

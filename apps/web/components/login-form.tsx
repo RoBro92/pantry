@@ -53,11 +53,27 @@ export function LoginForm({ nextPath = "/app" }: LoginFormProps) {
       </p>
       <label className="field">
         <span>Username or email</span>
-        <input name="identifier" autoComplete="username" required />
+        <input
+          type="text"
+          name="identifier"
+          autoComplete="section-login username"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
+          required
+        />
       </label>
       <label className="field">
         <span>Password</span>
-        <input type="password" name="password" autoComplete="current-password" required />
+        <input
+          type="password"
+          name="password"
+          autoComplete="section-login current-password"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
+          required
+        />
       </label>
       {error ? <p className="error-text">{error}</p> : null}
       <div className="wizard-actions login-actions">
