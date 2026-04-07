@@ -59,29 +59,27 @@ SETUP_STATUS_IN_PROGRESS = "in_progress"
 SETUP_STATUS_COMPLETED = "completed"
 DIETARY_NONE_OPTION = "None"
 SETUP_STEP_TITLES = {
-    "welcome": "Welcome",
-    "restore": "Fresh install or restore",
+    "welcome": "Install selection",
     "users": "Admin and users",
-    "household": "Household and storage",
-    "public_url": "Public URL",
     "dietary": "Dietary preferences",
+    "household": "Rooms and storage",
+    "public_url": "Public URL",
     "ai": "AI configuration",
     "smtp": "SMTP configuration",
     "review": "Review and complete",
 }
 FRESH_INSTALL_STEP_ORDER = [
     "welcome",
-    "restore",
     "users",
+    "dietary",
     "household",
     "public_url",
-    "dietary",
     "ai",
     "smtp",
     "review",
 ]
-RESTORE_STEP_ORDER = ["welcome", "restore", "review"]
-REQUIRED_STEPS = {"welcome", "restore", "users", "household"}
+RESTORE_STEP_ORDER = ["welcome", "review"]
+REQUIRED_STEPS = {"welcome", "users", "household"}
 OPTIONAL_STEPS = {"public_url", "dietary", "ai", "smtp"}
 DEFAULT_LOCATION_GROUP_NAME = "Kitchen"
 DEFAULT_ADMIN_STAGE_ID = "platform-admin"
@@ -290,10 +288,11 @@ def _compute_step_completion(payload: dict[str, object]) -> dict[str, bool]:
     smtp = payload["smtp"]
     staged_restore = payload.get("staged_restore") if isinstance(payload.get("staged_restore"), dict) else None
     skipped_optional_steps = set(payload.get("skipped_optional_steps") or [])
-    restore_complete = bool(
+    install_selection_complete = bool(
         installation_mode == SETUP_MODE_FRESH_INSTALL
         or (staged_restore and staged_restore.get("supported_for_restore"))
     )
+    welcome_complete = bool(payload.get("welcome_acknowledged")) and bool(install_selection_complete)
 
     users_complete = (
         bool(admin_user.get("login"))
@@ -324,16 +323,15 @@ def _compute_step_completion(payload: dict[str, object]) -> dict[str, bool]:
         smtp_complete = True
 
     review_complete = all(
-        [bool(payload.get("welcome_acknowledged")), restore_complete, users_complete, household_complete]
+        [welcome_complete, users_complete, household_complete]
     )
 
     return {
-        "welcome": bool(payload.get("welcome_acknowledged")),
-        "restore": restore_complete,
+        "welcome": welcome_complete,
         "users": users_complete,
+        "dietary": dietary_complete,
         "household": household_complete,
         "public_url": public_url_complete,
-        "dietary": dietary_complete,
         "ai": ai_complete,
         "smtp": smtp_complete,
         "review": review_complete,
@@ -344,10 +342,11 @@ def _missing_requirements(payload: dict[str, object]) -> list[str]:
     missing: list[str] = []
     completion = _compute_step_completion(payload)
     if not completion["welcome"]:
-        missing.append("Acknowledge the welcome step.")
+        if payload.get("installation_mode") == SETUP_MODE_RESTORE_BACKUP:
+            missing.append("Choose restore and upload a validated full instance Pantry backup.")
+        else:
+            missing.append("Choose how this Pantry install should start before continuing.")
     if payload.get("installation_mode") == SETUP_MODE_RESTORE_BACKUP:
-        if not completion["restore"]:
-            missing.append("Upload and validate a full instance Pantry backup before restoring.")
         return missing
     if not completion["users"]:
         missing.append("Create a platform admin login and save a password.")

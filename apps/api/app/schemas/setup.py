@@ -7,11 +7,10 @@ from pydantic import BaseModel, Field, model_validator
 
 SetupStepKey = Literal[
     "welcome",
-    "restore",
     "users",
+    "dietary",
     "household",
     "public_url",
-    "dietary",
     "ai",
     "smtp",
     "review",

@@ -91,11 +91,10 @@ export type SetupStatusResponse = {
   steps: Array<{
     key:
       | "welcome"
-      | "restore"
       | "users"
+      | "dietary"
       | "household"
       | "public_url"
-      | "dietary"
       | "ai"
       | "smtp"
       | "review";
@@ -445,6 +444,7 @@ export type PantryProductSummary = {
   aliases: string[];
   barcodes: string[];
   locations: PantryProductLocationSummary[];
+  stock_lots: PantryStockLotSummary[];
 };
 
 export type PantryCatalogProductSummary = {
@@ -503,6 +503,28 @@ export type PantryOverview = {
   products: PantryProductSummary[];
   stock_lots: PantryStockLotSummary[];
   recent_events: PantryAuditEventSummary[];
+};
+
+export type PantryProductMatchSummary = {
+  external_id: string;
+  name: string;
+  default_unit: string;
+  aliases: string[];
+};
+
+export type PantryAliasConflictSummary = {
+  alias: string;
+  product_external_id: string;
+  product_name: string;
+};
+
+export type PantryEntryMutationResponse = {
+  status: string;
+  message: string;
+  product: PantryCatalogProductSummary | null;
+  lot: PantryStockLotSummary | null;
+  matched_product: PantryProductMatchSummary | null;
+  alias_conflicts: PantryAliasConflictSummary[];
 };
 
 export type NearExpiryResponse = {

@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
+import { AdminUpdateBanner } from "../../../components/admin-update-banner";
 import { AdminSectionNav } from "../../../components/admin-section-nav";
-import { requirePlatformAdminSession } from "../../../lib/server-auth";
+import { getReleaseStatus, requirePlatformAdminSession } from "../../../lib/server-auth";
 
 export default async function AdminLayout({
   children
@@ -8,6 +9,7 @@ export default async function AdminLayout({
   children: ReactNode;
 }>) {
   await requirePlatformAdminSession();
+  const releaseStatus = await getReleaseStatus();
 
   return (
     <div className="stack">
@@ -19,6 +21,7 @@ export default async function AdminLayout({
         </p>
         <AdminSectionNav />
       </section>
+      <AdminUpdateBanner releaseStatus={releaseStatus} />
       {children}
     </div>
   );

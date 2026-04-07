@@ -219,6 +219,10 @@ code {
   gap: 1rem;
 }
 
+.compact-stack {
+  gap: 0.35rem;
+}
+
 .auth-grid,
 .status-grid,
 .content-grid,
@@ -649,6 +653,10 @@ code {
   background: rgba(173, 91, 31, 0.12);
 }
 
+.pill.is-warning {
+  background: rgba(173, 91, 31, 0.14);
+}
+
 .token-input-row {
   display: grid;
   gap: 0.75rem;
@@ -753,6 +761,7 @@ code {
 
 .modal-panel {
   width: min(680px, 100%);
+  max-height: calc(100vh - 2rem);
   display: grid;
   gap: 1rem;
   padding: 1.5rem;
@@ -760,6 +769,31 @@ code {
   border: 1px solid var(--border);
   background: var(--panel-strong);
   box-shadow: var(--shadow);
+  overflow: auto;
+}
+
+.modal-close-button {
+  width: auto;
+}
+
+.embedded-panel {
+  padding: 1.2rem;
+}
+
+.install-selection-grid {
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.install-selection-card {
+  display: grid;
+  gap: 1rem;
+  align-content: start;
+}
+
+.install-selection-actions {
+  margin-top: auto;
+  display: flex;
+  justify-content: flex-start;
 }
 
 .setup-alert {
@@ -807,6 +841,147 @@ code {
   color: var(--danger);
   padding: 0;
   cursor: pointer;
+}
+
+.admin-update-banner {
+  display: grid;
+  gap: 1rem;
+  border-color: rgba(173, 91, 31, 0.24);
+  background:
+    linear-gradient(135deg, rgba(173, 91, 31, 0.12), rgba(255, 255, 255, 0.84)),
+    var(--panel-strong);
+}
+
+.pantry-toolbar {
+  display: grid;
+  gap: 1rem;
+}
+
+.pantry-toolbar-copy h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(1.8rem, 3vw, 2.4rem);
+}
+
+.pantry-action-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.compact-callout p {
+  margin: 0;
+}
+
+.split-fields {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.pantry-product-list,
+.location-link-grid,
+.pantry-lot-list {
+  display: grid;
+  gap: 1rem;
+}
+
+.location-link-grid {
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.pantry-product-card,
+.pantry-lot-card {
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.58);
+}
+
+.pantry-product-card {
+  display: grid;
+  gap: 1.2rem;
+  padding: 1.3rem;
+}
+
+.pantry-product-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.pantry-product-card-header h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.6rem;
+}
+
+.pantry-product-card-metadata {
+  display: grid;
+  gap: 1rem;
+}
+
+.pantry-product-location-summary {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.pantry-lot-card {
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.pantry-lot-card-summary {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.lot-meta-grid {
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  margin: 0;
+}
+
+.lot-meta-grid dt {
+  color: var(--accent-strong);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.lot-meta-grid dd {
+  margin: 0.2rem 0 0;
+  color: var(--muted);
+}
+
+.lot-actions {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.inline-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  align-items: center;
+}
+
+.inline-form input,
+.inline-form select {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 0.72rem 0.85rem;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.compact-error {
+  font-size: 0.88rem;
 }
 
 @media (max-width: 980px) {
@@ -889,12 +1064,19 @@ code {
   }
 
   .table-member-row,
-  .detail-list li {
+  .detail-list li,
+  .pantry-product-card-header,
+  .pantry-lot-card-summary,
+  .inline-form {
     flex-direction: column;
     align-items: flex-start;
   }
 
   .detail-list span {
     text-align: left;
+  }
+
+  .modal-close-button {
+    width: 100%;
   }
 }
