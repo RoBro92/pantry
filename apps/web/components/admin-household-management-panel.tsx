@@ -22,12 +22,18 @@ export function AdminHouseholdManagementPanel({
   const [membershipError, setMembershipError] = useState<string | null>(null);
   const [membershipSuccess, setMembershipSuccess] = useState<string | null>(null);
   const [membershipPending, setMembershipPending] = useState(false);
+  const [maintenanceError, setMaintenanceError] = useState<string | null>(null);
+  const [maintenanceSuccess, setMaintenanceSuccess] = useState<string | null>(null);
+  const [maintenancePending, setMaintenancePending] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
+  const [acknowledgeLastHousehold, setAcknowledgeLastHousehold] = useState(false);
   const [selectedHousehold, setSelectedHousehold] = useState(households[0]?.external_id ?? "");
   const [selectedUser, setSelectedUser] = useState(users[0]?.external_id ?? "");
   const selectedHouseholdSummary = useMemo(
     () => households.find((household) => household.external_id === selectedHousehold) ?? null,
     [households, selectedHousehold],
   );
+  const isLastHousehold = households.length === 1;
 
   async function handleCreateHousehold(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -80,6 +86,63 @@ export function AdminHouseholdManagementPanel({
         submissionError instanceof Error ? submissionError.message : "Membership update failed.",
       );
       setMembershipPending(false);
+    }
+  }
+
+  async function handleRemoveMembership(membershipExternalId: string, displayLabel: string) {
+    const confirmed = window.confirm(
+      `Remove ${displayLabel} from ${selectedHouseholdSummary?.name ?? "this household"}?`,
+    );
+    if (!confirmed || !selectedHouseholdSummary) {
+      return;
+    }
+
+    setMaintenanceError(null);
+    setMaintenanceSuccess(null);
+    setMaintenancePending(true);
+    try {
+      const response = await postToApi<{ message: string }>(
+        `/api/platform-admin/households/${selectedHouseholdSummary.external_id}/memberships/${membershipExternalId}/remove`,
+        {},
+      );
+      setMaintenanceSuccess(response.message);
+      router.refresh();
+    } catch (requestError) {
+      setMaintenanceError(
+        requestError instanceof Error ? requestError.message : "Membership removal failed.",
+      );
+    } finally {
+      setMaintenancePending(false);
+    }
+  }
+
+  async function handleDeleteHousehold(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedHouseholdSummary) {
+      return;
+    }
+
+    setMaintenanceError(null);
+    setMaintenanceSuccess(null);
+    setMaintenancePending(true);
+    try {
+      const response = await postToApi<{ message: string }>(
+        `/api/platform-admin/households/${selectedHouseholdSummary.external_id}/delete`,
+        {
+          confirm_household_name: deleteConfirmation,
+          acknowledge_last_household_deletion: acknowledgeLastHousehold,
+        },
+      );
+      setMaintenanceSuccess(response.message);
+      setDeleteConfirmation("");
+      setAcknowledgeLastHousehold(false);
+      router.refresh();
+    } catch (requestError) {
+      setMaintenanceError(
+        requestError instanceof Error ? requestError.message : "Household deletion failed.",
+      );
+    } finally {
+      setMaintenancePending(false);
     }
   }
 
@@ -178,6 +241,120 @@ export function AdminHouseholdManagementPanel({
           disabled={membershipPending || households.length === 0 || users.length === 0}
         >
           {membershipPending ? "Saving..." : "Assign membership"}
+        </button>
+      </form>
+
+      <form
+        className="panel"
+        onSubmit={handleDeleteHousehold}
+        data-testid="admin-household-maintenance-form"
+      >
+        <p className="eyebrow">Maintenance</p>
+        <h2>Manage memberships and deletion</h2>
+        {households.length === 0 ? (
+          <p className="section-copy">Create a household before using these controls.</p>
+        ) : (
+          <div className="stack">
+            <label className="field">
+              <span>Household</span>
+              <select
+                name="maintenance_household_external_id"
+                value={selectedHousehold}
+                onChange={(event) => {
+                  setSelectedHousehold(event.target.value);
+                  setDeleteConfirmation("");
+                  setAcknowledgeLastHousehold(false);
+                }}
+              >
+                {households.map((household) => (
+                  <option key={household.external_id} value={household.external_id}>
+                    {household.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            {selectedHouseholdSummary ? (
+              <div className="stack">
+                <div className="warning-callout">
+                  <strong>Membership removal safeguards</strong>
+                  <p>
+                    Pantry will block removals that would leave the household without a household
+                    admin.
+                  </p>
+                </div>
+                <div className="stack">
+                  {selectedHouseholdSummary.memberships.length === 0 ? (
+                    <p className="section-copy">No memberships to remove.</p>
+                  ) : (
+                    selectedHouseholdSummary.memberships.map((membership) => (
+                      <div key={membership.membership_external_id} className="table-member-row">
+                        <div>
+                          <strong>{membership.display_name ?? membership.email}</strong>
+                          <div className="helper-text">
+                            {membership.email} · {getHouseholdRoleLabel(membership.role)}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          className="ghost-button"
+                          onClick={() =>
+                            void handleRemoveMembership(
+                              membership.membership_external_id,
+                              membership.display_name ?? membership.email,
+                            )
+                          }
+                          disabled={maintenancePending}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <div className="warning-callout">
+                  <strong>Delete household</strong>
+                  <p>
+                    This removes pantry, recipe, import, membership, AI, and audit records for the
+                    selected household.
+                  </p>
+                </div>
+                <label className="field">
+                  <span>Type the household name to confirm deletion</span>
+                  <input
+                    value={deleteConfirmation}
+                    onChange={(event) => setDeleteConfirmation(event.target.value)}
+                    placeholder={selectedHouseholdSummary.name}
+                  />
+                </label>
+                {isLastHousehold ? (
+                  <label className="checkbox-row">
+                    <input
+                      type="checkbox"
+                      checked={acknowledgeLastHousehold}
+                      onChange={(event) => setAcknowledgeLastHousehold(event.target.checked)}
+                    />
+                    <span>I understand this is the last household in the installation.</span>
+                  </label>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        )}
+        {maintenanceError ? <p className="error-text">{maintenanceError}</p> : null}
+        {maintenanceSuccess ? <p className="status-note">{maintenanceSuccess}</p> : null}
+        <button
+          type="submit"
+          className="primary-button"
+          disabled={
+            maintenancePending ||
+            !selectedHouseholdSummary ||
+            deleteConfirmation !== selectedHouseholdSummary.name ||
+            (isLastHousehold && !acknowledgeLastHousehold)
+          }
+        >
+          {maintenancePending ? "Working..." : "Delete household"}
         </button>
       </form>
     </div>

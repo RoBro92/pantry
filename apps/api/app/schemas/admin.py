@@ -48,3 +48,12 @@ class CreateAdminHouseholdRequest(BaseModel):
 class CreateAdminMembershipRequest(BaseModel):
     user_external_id: str
     role: str
+
+
+class DeleteAdminHouseholdRequest(BaseModel):
+    confirm_household_name: str
+    acknowledge_last_household_deletion: bool = False
+
+
+class AdminActionResponse(BaseModel):
+    message: str

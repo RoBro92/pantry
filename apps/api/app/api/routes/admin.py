@@ -12,6 +12,7 @@ from app.models.membership import Membership
 from app.models.role import Role
 from app.models.user import User
 from app.schemas.admin import (
+    AdminActionResponse,
     AdminHouseholdMemberSummary,
     AdminHouseholdSummary,
     AdminOverviewResponse,
@@ -19,10 +20,13 @@ from app.schemas.admin import (
     CreateAdminHouseholdRequest,
     CreateAdminMembershipRequest,
     CreateAdminUserRequest,
+    DeleteAdminHouseholdRequest,
 )
 from app.services.platform_admin import (
     create_managed_household,
     create_managed_user,
+    delete_managed_household,
+    remove_household_membership,
     upsert_household_membership,
 )
 
@@ -197,3 +201,47 @@ def post_household_membership(
         role=membership.role.code,
         is_active=membership.is_active,
     )
+
+
+@router.post(
+    "/households/{household_external_id}/memberships/{membership_external_id}/remove",
+    response_model=AdminActionResponse,
+)
+def post_remove_household_membership(
+    household_external_id: str,
+    membership_external_id: str,
+    current_user: User = Depends(require_platform_admin),
+    db: Session = Depends(get_db_session),
+):
+    try:
+        remove_household_membership(
+            db,
+            actor=current_user,
+            household_external_id=household_external_id,
+            membership_external_id=membership_external_id,
+        )
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
+
+    return AdminActionResponse(message="Household membership removed.")
+
+
+@router.post("/households/{household_external_id}/delete", response_model=AdminActionResponse)
+def post_delete_household(
+    household_external_id: str,
+    payload: DeleteAdminHouseholdRequest,
+    current_user: User = Depends(require_platform_admin),
+    db: Session = Depends(get_db_session),
+):
+    try:
+        delete_managed_household(
+            db,
+            actor=current_user,
+            household_external_id=household_external_id,
+            confirm_household_name=payload.confirm_household_name,
+            acknowledge_last_household_deletion=payload.acknowledge_last_household_deletion,
+        )
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
+
+    return AdminActionResponse(message="Household deleted.")
