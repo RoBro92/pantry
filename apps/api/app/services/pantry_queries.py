@@ -27,6 +27,7 @@ from app.schemas.pantry import (
 )
 from app.services.location_links import serialize_location_link
 from app.services.pantry_normalization import normalize_barcode, normalize_lookup_name
+from app.services.pantry_serialization import serialize_product_enrichment_summary
 from app.services.tenancy import HouseholdAccess
 
 
@@ -90,6 +91,11 @@ def _event_summary(event: AuditEvent) -> AuditEventSummary:
         )
     elif action == "product.created":
         summary = f"Created product {metadata['name']}."
+    elif action == "product.enrichment_synced":
+        summary = (
+            f"Linked Open Food Facts details to {metadata['product_name']} "
+            f"using {metadata['match_status'] or 'confirmed'} matching."
+        )
     elif action == "location.created":
         summary = f"Created location {metadata['location_group_name']} / {metadata['name']}."
     elif action == "location_group.created":
@@ -129,7 +135,7 @@ def _load_reference_lists(
     products = db.scalars(
         select(Product)
         .where(Product.household_id == household_id)
-        .options(selectinload(Product.aliases), selectinload(Product.barcodes))
+        .options(selectinload(Product.aliases), selectinload(Product.barcodes), selectinload(Product.enrichments))
         .order_by(Product.name)
     ).all()
     return location_groups, locations, products
@@ -144,6 +150,7 @@ def _load_active_lots(db: Session, *, household_id) -> list[StockLot]:
         .options(
             selectinload(StockLot.product).selectinload(Product.aliases),
             selectinload(StockLot.product).selectinload(Product.barcodes),
+            selectinload(StockLot.product).selectinload(Product.enrichments),
             selectinload(StockLot.location).selectinload(Location.location_group),
         )
         .order_by(StockLot.expires_on, StockLot.created_at)
@@ -200,6 +207,7 @@ def build_pantry_overview(
                 "lot_count": 0,
                 "aliases": [alias.name for alias in lot.product.aliases],
                 "barcodes": [barcode.value for barcode in lot.product.barcodes],
+                "enrichment": serialize_product_enrichment_summary(lot.product),
                 "stock_lots": [],
                 "locations": defaultdict(lambda: {"total_quantity": Decimal("0.000"), "lot_count": 0, "location": None}),
             },
@@ -223,6 +231,7 @@ def build_pantry_overview(
                 lot_count=bucket["lot_count"],
                 aliases=bucket["aliases"],
                 barcodes=bucket["barcodes"],
+                enrichment=bucket["enrichment"],
                 stock_lots=sorted(
                     bucket["stock_lots"],
                     key=lambda stock_lot: (
@@ -301,6 +310,7 @@ def build_pantry_overview(
                 "default_unit": product.default_unit,
                 "aliases": [alias.name for alias in product.aliases],
                 "barcodes": [barcode.value for barcode in product.barcodes],
+                "enrichment": serialize_product_enrichment_summary(product),
             }
             for product in products
         ],

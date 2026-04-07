@@ -7,6 +7,8 @@ from sqlalchemy import select
 
 from app.domain.roles import HOUSEHOLD_ADMIN_ROLE, HOUSEHOLD_USER_ROLE
 from app.models.audit_event import AuditEvent
+from app.models.product_enrichment import ProductEnrichment
+from app.schemas.pantry import ProductEnrichmentAttribution, ProductEnrichmentCandidate, ProductNutritionSummaryItem
 from app.models.stock_lot import StockLot
 from app.services.auth import create_household, create_membership, create_user
 from app.services.pantry_catalog import create_location as create_location_record
@@ -81,6 +83,47 @@ def create_pantry_entry(client, household_external_id: str, **payload) -> dict:
     response = client.post(f"/api/households/{household_external_id}/pantry/entries", json=payload)
     assert response.status_code == 200
     return response.json()
+
+
+def build_enrichment_candidate(
+    *,
+    source_product_id: str,
+    source_product_name: str,
+    match_status: str,
+    match_confidence: float,
+) -> ProductEnrichmentCandidate:
+    return ProductEnrichmentCandidate(
+        source_name="open_food_facts",
+        source_product_id=source_product_id,
+        source_barcode=source_product_id,
+        source_product_name=source_product_name,
+        source_product_url=f"https://world.openfoodfacts.org/product/{source_product_id}",
+        product_image_url="https://images.example.test/product.jpg",
+        ingredients_text="Tomatoes, vinegar, barley malt",
+        allergens_text="Gluten",
+        traces_text="Mustard",
+        allergen_tags=["Gluten"],
+        trace_tags=["Mustard"],
+        nutrition_summary=[
+            ProductNutritionSummaryItem(key="energy-kcal", label="Energy", value=100, unit="kcal"),
+            ProductNutritionSummaryItem(key="salt", label="Salt", value=1.2, unit="g"),
+        ],
+        labels=["Vegetarian"],
+        categories=["Brown Sauces"],
+        match_status=match_status,
+        match_confidence=match_confidence,
+        incomplete_fields=[],
+        warnings=[],
+        attribution=ProductEnrichmentAttribution(
+            source_name="open_food_facts",
+            source_label="Open Food Facts",
+            source_url="https://world.openfoodfacts.org",
+            product_url=f"https://world.openfoodfacts.org/product/{source_product_id}",
+            data_notice="Community-contributed Open Food Facts data may be incomplete or inaccurate.",
+            license_name="Open Database License",
+            license_url="https://opendatacommons.org/licenses/odbl/",
+        ),
+    )
 
 
 def test_pantry_overview_aggregates_and_supports_search_and_filters(client, db_session):
@@ -378,6 +421,106 @@ def test_pantry_entry_reports_alias_conflicts(client, db_session):
             "product_name": "Pasta",
         }
     ]
+
+
+def test_product_enrichment_preview_and_confirmed_persistence(client, db_session, monkeypatch):
+    _, household = create_household_with_role(
+        db_session,
+        email="enrich@example.com",
+        household_name="Enrichment Household",
+        role_code=HOUSEHOLD_ADMIN_ROLE,
+    )
+    login(client, email="enrich@example.com")
+
+    room = create_location_group(client, household.external_id, "Kitchen")
+    shelf = create_location(client, household.external_id, room["external_id"], "Shelf")
+
+    barcode_candidate = build_enrichment_candidate(
+        source_product_id="5000111046244",
+        source_product_name="HP Brown Sauce",
+        match_status="barcode_exact",
+        match_confidence=1.0,
+    )
+    name_candidates = [
+        build_enrichment_candidate(
+            source_product_id="5000111046244",
+            source_product_name="HP Brown Sauce",
+            match_status="name_search_candidate",
+            match_confidence=0.93,
+        ),
+        build_enrichment_candidate(
+            source_product_id="5000111046245",
+            source_product_name="HP Fruity Brown Sauce",
+            match_status="name_search_candidate",
+            match_confidence=0.78,
+        ),
+    ]
+
+    class StubOpenFoodFactsClient:
+        def lookup_by_barcode(self, barcode: str):
+            return barcode_candidate if barcode == "5000111046244" else None
+
+        def search_by_name(self, product_name: str, *, limit: int = 5):
+            return name_candidates if "hp" in product_name.lower() else []
+
+        def fetch_product_by_id(self, source_product_id: str):
+            for candidate in [barcode_candidate, *name_candidates]:
+                if candidate.source_product_id == source_product_id:
+                    return candidate
+            return None
+
+    monkeypatch.setattr(
+        "app.services.product_enrichment.get_default_open_food_facts_client",
+        lambda: StubOpenFoodFactsClient(),
+    )
+
+    preview = client.post(
+        f"/api/households/{household.external_id}/pantry/enrichment/preview",
+        json={"product_name": "HP brown sauce", "barcode": "5000111046244"},
+    )
+    assert preview.status_code == 200
+    preview_payload = preview.json()
+    assert preview_payload["status"] == "matched"
+    assert preview_payload["candidates"][0]["source_product_name"] == "HP Brown Sauce"
+
+    preview_fallback = client.post(
+        f"/api/households/{household.external_id}/pantry/enrichment/preview",
+        json={"product_name": "HP brown sauce", "barcode": None},
+    )
+    assert preview_fallback.status_code == 200
+    assert preview_fallback.json()["status"] == "multiple_matches"
+    assert len(preview_fallback.json()["candidates"]) == 2
+
+    payload = create_pantry_entry(
+        client,
+        household.external_id,
+        name="Brown sauce",
+        quantity="1.000",
+        unit="bottle",
+        location_external_id=shelf["external_id"],
+        barcode="5000111046244",
+        aliases=["HP sauce"],
+        confirmed_enrichment={
+            "source_name": "open_food_facts",
+            "source_product_id": "5000111046244",
+            "match_status": "barcode_exact",
+        },
+    )
+
+    assert payload["status"] == "created"
+    assert payload["product"]["enrichment"]["source_name"] == "open_food_facts"
+    assert payload["product"]["enrichment"]["source_product_name"] == "HP Brown Sauce"
+    assert "Open Food Facts details linked." in payload["message"]
+
+    stored_enrichment = db_session.scalar(select(ProductEnrichment))
+    assert stored_enrichment is not None
+    assert stored_enrichment.source_product_id == "5000111046244"
+    assert stored_enrichment.ingredients_text == "Tomatoes, vinegar, barley malt"
+
+    overview = client.get(f"/api/households/{household.external_id}/pantry/overview")
+    assert overview.status_code == 200
+    overview_payload = overview.json()
+    assert overview_payload["products"][0]["enrichment"]["labels"] == ["Vegetarian"]
 
 
 def test_move_stock_preserves_identity_on_full_move_and_splits_on_partial_move(client, db_session):

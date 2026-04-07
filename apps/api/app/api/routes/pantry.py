@@ -14,6 +14,8 @@ from app.schemas.pantry import (
     CreatePantryEntryRequest,
     CreateLocationGroupRequest,
     CreateLocationRequest,
+    ProductEnrichmentPreviewRequest,
+    ProductEnrichmentPreviewResponse,
     CreateProductRequest,
     LocationGroupSummary,
     LocationSummary,
@@ -38,6 +40,12 @@ from app.services.pantry_stock import (
     create_or_add_pantry_entry,
     move_stock_lot,
     remove_stock_from_lot,
+)
+from app.services.product_enrichment import (
+    ProductEnrichmentError,
+    apply_confirmed_product_enrichment,
+    preview_product_enrichment,
+    serialize_product_summary,
 )
 from app.services.tenancy import HouseholdAccess
 
@@ -142,13 +150,32 @@ def post_product(
     except ValueError as exc:
         raise _bad_request(exc) from exc
 
-    return ProductSummary(
-        external_id=product.external_id,
-        name=product.name,
-        default_unit=product.default_unit,
-        aliases=[alias.name for alias in product.aliases],
-        barcodes=[barcode.value for barcode in product.barcodes],
-    )
+    if payload.confirmed_enrichment is not None:
+        try:
+            apply_confirmed_product_enrichment(
+                db,
+                household=access.household,
+                actor=current_user,
+                product=product,
+                confirmed_enrichment=payload.confirmed_enrichment,
+            )
+            db.commit()
+            db.refresh(product)
+        except ProductEnrichmentError:
+            pass
+
+    return serialize_product_summary(product)
+
+
+@router.post("/pantry/enrichment/preview", response_model=ProductEnrichmentPreviewResponse)
+def post_product_enrichment_preview(
+    payload: ProductEnrichmentPreviewRequest,
+    access: HouseholdAccess = Depends(require_household_access()),
+):
+    try:
+        return preview_product_enrichment(product_name=payload.product_name, barcode=payload.barcode)
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
 
 
 @router.post("/pantry/entries", response_model=PantryEntryMutationResponse)
@@ -167,11 +194,13 @@ def post_pantry_entry(
             quantity=payload.quantity,
             unit=payload.unit,
             location_external_id=payload.location_external_id,
+            barcode=payload.barcode,
             aliases=payload.aliases,
             note=payload.note,
             purchased_on=payload.purchased_on,
             expires_on=payload.expires_on,
             existing_product_external_id=payload.existing_product_external_id,
+            confirmed_enrichment=payload.confirmed_enrichment,
             allow_create_product=access.can_administer,
         )
     except ValueError as exc:
@@ -184,13 +213,7 @@ def post_pantry_entry(
         status=str(result["status"]),
         message=str(result["message"]),
         product=(
-            ProductSummary(
-                external_id=product.external_id,
-                name=product.name,
-                default_unit=product.default_unit,
-                aliases=[alias.name for alias in product.aliases],
-                barcodes=[barcode.value for barcode in product.barcodes],
-            )
+            serialize_product_summary(product)
             if product is not None
             else None
         ),

@@ -57,7 +57,7 @@ def get_product_by_external_id(
         select(Product)
         .where(Product.household_id == household.id)
         .where(Product.external_id == external_id)
-        .options(selectinload(Product.aliases), selectinload(Product.barcodes))
+        .options(selectinload(Product.aliases), selectinload(Product.barcodes), selectinload(Product.enrichments))
     )
 
 
@@ -73,7 +73,7 @@ def get_product_by_lookup_name(
         select(Product)
         .where(Product.household_id == household.id)
         .where(Product.normalized_name == normalized_name)
-        .options(selectinload(Product.aliases), selectinload(Product.barcodes))
+        .options(selectinload(Product.aliases), selectinload(Product.barcodes), selectinload(Product.enrichments))
     )
     if product is not None:
         return product
@@ -106,11 +106,11 @@ def find_alias_conflicts(
         seen_normalized.add(normalized_name)
 
         product = db.scalar(
-            select(Product)
-            .where(Product.household_id == household.id)
-            .where(Product.normalized_name == normalized_name)
-            .options(selectinload(Product.aliases), selectinload(Product.barcodes))
-        )
+        select(Product)
+        .where(Product.household_id == household.id)
+        .where(Product.normalized_name == normalized_name)
+        .options(selectinload(Product.aliases), selectinload(Product.barcodes), selectinload(Product.enrichments))
+    )
         if product is not None and product.id != ignore_product_id:
             conflicts.append(
                 {

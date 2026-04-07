@@ -20,6 +20,7 @@ from app.services.pantry_catalog import (
     get_product_by_external_id,
     get_product_by_lookup_name,
 )
+from app.services.product_enrichment import ProductEnrichmentError, apply_confirmed_product_enrichment
 from app.services.pantry_normalization import normalize_unit, require_text
 
 
@@ -42,6 +43,7 @@ def _load_stock_lot(
         .options(
             selectinload(StockLot.product).selectinload(Product.aliases),
             selectinload(StockLot.product).selectinload(Product.barcodes),
+            selectinload(StockLot.product).selectinload(Product.enrichments),
             selectinload(StockLot.location).selectinload(Location.location_group),
         )
     )
@@ -128,11 +130,13 @@ def create_or_add_pantry_entry(
     quantity: Decimal,
     unit: str,
     location_external_id: str,
+    barcode: str | None,
     aliases: list[str],
     note: str | None,
     purchased_on: date | None,
     expires_on: date | None,
     existing_product_external_id: str | None = None,
+    confirmed_enrichment=None,
     allow_create_product: bool = True,
 ) -> dict[str, object]:
     display_name = require_text(name, field_name="Product name")
@@ -161,7 +165,16 @@ def create_or_add_pantry_entry(
         )
         return {
             "status": "added_to_existing",
-            "message": f"Added another stock lot to {matched_product.name}.",
+            "message": _build_enrichment_message(
+                f"Added another stock lot to {matched_product.name}.",
+                _try_apply_confirmed_enrichment(
+                    db,
+                    household=household,
+                    actor=actor,
+                    product=matched_product,
+                    confirmed_enrichment=confirmed_enrichment,
+                ),
+            ),
             "product": matched_product,
             "lot": lot,
             "matched_product": matched_product,
@@ -191,7 +204,7 @@ def create_or_add_pantry_entry(
         name=display_name,
         default_unit=unit,
         aliases=aliases,
-        barcodes=[],
+        barcodes=[barcode] if barcode and barcode.strip() else [],
     )
     lot = add_stock_lot(
         db,
@@ -205,14 +218,55 @@ def create_or_add_pantry_entry(
         expires_on=expires_on,
         unit_override=None,
     )
+    enrichment_message = _try_apply_confirmed_enrichment(
+        db,
+        household=household,
+        actor=actor,
+        product=product,
+        confirmed_enrichment=confirmed_enrichment,
+    )
     return {
         "status": "created",
-        "message": f"Created {product.name} and added the first stock lot.",
+        "message": _build_enrichment_message(
+            f"Created {product.name} and added the first stock lot.",
+            enrichment_message,
+        ),
         "product": product,
         "lot": lot,
         "matched_product": None,
         "alias_conflicts": [],
     }
+
+
+def _try_apply_confirmed_enrichment(
+    db: Session,
+    *,
+    household: Household,
+    actor: User,
+    product: Product,
+    confirmed_enrichment,
+) -> str | None:
+    if confirmed_enrichment is None:
+        return None
+    try:
+        apply_confirmed_product_enrichment(
+            db,
+            household=household,
+            actor=actor,
+            product=product,
+            confirmed_enrichment=confirmed_enrichment,
+        )
+        db.commit()
+        db.refresh(product)
+        return "Open Food Facts details linked."
+    except ProductEnrichmentError as exc:
+        return f"Open Food Facts details were not linked: {exc}"
+
+
+def _build_enrichment_message(base_message: str, enrichment_message: str | None) -> str:
+    if not enrichment_message:
+        return base_message
+    return f"{base_message} {enrichment_message}"
 
 
 def remove_stock_from_lot(
