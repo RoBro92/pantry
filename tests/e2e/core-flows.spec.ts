@@ -1,5 +1,5 @@
 import path from "node:path";
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import {
   login,
   loginThroughApi,
@@ -14,6 +14,16 @@ let manifest: E2ESeedManifest;
 test.beforeEach(() => {
   manifest = reseedE2E();
 });
+
+async function dismissAdminWhatsNewIfVisible(page: Page) {
+  const response = await page.request.post(
+    "http://localhost:8000/api/platform-admin/release-status/mark-seen",
+    {
+      data: {}
+    }
+  );
+  expect(response.ok()).toBeTruthy();
+}
 
 test("first-run setup handles staged users, skips optional steps, and completes cleanly", async ({
   page
@@ -605,13 +615,14 @@ test("ai flow covers unconfigured and configured-but-unavailable states", async 
   await expect(page.getByText("The configured AI provider is unhealthy.")).toBeVisible();
 });
 
-test("platform admin can create a user, create a household, and assign membership", async ({
+test("platform admin can manage household memberships from the consolidated panel", async ({
   page
 }) => {
   await loginThroughApi(page, {
     email: manifest.admin_email,
     password: manifest.password
   });
+  await dismissAdminWhatsNewIfVisible(page);
 
   await page.goto("/admin/users");
 
@@ -632,18 +643,35 @@ test("platform admin can create a user, create a household, and assign membershi
 
   await expect(page.getByRole("cell", { name: "Weekday Household" })).toBeVisible();
 
-  const membershipForm = page.getByTestId("admin-assign-membership-form");
-  await membershipForm
-    .locator('select[name="household_external_id"]')
+  await page
+    .locator('select[name="membership_household_external_id"]')
     .selectOption({ label: "Weekday Household" });
+
+  const membershipForm = page.getByTestId("admin-manage-memberships-form");
   await membershipForm
     .locator('select[name="user_external_id"]')
     .selectOption({ label: "Weekday Member (weekday-member@example.com)" });
   await membershipForm.locator('select[name="role"]').selectOption({ label: "User" });
-  await membershipForm.getByRole("button", { name: "Assign membership" }).click();
+  await membershipForm.getByRole("button", { name: "Add membership" }).click();
 
   await expect(page.getByText("Assigned weekday-member@example.com as User.")).toBeVisible();
-  await expect(page.getByRole("row", { name: /Weekday Household .*Weekday Member \(User\)/ })).toBeVisible();
+
+  const weekdayMemberRow = page
+    .locator(".household-member-row")
+    .filter({ hasText: "weekday-member@example.com" });
+  await expect(weekdayMemberRow).toBeVisible();
+  await weekdayMemberRow.getByLabel("Role for Weekday Member").selectOption({
+    label: "Household Admin"
+  });
+  await weekdayMemberRow.getByRole("button", { name: "Save role" }).click();
+
+  await expect(
+    page.getByText("Updated weekday-member@example.com to Household Admin.")
+  ).toBeVisible();
+
+  const householdsRow = page.locator("tr", { hasText: "Weekday Household" });
+  await expect(householdsRow).toContainText("Weekday Member");
+  await expect(householdsRow).toContainText("Household Admin");
 
   await page.getByRole("button", { name: "Logout" }).click();
 
@@ -660,7 +688,54 @@ test("platform admin can create a user, create a household, and assign membershi
 
   await expect(page.getByRole("heading", { name: "Weekday Household" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Add product" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Manage rooms" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Manage rooms" })).toBeVisible();
+});
+
+test("platform admin sees a warning modal when removing the last household admin would be unsafe", async ({
+  page
+}) => {
+  await loginThroughApi(page, {
+    email: manifest.admin_email,
+    password: manifest.password
+  });
+  await dismissAdminWhatsNewIfVisible(page);
+
+  await page.goto("/admin/users");
+
+  const createUserForm = page.getByTestId("admin-create-user-form");
+  await createUserForm.getByLabel("Email").fill("solo-admin@example.com");
+  await createUserForm.getByLabel("Display name").fill("Solo Admin");
+  await createUserForm.getByLabel("Password", { exact: true }).fill(manifest.password);
+  await createUserForm.getByLabel("Confirm password").fill(manifest.password);
+  await createUserForm.getByRole("button", { name: "Create user" }).click();
+
+  await page.goto("/admin/households");
+
+  const createHouseholdForm = page.getByTestId("admin-create-household-form");
+  await createHouseholdForm.getByLabel("Household name").fill("Solo Admin Household");
+  await createHouseholdForm.getByRole("button", { name: "Create household" }).click();
+  await expect(page.getByRole("cell", { name: "Solo Admin Household" })).toBeVisible();
+
+  await page
+    .locator('select[name="membership_household_external_id"]')
+    .selectOption({ label: "Solo Admin Household" });
+
+  const membershipForm = page.getByTestId("admin-manage-memberships-form");
+  await membershipForm
+    .locator('select[name="user_external_id"]')
+    .selectOption({ label: "Solo Admin (solo-admin@example.com)" });
+  await membershipForm.locator('select[name="role"]').selectOption({ label: "Admin" });
+  await membershipForm.getByRole("button", { name: "Add membership" }).click();
+  await expect(page.getByText("Assigned solo-admin@example.com as Admin.")).toBeVisible();
+
+  const soloAdminRow = page.locator(".household-member-row").filter({ hasText: "solo-admin@example.com" });
+  await soloAdminRow.getByRole("button", { name: "Remove" }).click();
+
+  const warningDialog = page.getByRole("dialog", { name: "Household admin required" });
+  await expect(warningDialog).toContainText("would be left without a household admin");
+  await warningDialog.getByRole("button", { name: "Understood" }).click();
+  await expect(warningDialog).toHaveCount(0);
+  await expect(soloAdminRow).toBeVisible();
 });
 
 test("platform admin can remove household members and delete a household with confirmation", async ({
@@ -670,6 +745,7 @@ test("platform admin can remove household members and delete a household with co
     email: manifest.admin_email,
     password: manifest.password
   });
+  await dismissAdminWhatsNewIfVisible(page);
 
   await page.goto("/admin/users");
 
@@ -687,38 +763,36 @@ test("platform admin can remove household members and delete a household with co
   await createHouseholdForm.getByRole("button", { name: "Create household" }).click();
   await expect(page.getByRole("cell", { name: "Cleanup Household" })).toBeVisible();
 
-  const membershipForm = page.getByTestId("admin-assign-membership-form");
-  await membershipForm
-    .locator('select[name="household_external_id"]')
+  await page
+    .locator('select[name="membership_household_external_id"]')
     .selectOption({ label: "Cleanup Household" });
+
+  const membershipForm = page.getByTestId("admin-manage-memberships-form");
   await membershipForm
     .locator('select[name="user_external_id"]')
     .selectOption({ label: "Cleanup Member (cleanup-member@example.com)" });
   await membershipForm.locator('select[name="role"]').selectOption({ label: "User" });
-  await membershipForm.getByRole("button", { name: "Assign membership" }).click();
+  await membershipForm.getByRole("button", { name: "Add membership" }).click();
   await expect(page.getByText("Assigned cleanup-member@example.com as User.")).toBeVisible();
 
-  const maintenanceForm = page.getByTestId("admin-household-maintenance-form");
-  await maintenanceForm
-    .locator('select[name="maintenance_household_external_id"]')
-    .selectOption({ label: "Cleanup Household" });
+  const cleanupMemberRow = page
+    .locator(".household-member-row")
+    .filter({ hasText: "cleanup-member@example.com" });
+  await cleanupMemberRow.getByRole("button", { name: "Remove" }).click();
 
-  page.once("dialog", async (dialog) => {
-    expect(dialog.message()).toContain("Remove Cleanup Member");
-    await dialog.accept();
-  });
-  await maintenanceForm
-    .locator(".table-member-row", { hasText: "cleanup-member@example.com" })
-    .getByRole("button", { name: "Remove" })
-    .click();
+  const removeDialog = page.getByRole("dialog", { name: "Remove membership" });
+  await expect(removeDialog).toContainText("Cleanup Household");
+  await removeDialog.getByRole("button", { name: "Remove member" }).click();
 
   await expect(page.getByText("Household membership removed.")).toBeVisible();
-  await expect(
-    maintenanceForm.locator(".table-member-row", { hasText: "cleanup-member@example.com" })
-  ).toHaveCount(0);
+  await expect(cleanupMemberRow).toHaveCount(0);
 
-  await maintenanceForm.getByLabel("Type the household name to confirm deletion").fill("Cleanup Household");
-  await maintenanceForm.getByRole("button", { name: "Delete household" }).click();
+  const deleteForm = page.getByTestId("admin-household-delete-form");
+  await deleteForm
+    .locator('select[name="delete_household_external_id"]')
+    .selectOption({ label: "Cleanup Household" });
+  await deleteForm.getByLabel("Type the household name to confirm deletion").fill("Cleanup Household");
+  await deleteForm.getByRole("button", { name: "Delete household" }).click();
 
   await expect(page.getByText("Household deleted.")).toBeVisible();
   await expect(page.getByRole("cell", { name: "Cleanup Household" })).toHaveCount(0);

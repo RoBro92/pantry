@@ -294,6 +294,48 @@ def test_platform_admin_can_create_users_households_and_memberships(client, db_s
     assert household_payload["memberships"][0]["email"] == "managed-user@example.com"
 
 
+def test_platform_admin_blocks_removing_or_demoting_the_last_household_admin(client, db_session):
+    admin = create_platform_admin(
+        db_session,
+        email="guard-admin@example.com",
+        password=PASSWORD,
+        display_name="Guard Admin",
+    )
+    guarded_user = create_user(
+        db_session,
+        email="guarded-member@example.com",
+        password=PASSWORD,
+        display_name="Guarded Member",
+    )
+    household = create_household(db_session, name="Guarded Household")
+    membership = create_membership(
+        db_session,
+        user=guarded_user,
+        household=household,
+        role_code="household_admin",
+    )
+    db_session.commit()
+
+    login(client, email="guard-admin@example.com")
+
+    remove_response = client.post(
+        f"/api/platform-admin/households/{household.external_id}/memberships/{membership.external_id}/remove",
+        json={},
+    )
+    assert remove_response.status_code == 400
+    assert remove_response.json()["detail"] == "Each household must keep at least one household admin."
+
+    demote_response = client.post(
+        f"/api/platform-admin/households/{household.external_id}/memberships",
+        json={
+            "user_external_id": guarded_user.external_id,
+            "role": "household_user",
+        },
+    )
+    assert demote_response.status_code == 400
+    assert demote_response.json()["detail"] == "Each household must keep at least one household admin."
+
+
 def test_platform_admin_can_export_and_restore_instance_backups(client, db_session):
     admin = create_platform_admin(
         db_session,
