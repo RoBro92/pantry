@@ -77,6 +77,12 @@ def add_stock_lot(client, household_external_id: str, **payload) -> dict:
     return response.json()
 
 
+def create_pantry_entry(client, household_external_id: str, **payload) -> dict:
+    response = client.post(f"/api/households/{household_external_id}/pantry/entries", json=payload)
+    assert response.status_code == 200
+    return response.json()
+
+
 def test_pantry_overview_aggregates_and_supports_search_and_filters(client, db_session):
     user, household = create_household_with_role(
         db_session,
@@ -233,7 +239,145 @@ def test_product_creation_rejects_alias_name_collision(client, db_session):
         },
     )
     assert second.status_code == 400
-    assert second.json()["detail"] == "A product with the same name or alias already exists."
+    assert second.json()["detail"] == "Rice already uses that name or alias."
+
+
+def test_pantry_entry_creates_product_and_first_stock_lot_in_one_flow(client, db_session):
+    _, household = create_household_with_role(
+        db_session,
+        email="entry-create@example.com",
+        household_name="Entry Create Household",
+        role_code=HOUSEHOLD_ADMIN_ROLE,
+    )
+    login(client, email="entry-create@example.com")
+
+    room = create_location_group(client, household.external_id, "Kitchen")
+    shelf = create_location(client, household.external_id, room["external_id"], "Shelf")
+
+    payload = create_pantry_entry(
+        client,
+        household.external_id,
+        name="Beef mince",
+        quantity="1.500",
+        unit="kg",
+        location_external_id=shelf["external_id"],
+        aliases=["Ground beef", "Minced beef"],
+        purchased_on="2026-04-01",
+        expires_on="2026-04-03",
+        note="Family pack",
+    )
+
+    assert payload["status"] == "created"
+    assert payload["product"]["name"] == "Beef mince"
+    assert payload["product"]["default_unit"] == "kg"
+    assert payload["lot"]["product_name"] == "Beef mince"
+    assert payload["lot"]["location_name"] == "Shelf"
+    assert payload["lot"]["note"] == "Family pack"
+
+
+def test_pantry_entry_detects_existing_product_then_adds_new_stock_lot(client, db_session):
+    _, household = create_household_with_role(
+        db_session,
+        email="entry-existing@example.com",
+        household_name="Entry Existing Household",
+        role_code=HOUSEHOLD_ADMIN_ROLE,
+    )
+    login(client, email="entry-existing@example.com")
+
+    room = create_location_group(client, household.external_id, "Kitchen")
+    shelf = create_location(client, household.external_id, room["external_id"], "Shelf")
+    freezer = create_location(client, household.external_id, room["external_id"], "Freezer")
+
+    first_entry = create_pantry_entry(
+        client,
+        household.external_id,
+        name="Beef mince",
+        quantity="1.000",
+        unit="kg",
+        location_external_id=shelf["external_id"],
+        aliases=["Ground beef"],
+        note="First pack",
+    )
+    assert first_entry["status"] == "created"
+
+    duplicate_attempt = create_pantry_entry(
+        client,
+        household.external_id,
+        name="Beef mince",
+        quantity="0.750",
+        unit="kg",
+        location_external_id=freezer["external_id"],
+        aliases=[],
+        note="Second pack",
+    )
+    assert duplicate_attempt["status"] == "existing_product"
+    assert duplicate_attempt["matched_product"]["name"] == "Beef mince"
+
+    confirmed_duplicate = create_pantry_entry(
+        client,
+        household.external_id,
+        name="Beef mince",
+        quantity="0.750",
+        unit="kg",
+        location_external_id=freezer["external_id"],
+        aliases=[],
+        note="Second pack",
+        existing_product_external_id=duplicate_attempt["matched_product"]["external_id"],
+    )
+    assert confirmed_duplicate["status"] == "added_to_existing"
+    assert confirmed_duplicate["lot"]["location_name"] == "Freezer"
+
+    overview = client.get(
+        f"/api/households/{household.external_id}/pantry/overview",
+        params={"q": "ground beef"},
+    )
+    assert overview.status_code == 200
+    product_payload = overview.json()["products"][0]
+    assert product_payload["product_name"] == "Beef mince"
+    assert len(product_payload["stock_lots"]) == 2
+    assert {lot["location_name"] for lot in product_payload["stock_lots"]} == {"Shelf", "Freezer"}
+
+
+def test_pantry_entry_reports_alias_conflicts(client, db_session):
+    _, household = create_household_with_role(
+        db_session,
+        email="entry-alias@example.com",
+        household_name="Entry Alias Household",
+        role_code=HOUSEHOLD_ADMIN_ROLE,
+    )
+    login(client, email="entry-alias@example.com")
+
+    room = create_location_group(client, household.external_id, "Kitchen")
+    shelf = create_location(client, household.external_id, room["external_id"], "Shelf")
+
+    first_entry = create_pantry_entry(
+        client,
+        household.external_id,
+        name="Pasta",
+        quantity="2.000",
+        unit="count",
+        location_external_id=shelf["external_id"],
+        aliases=["Dry pasta"],
+    )
+    assert first_entry["status"] == "created"
+
+    conflict = create_pantry_entry(
+        client,
+        household.external_id,
+        name="Beef mince",
+        quantity="1.000",
+        unit="kg",
+        location_external_id=shelf["external_id"],
+        aliases=["Dry pasta"],
+    )
+    assert conflict["status"] == "alias_conflict"
+    assert conflict["alias_conflicts"] == [
+        {
+            "alias": "Dry pasta",
+            "product_external_id": first_entry["product"]["external_id"],
+            "product_name": "Pasta",
+        }
+    ]
 
 
 def test_move_stock_preserves_identity_on_full_move_and_splits_on_partial_move(client, db_session):

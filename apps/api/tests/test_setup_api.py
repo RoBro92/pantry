@@ -71,12 +71,23 @@ def test_setup_wizard_persists_staged_progress(client):
     assert payload["storage_locations"] == ["Fridge", "Freezer", "Pantry shelf"]
     assert payload["public_base_url"] is None
     assert payload["can_complete"] is True
+    assert [step["key"] for step in payload["status"]["steps"]] == [
+        "welcome",
+        "users",
+        "dietary",
+        "household",
+        "public_url",
+        "ai",
+        "smtp",
+        "review",
+    ]
+    assert payload["status"]["steps"][0]["title"] == "Install selection"
     step_states = {step["key"]: step["is_complete"] for step in payload["status"]["steps"]}
     assert step_states["welcome"] is True
     assert step_states["users"] is True
+    assert step_states["dietary"] is False
     assert step_states["household"] is True
     assert step_states["public_url"] is False
-    assert step_states["dietary"] is False
     assert step_states["ai"] is False
     assert step_states["smtp"] is False
 

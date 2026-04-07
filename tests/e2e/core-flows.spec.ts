@@ -28,6 +28,9 @@ test("first-run setup handles staged users, skips optional steps, and completes 
   const wizard = page.getByTestId("setup-wizard");
   const progressItems = wizard.locator(".setup-progress-item");
 
+  await expect(page.getByRole("heading", { name: "Install selection" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Selected" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Choose restore" })).toBeVisible();
   await expect(progressItems.nth(0).locator(".setup-progress-count")).toHaveText("1");
   await expect(progressItems.nth(1).locator(".setup-progress-count")).toHaveText("2");
 
@@ -96,11 +99,13 @@ test("first-run setup handles staged users, skips optional steps, and completes 
   await expect(page.getByTestId("setup-user-card-2")).toHaveCount(0);
 
   await wizard.getByRole("button", { name: "Next" }).click();
-  await expect(page.getByRole("heading", { name: "Household and storage locations" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Dietary preferences" })).toBeVisible();
+  await wizard.getByRole("button", { name: "Skip for now" }).click();
+  await expect(page.getByRole("heading", { name: "First household and storage locations" })).toBeVisible();
 
   await page.getByLabel("Household name").fill("Brown Household");
-  await page.getByLabel("Default storage location").fill("Kitchen");
-  await page.getByLabel("Additional storage locations").fill("Fridge");
+  await page.getByLabel("First room").fill("Kitchen");
+  await page.getByLabel("Storage locations in this room").fill("Fridge");
   await page.getByRole("button", { name: "Add" }).first().click();
   await page
     .getByLabel("Household membership for Alex (alex)")
@@ -115,7 +120,7 @@ test("first-run setup handles staged users, skips optional steps, and completes 
   );
 
   await page.reload();
-  await expect(page.getByRole("heading", { name: "Household and storage locations" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "First household and storage locations" })).toBeVisible();
   await expect(page.getByLabel("Household name")).toHaveValue("Brown Household");
   await expect(page.getByRole("button", { name: "Fridge Remove" })).toBeVisible();
   await expect(page.getByLabel("Household membership for Alex (alex)")).toHaveValue(
@@ -127,8 +132,6 @@ test("first-run setup handles staged users, skips optional steps, and completes 
   await expect(wizard.getByRole("button", { name: "Skip for now" })).toBeVisible();
   await wizard.getByRole("button", { name: "Skip for now" }).click();
 
-  await expect(page.getByRole("heading", { name: "Dietary preferences" })).toBeVisible();
-  await wizard.getByRole("button", { name: "Skip for now" }).click();
   await expect(page.getByRole("heading", { name: "AI configuration" })).toBeVisible();
   await wizard.getByRole("button", { name: "Skip for now" }).click();
   await expect(page.getByRole("heading", { name: "SMTP configuration" })).toBeVisible();
@@ -140,7 +143,8 @@ test("first-run setup handles staged users, skips optional steps, and completes 
   await expect(progressItems.nth(4).locator(".setup-progress-count")).toHaveText("✓");
   await expect(progressItems.nth(5).locator(".setup-progress-count")).toHaveText("✓");
   await expect(progressItems.nth(6).locator(".setup-progress-count")).toHaveText("✓");
-  await expect(page.getByText("Skipped for now")).toHaveCount(4);
+  await expect(progressItems.nth(7).locator(".setup-progress-count")).toHaveText("8");
+  await expect(page.getByText("Skipped for now").first()).toBeVisible();
   await expect(page.getByText(/Alex \(alex\) \(User\)/)).toBeVisible();
   await wizard.getByRole("button", { name: "Complete Setup" }).click();
 
@@ -166,9 +170,7 @@ test("setup can restore from a staged Pantry backup bundle", async ({ page }) =>
 
   await page.goto("/setup");
   const wizard = page.getByTestId("setup-wizard");
-  await wizard.getByRole("button", { name: "Next" }).click();
-
-  await expect(page.getByRole("heading", { name: "Fresh install or restore from backup" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Install selection" })).toBeVisible();
   await page.getByRole("button", { name: "Choose restore" }).click();
   await expect(page.getByText("Restore mode selected.")).toBeVisible();
 
@@ -206,20 +208,14 @@ test("dietary none selection persists and marks the step complete", async ({ pag
 
   await page.goto("/setup");
   const wizard = page.getByTestId("setup-wizard");
-  await wizard.getByRole("button", { name: "Next" }).click();
 
   const usersStep = page.getByTestId("setup-users-step");
+  await wizard.getByRole("button", { name: "Next" }).click();
   await usersStep.getByLabel("Username or email").fill("owner");
   await usersStep.getByLabel("Password", { exact: true }).fill("correct horse battery");
   await usersStep.getByLabel("Confirm password").fill("correct horse battery");
-  await wizard.getByRole("button", { name: "Next" }).click();
-
-  await page.getByLabel("Household name").fill("Brown Household");
-  await page.getByLabel("Additional storage locations").fill("Fridge");
-  await page.getByRole("button", { name: "Add" }).first().click();
-  await wizard.getByRole("button", { name: "Next" }).click();
-  await wizard.getByRole("button", { name: "Skip for now" }).click();
-
+  await expect(wizard.locator(".setup-progress-item").nth(2)).toContainText("Dietary preferences");
+  await wizard.locator(".setup-progress-item").nth(2).click();
   await expect(page.getByRole("heading", { name: "Dietary preferences" })).toBeVisible();
   await page.getByRole("button", { name: "None" }).first().click();
   await expect(page.getByRole("button", { name: "None Remove" })).toBeVisible();
@@ -229,8 +225,8 @@ test("dietary none selection persists and marks the step complete", async ({ pag
   await expect(page.getByRole("button", { name: "None Remove" })).toBeVisible();
 
   await wizard.getByRole("button", { name: "Next" }).click();
-  await expect(page.getByRole("heading", { name: "AI configuration" })).toBeVisible();
-  await expect(wizard.locator(".setup-progress-item").nth(4).locator(".setup-progress-count")).toHaveText(
+  await expect(page.getByRole("heading", { name: "First household and storage locations" })).toBeVisible();
+  await expect(wizard.locator(".setup-progress-item").nth(2).locator(".setup-progress-count")).toHaveText(
     "✓",
   );
 });
@@ -336,7 +332,39 @@ test("platform admin updates and backups pages load from the admin navigation", 
   await expect(page.getByRole("button", { name: "Upload and validate" })).toBeVisible();
 });
 
-test("pantry flow covers create location, add stock, move stock, and remove stock", async ({
+test("update availability banner is shown only to admins when an update is available", async ({
+  page
+}) => {
+  await loginThroughApi(page, {
+    email: manifest.admin_email,
+    password: manifest.password
+  });
+
+  const releaseStatusResponse = await page.request.get(
+    "http://localhost:8000/api/platform-admin/release-status"
+  );
+  expect(releaseStatusResponse.ok()).toBeTruthy();
+  const releaseStatus = await releaseStatusResponse.json();
+  test.skip(
+    releaseStatus.status !== "update_available",
+    "Local stack did not report an update-available state.",
+  );
+
+  await page.goto("/admin");
+  await expect(page.getByTestId("admin-update-banner")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Review update" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Logout" }).click();
+  await loginThroughApi(page, {
+    email: manifest.member_email,
+    password: manifest.password
+  });
+
+  await page.goto("/app");
+  await expect(page.getByTestId("admin-update-banner")).toHaveCount(0);
+});
+
+test("pantry flow covers room management, combined add flow, duplicate handling, and search", async ({
   page
 }) => {
   await loginThroughApi(page, {
@@ -346,56 +374,83 @@ test("pantry flow covers create location, add stock, move stock, and remove stoc
 
   await page.goto(`/app/households/${manifest.household_external_id}`);
 
-  const createLocationForm = page.getByTestId("create-location-form");
-  await createLocationForm.locator("select").selectOption({ label: manifest.pantry_group_name });
-  await createLocationForm.locator('input[name="name"]').fill("Freezer");
-  await createLocationForm.getByRole("button", { name: "Add location" }).click();
+  await page.getByRole("button", { name: "Manage rooms" }).click();
+  const createLocationForm = page.getByTestId("pantry-create-location-form");
+  await createLocationForm
+    .locator('select[name="location_group_external_id"]')
+    .selectOption({ label: manifest.pantry_group_name });
+  await createLocationForm.getByLabel("Storage location").fill("Freezer");
+  await createLocationForm.getByRole("button", { name: "Add storage location" }).click();
+  await expect(createLocationForm.getByText("Saved.")).toBeVisible();
+  await page.getByRole("button", { name: "Close" }).click();
 
-  await expect(page.getByRole("heading", { name: "Kitchen / Freezer" })).toBeVisible();
+  await page.getByRole("button", { name: "Add product" }).click();
+  const addEntryForm = page.getByTestId("pantry-add-entry-form");
+  await addEntryForm.getByLabel("Product name").fill("Beef mince");
+  await addEntryForm.getByLabel("Storage location").selectOption({ label: "Kitchen / Freezer" });
+  await addEntryForm.getByLabel("Quantity").fill("2");
+  await addEntryForm.getByLabel("Unit").fill("kg");
+  await addEntryForm.getByLabel("Aliases").fill("Ground beef");
+  await addEntryForm.getByLabel("Purchase date").fill("2026-04-01");
+  await addEntryForm.getByLabel("Expiry date").fill("2026-04-04");
+  await addEntryForm.getByLabel("Notes").fill("First pack");
+  await addEntryForm.getByRole("button", { name: "Save pantry item" }).click();
 
-  const addStockForm = page.getByTestId("add-stock-form");
-  await addStockForm.locator('select[name="product_external_id"]').selectOption({ label: "Pasta" });
-  await addStockForm
-    .locator('select[name="location_external_id"]')
-    .selectOption({ label: "Kitchen / Shelf A" });
-  await addStockForm.locator('input[name="quantity"]').fill("2");
-  await addStockForm.locator('input[name="note"]').fill("E2E pantry lot");
-  await addStockForm.getByRole("button", { name: "Add stock" }).click();
+  await expect(page.getByRole("heading", { name: "Beef mince" })).toBeVisible();
+  const beefMinceCard = page
+    .locator('[data-testid^="product-card-"]')
+    .filter({ hasText: "Beef mince" });
+  await expect(beefMinceCard).toContainText("2.000 kg across 1 lot");
+  await expect(beefMinceCard).toContainText("Kitchen / Freezer");
+  await expect(beefMinceCard).toContainText("4 Apr 2026");
 
-  const shelfRow = page
-    .locator("tbody tr", {
-      has: page.locator("td:nth-child(1)", { hasText: "Pasta" })
-    })
-    .filter({
-      has: page.locator("td:nth-child(2)", { hasText: "Kitchen / Shelf A" })
-    })
-    .filter({
-      has: page.locator("td:nth-child(5)", { hasText: "E2E pantry lot" })
-    });
-  await expect(shelfRow).toContainText("2.000 count");
+  await page.getByRole("button", { name: "Search" }).click();
+  const searchForm = page.getByTestId("pantry-search-form");
+  await searchForm.getByLabel("Search").fill("ground beef");
+  await searchForm.getByRole("button", { name: "Search", exact: true }).click();
 
-  const moveForm = shelfRow.locator('form[data-testid^="move-lot-form-"]');
-  await moveForm.getByPlaceholder("Qty").fill("1");
-  await moveForm.getByRole("combobox").selectOption({ label: "Kitchen / Freezer" });
-  await moveForm.getByRole("button", { name: "Move" }).click();
+  await expect(page.getByText("Search results for “ground beef”")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Beef mince" })).toBeVisible();
 
-  const freezerRow = page
-    .locator("tbody tr", {
-      has: page.locator("td:nth-child(1)", { hasText: "Pasta" })
-    })
-    .filter({
-      has: page.locator("td:nth-child(2)", { hasText: "Kitchen / Freezer" })
-    })
-    .filter({
-      has: page.locator("td:nth-child(5)", { hasText: "E2E pantry lot" })
-    });
-  await expect(freezerRow).toContainText("1.000 count");
+  await page.getByRole("button", { name: "Add product" }).click();
+  const duplicateForm = page.getByTestId("pantry-add-entry-form");
+  await duplicateForm.getByLabel("Product name").fill("Beef mince");
+  await duplicateForm.getByLabel("Storage location").selectOption({ label: "Kitchen / Shelf A" });
+  await duplicateForm.getByLabel("Quantity").fill("1");
+  await duplicateForm.getByLabel("Unit").fill("kg");
+  await duplicateForm.getByLabel("Notes").fill("Second pack");
+  await duplicateForm.getByRole("button", { name: "Save pantry item" }).click();
 
-  const removeForm = freezerRow.locator('form[data-testid^="remove-lot-form-"]');
-  await removeForm.getByPlaceholder("Qty").fill("0.500");
-  await removeForm.getByRole("button", { name: "Remove" }).click();
+  await expect(page.getByTestId("existing-product-warning")).toContainText(
+    "Beef mince already exists",
+  );
+  await duplicateForm
+    .getByRole("button", { name: "Add stock lot to existing product" })
+    .click();
 
-  await expect(freezerRow).toContainText("0.500 count");
+  await expect(beefMinceCard).toContainText("3.000 kg across 2 lots");
+  await expect(beefMinceCard.locator('[data-testid^="stock-lot-card-"]')).toHaveCount(2);
+  await expect(beefMinceCard).toContainText("Second pack");
+});
+
+test("pantry add flow warns when an alias is already used by another product", async ({ page }) => {
+  await loginThroughApi(page, {
+    email: manifest.member_email,
+    password: manifest.password
+  });
+
+  await page.goto(`/app/households/${manifest.household_external_id}`);
+  await page.getByRole("button", { name: "Add product" }).click();
+
+  const addEntryForm = page.getByTestId("pantry-add-entry-form");
+  await addEntryForm.getByLabel("Product name").fill("Soup base");
+  await addEntryForm.getByLabel("Storage location").selectOption({ label: "Kitchen / Shelf A" });
+  await addEntryForm.getByLabel("Quantity").fill("1");
+  await addEntryForm.getByLabel("Unit").fill("count");
+  await addEntryForm.getByLabel("Aliases").fill("Dry pasta");
+  await addEntryForm.getByRole("button", { name: "Save pantry item" }).click();
+
+  await expect(page.getByText("Dry pasta is already used by Pasta")).toBeVisible();
 });
 
 test("recipe flow covers create, detail view, and pantry coverage display", async ({ page }) => {
@@ -563,7 +618,8 @@ test("platform admin can create a user, create a household, and assign membershi
     .click();
 
   await expect(page.getByRole("heading", { name: "Weekday Household" })).toBeVisible();
-  await expect(page.getByText("Household-admin actions only")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Add product" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Manage rooms" })).toHaveCount(0);
 });
 
 test("platform admin can remove household members and delete a household with confirmation", async ({

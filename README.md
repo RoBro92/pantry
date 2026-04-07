@@ -4,7 +4,7 @@ Pantry is a self-hosted household inventory and meal management application for 
 
 ## Features
 
-- Pantry inventory with locations, stock lots, and expiry tracking
+- Pantry inventory with rooms, storage locations, stock lots, and expiry tracking
 - Recipe management with pantry coverage insights
 - Review-first import flows
 - QR location access
@@ -47,7 +47,7 @@ Pantry now uses:
 - the first-run wizard when setup is incomplete
 - the login page when setup is complete
 
-The setup wizard stages progress until the final confirmation step. It only writes users, household data, settings, dietary preferences, and optional AI/SMTP configuration into live tables when you click `Complete Setup`.
+The setup wizard stages progress until the final confirmation step. It walks through install selection, admin and user setup, dietary preferences, the first household with rooms and storage locations, and optional instance settings before writing anything live.
 
 Pantry supports two first-run paths:
 
@@ -55,6 +55,10 @@ Pantry supports two first-run paths:
 - `Restore from backup`
 
 Restore currently accepts Pantry-native full instance JSON backup bundles only. Uploaded restore files are validated, staged in quarantine, and never executed as code.
+
+## Pantry Workflow
+
+The household pantry page is built as one searchable pantry view. Use `Search` to find products by name or alias, review every stock lot with its room, storage location, dates, and notes, and use `Add product` to create a product and its first stock lot in one flow.
 
 ## Updating Pantry
 
