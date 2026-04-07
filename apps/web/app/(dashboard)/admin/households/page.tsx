@@ -12,37 +12,64 @@ export default async function AdminHouseholdsPage() {
       <AdminHouseholdManagementPanel households={households} users={users} />
       <DataTable
         title="Households"
-        columns={["Name", "External ID", "Memberships", "Current Members", "Pantry"]}
+        columns={["Name", "External ID", "Memberships", "Current Members", "Role", "Pantry"]}
         tableClassName="households-table"
       >
-        {households.map((household) => (
-          <tr key={household.external_id}>
-            <td className="household-name-cell">
-              <strong>{household.name}</strong>
-            </td>
-            <td className="household-external-id-cell">
-              <code>{household.external_id}</code>
-            </td>
-            <td className="household-count-cell">{household.membership_count}</td>
-            <td className="household-members-cell">
-              {household.memberships.length === 0
-                ? "None"
-                : household.memberships.map((membership) => (
-                    <div key={membership.membership_external_id} className="table-member-row">
-                      <span>{membership.display_name ?? membership.email}</span>
-                      <span className="table-member-role">
-                        {getHouseholdRoleLabel(membership.role)}
+        {households.map((household) => {
+          const adminCount = household.memberships.filter(
+            (membership) => membership.role === "household_admin",
+          ).length;
+
+          return (
+            <tr key={household.external_id}>
+              <td data-label="Name" className="household-name-cell">
+                <div className="household-table-stack">
+                  <strong>{household.name}</strong>
+                  <span className="helper-text">
+                    {adminCount} {adminCount === 1 ? "admin" : "admins"}
+                  </span>
+                </div>
+              </td>
+              <td data-label="External ID" className="household-external-id-cell">
+                <code>{household.external_id}</code>
+              </td>
+              <td data-label="Memberships" className="household-count-cell">
+                {household.membership_count}
+              </td>
+              <td data-label="Current Members" className="household-members-cell">
+                {household.memberships.length === 0 ? (
+                  <span className="helper-text">None</span>
+                ) : (
+                  <div className="household-table-stack">
+                    {household.memberships.map((membership) => (
+                      <span key={membership.membership_external_id} className="household-table-entry">
+                        {membership.display_name ?? membership.email}
                       </span>
-                    </div>
-                  ))}
-            </td>
-            <td className="household-link-cell">
-              <Link href={`/app/households/${household.external_id}`} className="inline-link">
-                Open pantry
-              </Link>
-            </td>
-          </tr>
-        ))}
+                    ))}
+                  </div>
+                )}
+              </td>
+              <td data-label="Role" className="household-roles-cell">
+                {household.memberships.length === 0 ? (
+                  <span className="helper-text">-</span>
+                ) : (
+                  <div className="household-table-stack">
+                    {household.memberships.map((membership) => (
+                      <span key={membership.membership_external_id} className="household-table-entry">
+                        {getHouseholdRoleLabel(membership.role, { detailed: true })}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </td>
+              <td data-label="Pantry" className="household-link-cell">
+                <Link href={`/app/households/${household.external_id}`} className="inline-link">
+                  Open pantry
+                </Link>
+              </td>
+            </tr>
+          );
+        })}
       </DataTable>
     </div>
   );
