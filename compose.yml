@@ -62,7 +62,7 @@ services:
       'export APP_VERSION=$$(cat /workspace/VERSION) &&
       python -m worker.main'
     volumes:
-      - .:/workspace
+      - ./.local/imports:/workspace/.local/imports
     depends_on:
       postgres:
         condition: service_healthy

@@ -79,7 +79,7 @@ export function AdminAIConfigForm({
         <p className="eyebrow">Instance AI Provider</p>
         <h1>Provider Configuration</h1>
         <p>
-          The self-hosted installation only uses provider details configured here. Secrets are not
+          The self hosted installation uses provider details configured here. Secrets are not
           shown after save and are never written to logs.
         </p>
         {!featureEnabled ? (

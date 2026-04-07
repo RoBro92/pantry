@@ -4,4 +4,4 @@ const nextConfig = {
   transpilePackages: ["@pantry/shared-types"]
 };
 
-export default nextConfig;
+module.exports = nextConfig;
