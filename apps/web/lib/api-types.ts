@@ -435,6 +435,81 @@ export type PantryProductLocationSummary = {
   lot_count: number;
 };
 
+export type ProductNutritionSummaryItem = {
+  key: string;
+  label: string;
+  value: number;
+  unit: string | null;
+};
+
+export type ProductEnrichmentAttribution = {
+  source_name: string;
+  source_label: string;
+  source_url: string;
+  product_url: string | null;
+  data_notice: string;
+  license_name: string | null;
+  license_url: string | null;
+};
+
+export type ProductEnrichmentSummary = {
+  source_name: string;
+  source_product_id: string;
+  source_barcode: string | null;
+  source_product_name: string | null;
+  source_product_url: string | null;
+  product_image_url: string | null;
+  ingredients_text: string | null;
+  allergens_text: string | null;
+  traces_text: string | null;
+  allergen_tags: string[];
+  trace_tags: string[];
+  nutrition_summary: ProductNutritionSummaryItem[];
+  labels: string[];
+  categories: string[];
+  match_status: string | null;
+  match_confidence: number | null;
+  last_synced_at: string | null;
+  attribution: ProductEnrichmentAttribution;
+};
+
+export type PantryConfirmedEnrichmentRequest = {
+  source_name: string;
+  source_product_id: string;
+  match_status: string | null;
+};
+
+export type PantryEnrichmentCandidate = {
+  source_name: string;
+  source_product_id: string;
+  source_barcode: string | null;
+  source_product_name: string | null;
+  source_product_url: string | null;
+  product_image_url: string | null;
+  ingredients_text: string | null;
+  allergens_text: string | null;
+  traces_text: string | null;
+  allergen_tags: string[];
+  trace_tags: string[];
+  nutrition_summary: ProductNutritionSummaryItem[];
+  labels: string[];
+  categories: string[];
+  match_status: string;
+  match_confidence: number | null;
+  incomplete_fields: string[];
+  warnings: string[];
+  attribution: ProductEnrichmentAttribution;
+};
+
+export type PantryEnrichmentPreviewResponse = {
+  query_name: string;
+  query_barcode: string | null;
+  lookup_strategy: string;
+  status: string;
+  message: string;
+  candidates: PantryEnrichmentCandidate[];
+};
+
 export type PantryProductSummary = {
   product_external_id: string;
   product_name: string;
@@ -443,6 +518,7 @@ export type PantryProductSummary = {
   lot_count: number;
   aliases: string[];
   barcodes: string[];
+  enrichment: ProductEnrichmentSummary | null;
   locations: PantryProductLocationSummary[];
   stock_lots: PantryStockLotSummary[];
 };
@@ -453,6 +529,7 @@ export type PantryCatalogProductSummary = {
   default_unit: string;
   aliases: string[];
   barcodes: string[];
+  enrichment: ProductEnrichmentSummary | null;
 };
 
 export type PantryStockLotSummary = {

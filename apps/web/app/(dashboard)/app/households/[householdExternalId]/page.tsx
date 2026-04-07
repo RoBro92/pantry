@@ -41,7 +41,8 @@ export default async function HouseholdPantryPage({
         <h1>{overview.household_name}</h1>
         <p>
           Household role: <strong>{overview.effective_role}</strong>. Browse the pantry as one
-          searchable list of products, with each stock lot shown where it is stored.
+          searchable list of products, with each stock lot shown where it is stored and optional
+          linked product details shown when enrichment has been confirmed.
         </p>
         <div className="page-actions">
           <Link
@@ -125,7 +126,7 @@ export default async function HouseholdPantryPage({
               overview.filters.location_group_external_id ||
               overview.filters.location_external_id
                 ? "No pantry items match this search yet. Try a different product name or room."
-                : "No pantry items have been added yet. Use Add product to create the first item and stock lot."}
+                : "No pantry items have been added yet. Use Add product to create the first item, first stock lot, and optional linked product details."}
             </p>
           </div>
         ) : (

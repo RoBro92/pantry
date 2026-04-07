@@ -1,5 +1,6 @@
 import type { PantryLocationSummary, PantryProductSummary } from "../lib/api-types";
 import { PantryLotActions } from "./pantry-lot-actions";
+import { ProductEnrichmentDetails } from "./product-enrichment-details";
 
 type PantryProductCardProps = {
   householdExternalId: string;
@@ -44,6 +45,14 @@ export function PantryProductCard({
       </div>
 
       <div className="pantry-product-card-metadata">
+        {product.enrichment ? (
+          <ProductEnrichmentDetails
+            enrichment={product.enrichment}
+            title="Linked product details"
+            subtitle="Open Food Facts metadata is optional advisory context and does not replace Pantry's product identity."
+          />
+        ) : null}
+
         <div className="pantry-product-location-summary">
           <strong>Stored in</strong>
           <ul className="detail-list">

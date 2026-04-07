@@ -3,12 +3,14 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type {
+  PantryEnrichmentPreviewResponse,
   PantryEntryMutationResponse,
   PantryLocationSummary,
   PantryProductMatchSummary,
 } from "../lib/api-types";
 import { postToApi } from "../lib/client-api";
 import { ModalShell } from "./modal-shell";
+import { ProductEnrichmentPreview } from "./product-enrichment-preview";
 
 type PantryAddEntryDialogProps = {
   householdExternalId: string;
@@ -19,6 +21,7 @@ type PantryAddEntryDialogProps = {
 
 type FormState = {
   name: string;
+  barcode: string;
   quantity: string;
   unit: string;
   locationExternalId: string;
@@ -32,6 +35,7 @@ const UNIT_OPTIONS = ["g", "kg", "oz", "lb", "ml", "l", "count", "pack", "bottle
 
 const EMPTY_FORM: FormState = {
   name: "",
+  barcode: "",
   quantity: "",
   unit: "count",
   locationExternalId: "",
@@ -60,6 +64,45 @@ export function PantryAddEntryDialog({
   const [error, setError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [matchedProduct, setMatchedProduct] = useState<PantryProductMatchSummary | null>(null);
+  const [lookupPending, setLookupPending] = useState(false);
+  const [lookupPreview, setLookupPreview] = useState<PantryEnrichmentPreviewResponse | null>(null);
+  const [selectedEnrichmentSourceProductId, setSelectedEnrichmentSourceProductId] = useState<string | null>(null);
+
+  const selectedCandidate =
+    lookupPreview?.candidates.find(
+      (candidate) => candidate.source_product_id === selectedEnrichmentSourceProductId,
+    ) ?? null;
+
+  function resetEnrichmentPreview() {
+    setLookupPreview(null);
+    setSelectedEnrichmentSourceProductId(null);
+  }
+
+  async function findProductDetails() {
+    setLookupPending(true);
+    setError(null);
+    setStatusMessage(null);
+
+    try {
+      const response = await postToApi<PantryEnrichmentPreviewResponse>(
+        `/api/households/${householdExternalId}/pantry/enrichment/preview`,
+        {
+          product_name: form.name,
+          barcode: form.barcode.trim() || null,
+        },
+      );
+      setLookupPreview(response);
+      setSelectedEnrichmentSourceProductId(null);
+    } catch (requestError) {
+      setLookupPreview(null);
+      setSelectedEnrichmentSourceProductId(null);
+      setError(
+        requestError instanceof Error ? requestError.message : "Could not look up product details.",
+      );
+    } finally {
+      setLookupPending(false);
+    }
+  }
 
   async function submit(existingProductExternalId?: string) {
     setPending(true);
@@ -74,11 +117,19 @@ export function PantryAddEntryDialog({
           quantity: form.quantity,
           unit: form.unit,
           location_external_id: form.locationExternalId,
+          barcode: form.barcode.trim() || null,
           aliases: splitAliases(form.aliases),
           purchased_on: form.purchasedOn || null,
           expires_on: form.expiresOn || null,
           note: form.note.trim() || null,
           existing_product_external_id: existingProductExternalId ?? null,
+          confirmed_enrichment: selectedCandidate
+            ? {
+                source_name: selectedCandidate.source_name,
+                source_product_id: selectedCandidate.source_product_id,
+                match_status: selectedCandidate.match_status,
+              }
+            : null,
         },
       );
 
@@ -112,6 +163,7 @@ export function PantryAddEntryDialog({
       setMatchedProduct(null);
       setStatusMessage(response.message);
       setForm(EMPTY_FORM);
+      resetEnrichmentPreview();
       router.refresh();
       window.setTimeout(() => onClose(), 350);
     } catch (requestError) {
@@ -143,10 +195,23 @@ export function PantryAddEntryDialog({
               value={form.name}
               onChange={(event) => {
                 setMatchedProduct(null);
+                resetEnrichmentPreview();
                 setForm((current) => ({ ...current, name: event.target.value }));
               }}
               placeholder="Beef mince"
               required
+            />
+          </label>
+          <label className="field">
+            <span>Barcode</span>
+            <input
+              name="barcode"
+              value={form.barcode}
+              onChange={(event) => {
+                resetEnrichmentPreview();
+                setForm((current) => ({ ...current, barcode: event.target.value }));
+              }}
+              placeholder="5000111046244"
             />
           </label>
           <label className="field">
@@ -168,6 +233,31 @@ export function PantryAddEntryDialog({
             </select>
           </label>
         </div>
+
+        <div className="page-actions">
+          <button
+            type="button"
+            className="ghost-button"
+            disabled={lookupPending || (!form.name.trim() && !form.barcode.trim())}
+            onClick={() => void findProductDetails()}
+          >
+            {lookupPending ? "Finding details..." : "Find product details"}
+          </button>
+          {lookupPreview ? (
+            <button type="button" className="ghost-button" onClick={resetEnrichmentPreview}>
+              Clear preview
+            </button>
+          ) : null}
+        </div>
+
+        {lookupPreview ? (
+          <ProductEnrichmentPreview
+            preview={lookupPreview}
+            selectedSourceProductId={selectedEnrichmentSourceProductId}
+            onSelect={setSelectedEnrichmentSourceProductId}
+            onClearSelection={() => setSelectedEnrichmentSourceProductId(null)}
+          />
+        ) : null}
 
         <div className="split-fields">
           <label className="field">
@@ -256,6 +346,16 @@ export function PantryAddEntryDialog({
             {matchedProduct.aliases.length > 0 ? (
               <p>Known aliases: {matchedProduct.aliases.join(", ")}.</p>
             ) : null}
+          </div>
+        ) : null}
+
+        {selectedCandidate ? (
+          <div className="info-callout">
+            <strong>Enrichment will be linked on save</strong>
+            <p>
+              Pantry will keep its own product name and unit, and store these Open Food Facts
+              details as optional advisory metadata.
+            </p>
           </div>
         ) : null}
 

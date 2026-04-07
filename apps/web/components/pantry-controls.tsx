@@ -42,8 +42,8 @@ export function PantryControls({
           <p className="eyebrow">Pantry actions</p>
           <h2>Browse, search, and add items from one place</h2>
           <p className="section-copy">
-            Search by product name or alias, add new pantry items in one flow, and manage rooms
-            only when you need to adjust the structure.
+            Search by product name, alias, or barcode, add new pantry items in one flow, and
+            optionally preview Open Food Facts details before saving.
           </p>
         </div>
         <div className="pantry-action-pills">

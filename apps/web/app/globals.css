@@ -921,6 +921,45 @@ code {
   gap: 1rem;
 }
 
+.enrichment-preview-list,
+.enrichment-card {
+  display: grid;
+  gap: 1rem;
+}
+
+.enrichment-card {
+  padding: 1rem 1.1rem;
+  border-radius: 22px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.enrichment-card-header,
+.enrichment-layout {
+  display: grid;
+  gap: 1rem;
+}
+
+.enrichment-layout {
+  grid-template-columns: minmax(0, 120px) minmax(0, 1fr);
+  align-items: start;
+}
+
+.enrichment-image-frame {
+  overflow: hidden;
+  aspect-ratio: 1 / 1;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.8);
+}
+
+.enrichment-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
 .pantry-product-location-summary {
   display: grid;
   gap: 0.75rem;
@@ -1070,6 +1109,10 @@ code {
   .inline-form {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .enrichment-layout {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .detail-list span {

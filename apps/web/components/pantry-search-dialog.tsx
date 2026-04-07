@@ -49,7 +49,7 @@ export function PantrySearchDialog({
   return (
     <ModalShell
       title="Search pantry"
-      description="Search by product name or alias, and narrow the list by room or storage location."
+      description="Search by product name, alias, or barcode, and narrow the list by room or storage location."
       onClose={onClose}
     >
       <form
@@ -66,7 +66,7 @@ export function PantrySearchDialog({
             name="q"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Beef mince or ground beef"
+            placeholder="Beef mince, ground beef, or barcode"
           />
         </label>
 
