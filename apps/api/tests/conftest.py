@@ -19,6 +19,8 @@ os.environ["WEB_APP_URL"] = "http://testserver"
 os.environ["API_BASE_URL"] = "http://testserver"
 import_storage_root = tempfile.mkdtemp(prefix="pantry-imports-")
 os.environ["IMPORT_STORAGE_ROOT"] = import_storage_root
+backup_storage_root = tempfile.mkdtemp(prefix="pantry-backups-")
+os.environ["BACKUP_STORAGE_ROOT"] = backup_storage_root
 
 api_root = Path(__file__).resolve().parents[1]
 alembic_config = Config(str(api_root / "alembic.ini"))
@@ -39,6 +41,8 @@ def clean_database():
         session.commit()
     shutil.rmtree(import_storage_root, ignore_errors=True)
     Path(import_storage_root).mkdir(parents=True, exist_ok=True)
+    shutil.rmtree(backup_storage_root, ignore_errors=True)
+    Path(backup_storage_root).mkdir(parents=True, exist_ok=True)
 
     yield
 
@@ -50,6 +54,8 @@ def clean_database():
         session.commit()
     shutil.rmtree(import_storage_root, ignore_errors=True)
     Path(import_storage_root).mkdir(parents=True, exist_ok=True)
+    shutil.rmtree(backup_storage_root, ignore_errors=True)
+    Path(backup_storage_root).mkdir(parents=True, exist_ok=True)
 
 
 @pytest.fixture

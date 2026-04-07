@@ -149,6 +149,58 @@ test("first-run setup handles staged users, skips optional steps, and completes 
   await expect(page.locator(".household-card").getByText("Brown Household")).toBeVisible();
 });
 
+test("setup can restore from a staged Pantry backup bundle", async ({ page }) => {
+  await loginThroughApi(page, {
+    email: manifest.admin_email,
+    password: manifest.password
+  });
+
+  const exportResponse = await page.request.get(
+    "http://localhost:8000/api/platform-admin/backups/export/instance"
+  );
+  expect(exportResponse.ok()).toBeTruthy();
+  const backupText = await exportResponse.text();
+
+  resetToUninitialized();
+  await page.context().clearCookies();
+
+  await page.goto("/setup");
+  const wizard = page.getByTestId("setup-wizard");
+  await wizard.getByRole("button", { name: "Next" }).click();
+
+  await expect(page.getByRole("heading", { name: "Fresh install or restore from backup" })).toBeVisible();
+  await page.getByRole("button", { name: "Choose restore" }).click();
+  await expect(page.getByText("Restore mode selected.")).toBeVisible();
+
+  await page.locator('input[type="file"][name="file"]').setInputFiles({
+    name: "pantry-instance-backup.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(backupText, "utf-8")
+  });
+  await page.getByRole("button", { name: "Upload and validate" }).click();
+
+  await expect(page.getByText("Restore backup staged safely.")).toBeVisible();
+  await expect(page.getByText("Staged restore bundle")).toBeVisible();
+  await expect(
+    page.getByText("Restore currently supports full instance Pantry backup bundles only.")
+  ).toBeVisible();
+
+  await wizard.getByRole("button", { name: "Next" }).click();
+  await expect(page.getByRole("heading", { name: "Review and complete" })).toBeVisible();
+
+  const finalizeResponse = await page.request.post("http://localhost:8000/api/setup/wizard/finalize", {
+    data: {}
+  });
+  expect(finalizeResponse.ok()).toBeTruthy();
+
+  await page.goto("/app");
+  await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
+  await expect(page.getByText("Logged in as E2E Admin")).toBeVisible();
+
+  await page.goto("/admin/households");
+  await expect(page.getByRole("cell", { name: manifest.household_name })).toBeVisible();
+});
+
 test("dietary none selection persists and marks the step complete", async ({ page }) => {
   resetToUninitialized();
 
@@ -262,6 +314,26 @@ test("platform admin diagnostics page loads against the docker stack", async ({ 
   await expect(page.getByText("Update Check")).toBeVisible();
   await expect(page.getByText("Queue And Worker")).toBeVisible();
   await expect(page.getByText("Default")).toBeVisible();
+});
+
+test("platform admin updates and backups pages load from the admin navigation", async ({
+  page
+}) => {
+  await loginThroughApi(page, {
+    email: manifest.admin_email,
+    password: manifest.password
+  });
+
+  await page.goto("/admin/updates");
+  await expect(page.getByRole("heading", { name: "Release visibility and manual updates" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Backups", exact: true })).toBeVisible();
+  await expect(page.getByText("Operator-controlled only")).toBeVisible();
+
+  await page.goto("/admin/backups");
+  await expect(page.getByRole("heading", { name: "Export and recovery foundations" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Updates", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Download full backup" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Upload and validate" })).toBeVisible();
 });
 
 test("pantry flow covers create location, add stock, move stock, and remove stock", async ({
@@ -492,6 +564,67 @@ test("platform admin can create a user, create a household, and assign membershi
 
   await expect(page.getByRole("heading", { name: "Weekday Household" })).toBeVisible();
   await expect(page.getByText("Household-admin actions only")).toBeVisible();
+});
+
+test("platform admin can remove household members and delete a household with confirmation", async ({
+  page
+}) => {
+  await loginThroughApi(page, {
+    email: manifest.admin_email,
+    password: manifest.password
+  });
+
+  await page.goto("/admin/users");
+
+  const createUserForm = page.getByTestId("admin-create-user-form");
+  await createUserForm.getByLabel("Email").fill("cleanup-member@example.com");
+  await createUserForm.getByLabel("Display name").fill("Cleanup Member");
+  await createUserForm.getByLabel("Password", { exact: true }).fill(manifest.password);
+  await createUserForm.getByLabel("Confirm password").fill(manifest.password);
+  await createUserForm.getByRole("button", { name: "Create user" }).click();
+
+  await page.goto("/admin/households");
+
+  const createHouseholdForm = page.getByTestId("admin-create-household-form");
+  await createHouseholdForm.getByLabel("Household name").fill("Cleanup Household");
+  await createHouseholdForm.getByRole("button", { name: "Create household" }).click();
+  await expect(page.getByRole("cell", { name: "Cleanup Household" })).toBeVisible();
+
+  const membershipForm = page.getByTestId("admin-assign-membership-form");
+  await membershipForm
+    .locator('select[name="household_external_id"]')
+    .selectOption({ label: "Cleanup Household" });
+  await membershipForm
+    .locator('select[name="user_external_id"]')
+    .selectOption({ label: "Cleanup Member (cleanup-member@example.com)" });
+  await membershipForm.locator('select[name="role"]').selectOption({ label: "User" });
+  await membershipForm.getByRole("button", { name: "Assign membership" }).click();
+  await expect(page.getByText("Assigned cleanup-member@example.com as User.")).toBeVisible();
+
+  const maintenanceForm = page.getByTestId("admin-household-maintenance-form");
+  await maintenanceForm
+    .locator('select[name="maintenance_household_external_id"]')
+    .selectOption({ label: "Cleanup Household" });
+
+  page.once("dialog", async (dialog) => {
+    expect(dialog.message()).toContain("Remove Cleanup Member");
+    await dialog.accept();
+  });
+  await maintenanceForm
+    .locator(".table-member-row", { hasText: "cleanup-member@example.com" })
+    .getByRole("button", { name: "Remove" })
+    .click();
+
+  await expect(page.getByText("Household membership removed.")).toBeVisible();
+  await expect(
+    maintenanceForm.locator(".table-member-row", { hasText: "cleanup-member@example.com" })
+  ).toHaveCount(0);
+
+  await maintenanceForm.getByLabel("Type the household name to confirm deletion").fill("Cleanup Household");
+  await maintenanceForm.getByRole("button", { name: "Delete household" }).click();
+
+  await expect(page.getByText("Household deleted.")).toBeVisible();
+  await expect(page.getByRole("cell", { name: "Cleanup Household" })).toHaveCount(0);
 });
 
 test("location route redirects to login and lands on the correct location page after auth", async ({

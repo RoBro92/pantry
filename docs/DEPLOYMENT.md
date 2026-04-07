@@ -21,7 +21,9 @@ http://YOUR_HOST:3000/
 Pantry will:
 
 - route to the setup wizard if setup is incomplete
+- allow operators to choose a fresh install or a restore from backup
 - keep staged setup progress between refreshes
+- validate restore uploads before finalization
 - finalize users, households, locations, settings, dietary preferences, and optional AI/SMTP configuration only when `Complete Setup` is clicked
 
 ## Manual Install Checklist
@@ -40,6 +42,15 @@ Pantry will:
 4. Pull images, run migrations, and start the stack.
 5. Open the browser URL and complete first-run setup.
 
+## Admin Operations
+
+Pantry keeps lifecycle operations in the platform admin console:
+
+- `Updates`: advisory-only release metadata, changelog visibility, breaking change notes, and manual operator commands
+- `Backups`: full instance export, household export, restore upload validation, and explicit destructive restore
+
+GHCR remains image hosting only. Pantry does not self-update.
+
 ## Operational Commands
 
 CLI bootstrap still exists as an operator fallback:
@@ -56,3 +67,10 @@ Password reset:
 docker compose --env-file .env -f pantry.yml run --rm api python -m app.cli reset-password \
   --email admin@example.com
 ```
+
+## Restore Notes
+
+- Restore currently supports Pantry backup bundle v1 JSON only.
+- Full instance restore requires the same migrated schema revision as the running install.
+- Uploaded restore bundles are staged under `BACKUP_STORAGE_ROOT` before use.
+- Restore replaces current database content deliberately and requires explicit confirmation in the UI.

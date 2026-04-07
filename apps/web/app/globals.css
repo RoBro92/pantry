@@ -705,6 +705,63 @@ code {
   background: rgba(255, 255, 255, 0.6);
 }
 
+.info-callout,
+.warning-callout {
+  padding: 1rem 1.1rem;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.56);
+}
+
+.warning-callout {
+  border-color: rgba(159, 49, 36, 0.2);
+  background: rgba(159, 49, 36, 0.08);
+}
+
+.callout-list {
+  margin-top: 0.7rem;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.command-card {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1rem 1.1rem;
+  border-radius: 22px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.56);
+}
+
+.command-card pre {
+  margin: 0;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(39, 29, 19, 0.38);
+  backdrop-filter: blur(6px);
+}
+
+.modal-panel {
+  width: min(680px, 100%);
+  display: grid;
+  gap: 1rem;
+  padding: 1.5rem;
+  border-radius: 28px;
+  border: 1px solid var(--border);
+  background: var(--panel-strong);
+  box-shadow: var(--shadow);
+}
+
 .setup-alert {
   padding: 1rem 1.1rem;
   border-radius: 20px;

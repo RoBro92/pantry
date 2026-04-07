@@ -1,15 +1,19 @@
 from __future__ import annotations
 
+import json
 from dataclasses import replace
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import delete, func, select
 
 from app.core.config import get_settings
+from app.models.household import Household
 from app.models.import_job import ImportJob
 from app.models.instance_setting import InstanceSetting
+from app.models.membership import Membership
 from app.models.recipe import Recipe
+from app.models.user import User
 from app.models.usage_counter import UsageCounter
 from app.services.ai_config import upsert_instance_provider_config
 from app.services.auth import create_household, create_membership, create_platform_admin, create_user
@@ -288,6 +292,165 @@ def test_platform_admin_can_create_users_households_and_memberships(client, db_s
     assert households_response.status_code == 200
     household_payload = households_response.json()[0]
     assert household_payload["memberships"][0]["email"] == "managed-user@example.com"
+
+
+def test_platform_admin_can_export_and_restore_instance_backups(client, db_session):
+    admin = create_platform_admin(
+        db_session,
+        email="backup-admin@example.com",
+        password=PASSWORD,
+        display_name="Backup Admin",
+    )
+    member = create_user(
+        db_session,
+        email="backup-member@example.com",
+        password=PASSWORD,
+        display_name="Backup Member",
+    )
+    household = create_household(db_session, name="Backup Household")
+    create_membership(db_session, user=member, household=household, role_code="household_user")
+    db_session.commit()
+
+    login(client, email="backup-admin@example.com")
+
+    export_response = client.get("/api/platform-admin/backups/export/instance")
+    assert export_response.status_code == 200
+    backup_bundle = json.loads(export_response.text)
+    assert backup_bundle["format"] == "pantry.backup.bundle"
+    assert backup_bundle["scope"] == "instance"
+
+    extra_user = create_user(
+        db_session,
+        email="extra-user@example.com",
+        password=PASSWORD,
+        display_name="Extra User",
+    )
+    extra_household = create_household(db_session, name="Extra Household")
+    create_membership(db_session, user=extra_user, household=extra_household, role_code="household_user")
+    db_session.commit()
+    assert db_session.scalar(select(func.count(User.id))) == 3
+
+    upload_response = client.post(
+        "/api/platform-admin/backups/restore-upload",
+        files={"file": ("pantry-instance-backup.json", json.dumps(backup_bundle), "application/json")},
+    )
+    assert upload_response.status_code == 200
+    staged_payload = upload_response.json()
+    assert staged_payload["supported_for_restore"] is True
+    assert staged_payload["bundle"]["scope"] == "instance"
+
+    restore_response = client.post(
+        "/api/platform-admin/backups/restore",
+        json={
+            "stage_id": staged_payload["stage_id"],
+            "confirmation_phrase": "RESTORE PANTRY INSTANCE",
+        },
+    )
+    assert restore_response.status_code == 200
+    restore_payload = restore_response.json()
+    assert restore_payload["restored"] is True
+    assert restore_payload["requires_reauthentication"] is True
+
+    restored_users = db_session.scalars(select(User).order_by(User.email)).all()
+    assert [user.email for user in restored_users] == ["backup-admin@example.com", "backup-member@example.com"]
+    assert db_session.scalar(select(func.count(Household.id))) == 1
+    assert db_session.scalar(select(User).where(User.email == "extra-user@example.com")) is None
+    assert db_session.scalar(select(Household).where(Household.name == "Extra Household")) is None
+
+
+def test_platform_admin_restore_upload_rejects_non_json_files(client, db_session):
+    create_platform_admin(
+        db_session,
+        email="backup-validation@example.com",
+        password=PASSWORD,
+        display_name="Backup Validation Admin",
+    )
+    login(client, email="backup-validation@example.com")
+
+    response = client.post(
+        "/api/platform-admin/backups/restore-upload",
+        files={"file": ("backup.sh", "#!/bin/sh\necho nope\n", "text/plain")},
+    )
+    assert response.status_code == 400
+    assert ".json" in response.json()["detail"]
+
+
+def test_platform_admin_can_remove_household_memberships_with_safeguards(client, db_session):
+    admin = create_platform_admin(
+        db_session,
+        email="household-admin@example.com",
+        password=PASSWORD,
+        display_name="Household Admin",
+    )
+    removable_user = create_user(
+        db_session,
+        email="remove-me@example.com",
+        password=PASSWORD,
+        display_name="Remove Me",
+    )
+    household = create_household(db_session, name="Remove Test Household")
+    protected_membership = create_membership(
+        db_session,
+        user=admin,
+        household=household,
+        role_code="household_admin",
+    )
+    removable_membership = create_membership(
+        db_session,
+        user=removable_user,
+        household=household,
+        role_code="household_user",
+    )
+
+    login(client, email="household-admin@example.com")
+
+    remove_response = client.post(
+        f"/api/platform-admin/households/{household.external_id}/memberships/{removable_membership.external_id}/remove",
+        json={},
+    )
+    assert remove_response.status_code == 200
+    assert db_session.scalar(select(Membership).where(Membership.id == removable_membership.id)) is None
+
+    protected_response = client.post(
+        f"/api/platform-admin/households/{household.external_id}/memberships/{protected_membership.external_id}/remove",
+        json={},
+    )
+    assert protected_response.status_code == 400
+    assert "at least one household admin" in protected_response.json()["detail"].lower()
+
+
+def test_platform_admin_household_deletion_requires_confirmation_and_acknowledgement(client, db_session):
+    admin = create_platform_admin(
+        db_session,
+        email="delete-admin@example.com",
+        password=PASSWORD,
+        display_name="Delete Admin",
+    )
+    household = create_household(db_session, name="Delete Me")
+    create_membership(db_session, user=admin, household=household, role_code="household_admin")
+
+    login(client, email="delete-admin@example.com")
+
+    missing_ack_response = client.post(
+        f"/api/platform-admin/households/{household.external_id}/delete",
+        json={"confirm_household_name": "Delete Me", "acknowledge_last_household_deletion": False},
+    )
+    assert missing_ack_response.status_code == 400
+    assert "last household" in missing_ack_response.json()["detail"].lower()
+
+    wrong_name_response = client.post(
+        f"/api/platform-admin/households/{household.external_id}/delete",
+        json={"confirm_household_name": "Wrong", "acknowledge_last_household_deletion": True},
+    )
+    assert wrong_name_response.status_code == 400
+    assert "exact household name" in wrong_name_response.json()["detail"].lower()
+
+    delete_response = client.post(
+        f"/api/platform-admin/households/{household.external_id}/delete",
+        json={"confirm_household_name": "Delete Me", "acknowledge_last_household_deletion": True},
+    )
+    assert delete_response.status_code == 200
+    assert db_session.scalar(select(Household).where(Household.id == household.id)) is None
 
 
 def test_platform_admin_management_endpoints_require_platform_admin(client, db_session):

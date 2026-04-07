@@ -86,6 +86,22 @@ export default async function AdminOverviewPage() {
 
       <section className="content-grid">
         <article className="panel">
+          <p className="eyebrow">Lifecycle</p>
+          <h2>Updates and recovery</h2>
+          <p>
+            Review advisory release metadata, acknowledge changelog notes after upgrades, and use
+            the backup tools to export or restore Pantry data deliberately.
+          </p>
+          <div className="page-actions">
+            <Link href="/admin/updates" className="primary-link">
+              Open updates
+            </Link>
+            <Link href="/admin/backups" className="secondary-link">
+              Open backups
+            </Link>
+          </div>
+        </article>
+        <article className="panel">
           <p className="eyebrow">Getting Started</p>
           <h2>Make the install usable</h2>
           <p>
@@ -131,11 +147,20 @@ export default async function AdminOverviewPage() {
           </p>
           {releaseStatus.release_notes_url ? (
             <div className="page-actions">
+              <Link href="/admin/updates" className="primary-link">
+                Open updates
+              </Link>
               <a href={releaseStatus.release_notes_url} className="secondary-link">
                 Release notes
               </a>
             </div>
-          ) : null}
+          ) : (
+            <div className="page-actions">
+              <Link href="/admin/updates" className="primary-link">
+                Open updates
+              </Link>
+            </div>
+          )}
         </article>
       </section>
     </div>

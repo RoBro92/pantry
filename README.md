@@ -8,9 +8,10 @@ Pantry is a self-hosted household inventory and meal management application for 
 - Recipe management with pantry coverage insights
 - Review-first import flows
 - QR location access
-- Diagnostics and installation visibility
+- Diagnostics, update visibility, and manual update guidance
+- Pantry-native backup export plus guarded restore foundations
 - Optional AI-powered suggestions
-- Guided first-run setup and login flow
+- Guided first-run setup and login flow, including restore-from-backup
 
 ## Quick Start
 
@@ -48,11 +49,30 @@ Pantry now uses:
 
 The setup wizard stages progress until the final confirmation step. It only writes users, household data, settings, dietary preferences, and optional AI/SMTP configuration into live tables when you click `Complete Setup`.
 
+Pantry supports two first-run paths:
+
+- `Fresh install`
+- `Restore from backup`
+
+Restore currently accepts Pantry-native full instance JSON backup bundles only. Uploaded restore files are validated, staged in quarantine, and never executed as code.
+
 ## Updating Pantry
 
 ```bash
 ./infra/scripts/update-pantry.sh
 ```
+
+Pantry does not self-update. Platform admins can review the current version, latest published release metadata, changelog summaries, breaking change notes, and operator commands from the admin `Updates` page.
+
+## Backups And Recovery
+
+Platform admins can use the admin `Backups` page to:
+
+- export a full instance Pantry backup bundle
+- export a household-specific Pantry bundle for retention or inspection
+- upload and validate a full instance restore bundle before applying it deliberately
+
+Current restore support is limited to Pantry backup bundle v1 JSON files from the same schema revision.
 
 ## Configuration
 
@@ -91,4 +111,9 @@ docker compose restart
 
 ## Versioning
 
-The running version is defined by the `VERSION` file and surfaced across the app and diagnostics.
+The running version is defined by the `VERSION` file and surfaced across the app, diagnostics, and updates UI.
+
+See also:
+
+- [docs/VERSIONING.md](/Users/robinbrown/Documents/GitHub/pantry/docs/VERSIONING.md)
+- [docs/SECURITY.md](/Users/robinbrown/Documents/GitHub/pantry/docs/SECURITY.md)

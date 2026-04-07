@@ -5,7 +5,7 @@ Quick reference for the public repository layout.
 ## Application Code
 
 - `apps/web/`: Next.js frontend
-- `apps/api/`: FastAPI backend, Alembic migrations, API tests, and setup finalisation logic
+- `apps/api/`: FastAPI backend, Alembic migrations, API tests, release metadata logic, backup/restore services, and setup finalisation logic
 - `apps/worker/`: background worker
 - `packages/shared-types/`: shared TypeScript constants and types
 
@@ -23,6 +23,8 @@ Quick reference for the public repository layout.
 - `docs/ARCHITECTURE.md`: runtime and setup architecture
 - `docs/CONTRIBUTING.md`: local setup and contribution flow
 - `docs/DEPLOYMENT.md`: self-hosted deployment guidance
+- `docs/VERSIONING.md`: release metadata policy and update visibility model
+- `docs/SECURITY.md`: upload, restore, and operator safety notes
 - `docs/TEST_STRATEGY.md`: validation expectations
 - `docs/PROJECT_STATE.md`: current milestone state and recent validations
 - `docs/DECISIONS.md`: durable architecture decisions

@@ -1,7 +1,10 @@
 from __future__ import annotations
 
-from sqlalchemy import select
+import json
 
+from sqlalchemy import delete, select
+
+from app.models import Base, Role
 from app.models.ai_provider_config import AIProviderConfig
 from app.models.household import Household
 from app.models.instance_setting import InstanceSetting
@@ -333,3 +336,42 @@ def test_login_is_blocked_until_setup_is_complete(client):
     response = client.post("/api/auth/login", json={"identifier": "owner", "password": "correct horse battery"})
     assert response.status_code == 403
     assert response.json()["detail"] == "Pantry setup is not complete yet. Finish the setup wizard first."
+
+
+def test_setup_restore_path_stages_backup_and_only_completes_on_success(client, db_session):
+    _save_required_setup_steps(client)
+    finalize_response = client.post("/api/setup/wizard/finalize")
+    assert finalize_response.status_code == 200
+
+    export_response = client.get("/api/platform-admin/backups/export/instance")
+    assert export_response.status_code == 200
+    bundle = json.loads(export_response.text)
+
+    for table in reversed(Base.metadata.sorted_tables):
+        if table.name == Role.__tablename__:
+            continue
+        db_session.execute(delete(table))
+    db_session.commit()
+
+    welcome_response = client.put("/api/setup/wizard/welcome", json={"acknowledged": True})
+    assert welcome_response.status_code == 200
+
+    upload_response = client.post(
+        "/api/setup/wizard/restore-upload",
+        files={"file": ("restore-bundle.json", json.dumps(bundle), "application/json")},
+    )
+    assert upload_response.status_code == 200
+    staged_payload = upload_response.json()
+    assert staged_payload["installation_mode"] == "restore_backup"
+    assert staged_payload["staged_restore"]["supported_for_restore"] is True
+    assert staged_payload["can_complete"] is True
+
+    restored_finalize = client.post("/api/setup/wizard/finalize")
+    assert restored_finalize.status_code == 200
+    assert restored_finalize.json()["user"]["email"] == "owner"
+
+    restored_users = db_session.scalars(select(User).order_by(User.email)).all()
+    assert [user.email for user in restored_users] == ["alex", "owner"]
+    restored_household = db_session.scalar(select(Household))
+    assert restored_household is not None
+    assert restored_household.name == "Brown Household"
