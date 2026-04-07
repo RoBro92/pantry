@@ -381,6 +381,105 @@ code {
   border-top: 1px solid var(--border);
 }
 
+.household-admin-console {
+  display: grid;
+  gap: 1rem;
+  align-items: start;
+  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+}
+
+.household-create-panel,
+.household-membership-panel,
+.household-delete-panel {
+  display: grid;
+  gap: 1rem;
+}
+
+.household-create-form {
+  display: grid;
+  gap: 0.85rem;
+  align-items: end;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.household-management-toolbar {
+  align-items: end;
+}
+
+.household-selector-field {
+  min-width: min(100%, 260px);
+}
+
+.household-summary-grid,
+.household-management-grid,
+.household-delete-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.household-summary-grid {
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
+.household-summary-card {
+  display: grid;
+  gap: 0.35rem;
+  padding: 1rem 1.05rem;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.56);
+}
+
+.household-summary-card strong,
+.household-summary-card code {
+  font-size: 1rem;
+}
+
+.household-summary-card code {
+  word-break: break-all;
+}
+
+.household-summary-action {
+  align-items: center;
+}
+
+.household-management-grid {
+  grid-template-columns: minmax(0, 1.5fr) minmax(280px, 0.95fr);
+}
+
+.household-members-list,
+.household-member-controls {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.household-member-row {
+  display: grid;
+  gap: 0.9rem;
+  align-items: center;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--border);
+}
+
+.household-member-row:first-child {
+  padding-top: 0;
+  border-top: none;
+}
+
+.household-member-details {
+  min-width: 0;
+}
+
+.household-member-controls {
+  justify-items: end;
+}
+
+.household-delete-grid {
+  grid-template-columns: minmax(260px, 0.95fr) minmax(0, 1fr);
+  align-items: start;
+}
+
 .household-card {
   padding: 1.25rem;
   border: 1px solid var(--border);
@@ -1080,6 +1179,22 @@ code {
     min-width: 100%;
   }
 
+  .household-admin-console,
+  .household-create-form,
+  .household-management-grid,
+  .household-delete-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .household-management-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .household-selector-field {
+    min-width: 100%;
+  }
+
   .households-table,
   .households-table tbody,
   .households-table tr,
@@ -1104,11 +1219,20 @@ code {
 
   .table-member-row,
   .detail-list li,
+  .household-member-row,
   .pantry-product-card-header,
   .pantry-lot-card-summary,
   .inline-form {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .household-member-row {
+    display: grid;
+  }
+
+  .household-member-controls {
+    justify-items: stretch;
   }
 
   .enrichment-layout {
