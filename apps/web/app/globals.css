@@ -472,7 +472,13 @@ code {
 }
 
 .household-member-controls {
-  justify-items: end;
+  align-items: end;
+  grid-template-columns: minmax(150px, 180px) auto auto;
+  justify-content: end;
+}
+
+.household-role-field {
+  min-width: 150px;
 }
 
 .household-delete-grid {
@@ -1232,7 +1238,8 @@ code {
   }
 
   .household-member-controls {
-    justify-items: stretch;
+    grid-template-columns: minmax(0, 1fr);
+    justify-content: stretch;
   }
 
   .enrichment-layout {

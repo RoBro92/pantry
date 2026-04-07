@@ -6,11 +6,27 @@ import { useRouter } from "next/navigation";
 import type { AdminHouseholdSummary, AdminUserSummary } from "../lib/api-types";
 import { postToApi } from "../lib/client-api";
 import { getHouseholdRoleLabel } from "../lib/role-labels";
+import { ModalShell } from "./modal-shell";
 
 type AdminHouseholdManagementPanelProps = {
   households: AdminHouseholdSummary[];
   users: AdminUserSummary[];
 };
+
+type MembershipDialogState =
+  | {
+      kind: "confirm-remove";
+      membershipExternalId: string;
+      displayLabel: string;
+      title: string;
+      description: string;
+    }
+  | {
+      kind: "warning";
+      title: string;
+      description: string;
+    }
+  | null;
 
 type HouseholdSelectFieldProps = {
   households: AdminHouseholdSummary[];
@@ -53,6 +69,10 @@ function countHouseholdAdmins(household: AdminHouseholdSummary | null) {
   );
 }
 
+function isMembershipGuardError(error: unknown) {
+  return error instanceof Error && error.message === "Each household must keep at least one household admin.";
+}
+
 export function AdminHouseholdManagementPanel({
   households,
   users,
@@ -64,6 +84,9 @@ export function AdminHouseholdManagementPanel({
   const [membershipError, setMembershipError] = useState<string | null>(null);
   const [membershipSuccess, setMembershipSuccess] = useState<string | null>(null);
   const [membershipPending, setMembershipPending] = useState(false);
+  const [membershipActionPendingId, setMembershipActionPendingId] = useState<string | null>(null);
+  const [membershipRoleDrafts, setMembershipRoleDrafts] = useState<Record<string, string>>({});
+  const [membershipDialog, setMembershipDialog] = useState<MembershipDialogState>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleteSuccess, setDeleteSuccess] = useState<string | null>(null);
   const [deletePending, setDeletePending] = useState(false);
@@ -86,12 +109,38 @@ export function AdminHouseholdManagementPanel({
   const resolvedSelectedUser = availableUsers.some((user) => user.external_id === selectedUser)
     ? selectedUser
     : (availableUsers[0]?.external_id ?? "");
+  const isCreatingMembership = membershipPending && membershipActionPendingId === "create";
+
+  function getMembershipDisplayLabel(membership: AdminHouseholdSummary["memberships"][number]) {
+    return membership.display_name ?? membership.email;
+  }
+
+  function getUnsafeAdminWarning(
+    membership: AdminHouseholdSummary["memberships"][number],
+    action: "remove" | "change-role",
+  ) {
+    if (!selectedHouseholdSummary) {
+      return null;
+    }
+
+    const actionText =
+      action === "remove"
+        ? `Remove ${getMembershipDisplayLabel(membership)}`
+        : `Change ${getMembershipDisplayLabel(membership)} to ${getHouseholdRoleLabel("household_user")}`;
+    return {
+      title: "Household admin required",
+      description: `${actionText} is blocked because ${selectedHouseholdSummary.name} would be left without a household admin. Assign another admin first, then try again.`,
+    };
+  }
 
   function handleHouseholdSelection(nextValue: string) {
     setSelectedHousehold(nextValue);
     setDeleteConfirmation("");
     setAcknowledgeLastHousehold(false);
     setSelectedUser("");
+    setMembershipActionPendingId(null);
+    setMembershipRoleDrafts({});
+    setMembershipDialog(null);
     setMembershipError(null);
     setMembershipSuccess(null);
     setDeleteError(null);
@@ -128,6 +177,7 @@ export function AdminHouseholdManagementPanel({
     setMembershipError(null);
     setMembershipSuccess(null);
     setMembershipPending(true);
+    setMembershipActionPendingId("create");
 
     const formData = new FormData(event.currentTarget);
     const userExternalId = String(formData.get("user_external_id") ?? "");
@@ -150,39 +200,141 @@ export function AdminHouseholdManagementPanel({
       setMembershipSuccess(`Assigned ${created.email} as ${getHouseholdRoleLabel(created.role)}.`);
       setSelectedUser("");
       router.refresh();
-      setMembershipPending(false);
     } catch (submissionError) {
       setMembershipError(
         submissionError instanceof Error ? submissionError.message : "Membership update failed.",
       );
+    } finally {
       setMembershipPending(false);
+      setMembershipActionPendingId(null);
     }
   }
 
-  async function handleRemoveMembership(membershipExternalId: string, displayLabel: string) {
-    const confirmed = window.confirm(
-      `Remove ${displayLabel} from ${selectedHouseholdSummary?.name ?? "this household"}?`,
-    );
-    if (!confirmed || !selectedHouseholdSummary) {
+  function getMembershipRoleValue(membership: AdminHouseholdSummary["memberships"][number]) {
+    return membershipRoleDrafts[membership.membership_external_id] ?? membership.role;
+  }
+
+  function handleMembershipRoleDraft(
+    membershipExternalId: string,
+    role: string,
+  ) {
+    setMembershipRoleDrafts((current) => ({
+      ...current,
+      [membershipExternalId]: role,
+    }));
+  }
+
+  function requestRemoveMembership(membership: AdminHouseholdSummary["memberships"][number]) {
+    if (!selectedHouseholdSummary) {
+      return;
+    }
+
+    if (membership.role === "household_admin" && adminCount <= 1) {
+      const warning = getUnsafeAdminWarning(membership, "remove");
+      if (warning) {
+        setMembershipDialog({ kind: "warning", ...warning });
+      }
+      return;
+    }
+
+    setMembershipDialog({
+      kind: "confirm-remove",
+      membershipExternalId: membership.membership_external_id,
+      displayLabel: getMembershipDisplayLabel(membership),
+      title: "Remove membership",
+      description: `Remove ${getMembershipDisplayLabel(membership)} from ${selectedHouseholdSummary.name}? They will lose access to that pantry immediately.`,
+    });
+  }
+
+  async function handleConfirmRemoveMembership() {
+    if (membershipDialog?.kind !== "confirm-remove" || !selectedHouseholdSummary) {
       return;
     }
 
     setMembershipError(null);
     setMembershipSuccess(null);
     setMembershipPending(true);
+    setMembershipActionPendingId(membershipDialog.membershipExternalId);
     try {
       const response = await postToApi<{ message: string }>(
-        `/api/platform-admin/households/${selectedHouseholdSummary.external_id}/memberships/${membershipExternalId}/remove`,
+        `/api/platform-admin/households/${selectedHouseholdSummary.external_id}/memberships/${membershipDialog.membershipExternalId}/remove`,
         {},
       );
       setMembershipSuccess(response.message);
+      setMembershipDialog(null);
       router.refresh();
     } catch (requestError) {
-      setMembershipError(
-        requestError instanceof Error ? requestError.message : "Membership removal failed.",
-      );
+      if (isMembershipGuardError(requestError)) {
+        setMembershipDialog({
+          kind: "warning",
+          title: "Household admin required",
+          description: `${selectedHouseholdSummary.name} still needs at least one household admin. Assign another admin before removing ${membershipDialog.displayLabel}.`,
+        });
+      } else {
+        setMembershipError(
+          requestError instanceof Error ? requestError.message : "Membership removal failed.",
+        );
+      }
     } finally {
       setMembershipPending(false);
+      setMembershipActionPendingId(null);
+    }
+  }
+
+  async function handleSaveMembershipRole(membership: AdminHouseholdSummary["memberships"][number]) {
+    if (!selectedHouseholdSummary) {
+      return;
+    }
+
+    const nextRole = getMembershipRoleValue(membership);
+    if (nextRole === membership.role) {
+      return;
+    }
+
+    if (membership.role === "household_admin" && nextRole !== "household_admin" && adminCount <= 1) {
+      const warning = getUnsafeAdminWarning(membership, "change-role");
+      if (warning) {
+        setMembershipDialog({ kind: "warning", ...warning });
+      }
+      return;
+    }
+
+    setMembershipError(null);
+    setMembershipSuccess(null);
+    setMembershipPending(true);
+    setMembershipActionPendingId(membership.membership_external_id);
+    try {
+      const response = await postToApi<{ email: string; role: string }>(
+        `/api/platform-admin/households/${selectedHouseholdSummary.external_id}/memberships`,
+        {
+          user_external_id: membership.user_external_id,
+          role: nextRole,
+        },
+      );
+      setMembershipRoleDrafts((current) => {
+        const nextDrafts = { ...current };
+        delete nextDrafts[membership.membership_external_id];
+        return nextDrafts;
+      });
+      setMembershipSuccess(
+        `Updated ${response.email} to ${getHouseholdRoleLabel(response.role, { detailed: true })}.`,
+      );
+      router.refresh();
+    } catch (requestError) {
+      if (isMembershipGuardError(requestError)) {
+        setMembershipDialog({
+          kind: "warning",
+          title: "Household admin required",
+          description: `${selectedHouseholdSummary.name} still needs at least one household admin. Assign another admin before changing ${getMembershipDisplayLabel(membership)} to ${getHouseholdRoleLabel("household_user")}.`,
+        });
+      } else {
+        setMembershipError(
+          requestError instanceof Error ? requestError.message : "Membership update failed.",
+        );
+      }
+    } finally {
+      setMembershipPending(false);
+      setMembershipActionPendingId(null);
     }
   }
 
@@ -315,18 +467,45 @@ export function AdminHouseholdManagementPanel({
                             <div className="helper-text">{membership.email}</div>
                           </div>
                           <div className="household-member-controls">
-                            <span className="pill">
-                              {getHouseholdRoleLabel(membership.role, { detailed: true })}
-                            </span>
+                            <label className="field compact household-role-field">
+                              <span>Role</span>
+                              <select
+                                aria-label={`Role for ${getMembershipDisplayLabel(membership)}`}
+                                value={getMembershipRoleValue(membership)}
+                                onChange={(event) =>
+                                  handleMembershipRoleDraft(
+                                    membership.membership_external_id,
+                                    event.target.value,
+                                  )
+                                }
+                                disabled={membershipPending}
+                              >
+                                <option value="household_admin">
+                                  {getHouseholdRoleLabel("household_admin", { detailed: true })}
+                                </option>
+                                <option value="household_user">
+                                  {getHouseholdRoleLabel("household_user", { detailed: true })}
+                                </option>
+                              </select>
+                            </label>
                             <button
                               type="button"
                               className="ghost-button"
-                              onClick={() =>
-                                void handleRemoveMembership(
-                                  membership.membership_external_id,
-                                  membership.display_name ?? membership.email,
-                                )
+                              onClick={() => void handleSaveMembershipRole(membership)}
+                              disabled={
+                                membershipPending ||
+                                getMembershipRoleValue(membership) === membership.role
                               }
+                            >
+                              {membershipPending &&
+                              membershipActionPendingId === membership.membership_external_id
+                                ? "Saving..."
+                                : "Save role"}
+                            </button>
+                            <button
+                              type="button"
+                              className="ghost-button"
+                              onClick={() => requestRemoveMembership(membership)}
                               disabled={membershipPending}
                             >
                               Remove
@@ -404,8 +583,8 @@ export function AdminHouseholdManagementPanel({
                   )}
 
                   <p className="helper-text">
-                    Need to remove access? Use the member list so routine assignment stays in one
-                    place.
+                    Need to remove access or change someone’s role? Do it from the member list so
+                    everything for this household stays in one place.
                   </p>
                 </form>
               </div>
@@ -491,6 +670,52 @@ export function AdminHouseholdManagementPanel({
         {deleteError ? <p className="error-text">{deleteError}</p> : null}
         {deleteSuccess ? <p className="status-note">{deleteSuccess}</p> : null}
       </form>
+
+      {membershipDialog ? (
+        <ModalShell
+          title={membershipDialog.title}
+          description={membershipDialog.description}
+          onClose={() => {
+            if (!membershipPending) {
+              setMembershipDialog(null);
+            }
+          }}
+        >
+          <div className="page-actions">
+            {membershipDialog.kind === "confirm-remove" ? (
+              <>
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() => setMembershipDialog(null)}
+                  disabled={membershipPending}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={() => void handleConfirmRemoveMembership()}
+                  disabled={membershipPending}
+                >
+                  {membershipPending &&
+                  membershipActionPendingId === membershipDialog.membershipExternalId
+                    ? "Removing..."
+                    : "Remove member"}
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                className="primary-button"
+                onClick={() => setMembershipDialog(null)}
+              >
+                Understood
+              </button>
+            )}
+          </div>
+        </ModalShell>
+      ) : null}
     </div>
   );
 }
