@@ -298,7 +298,10 @@ export function PantryProductBrowser({
                   <tr>
                     <td>
                       <div className="inventory-product-cell">
-                        <strong>{product.product_name}</strong>
+                        <h3 className="inventory-product-name">{product.product_name}</h3>
+                        {product.manual_ingredient_tags.length > 0 ? (
+                          <span>Manual ingredients: {product.manual_ingredient_tags.join(", ")}</span>
+                        ) : null}
                         <span>
                           {product.enrichment ? "Open Food Facts linked" : "User-owned product record"}
                         </span>
@@ -307,7 +310,7 @@ export function PantryProductBrowser({
                     <td>
                       {product.stock_status === "out_of_stock"
                         ? "Out of stock"
-                        : `${product.total_quantity} ${product.unit} · ${product.lot_count} lot${product.lot_count === 1 ? "" : "s"}`}
+                        : `${product.total_quantity} ${product.unit} across ${product.lot_count} lot${product.lot_count === 1 ? "" : "s"}`}
                     </td>
                     <td>
                       <div className="inventory-product-cell">
@@ -366,7 +369,7 @@ export function PantryProductBrowser({
                     <p className="helper-text">
                       {product.stock_status === "out_of_stock"
                         ? "Out of stock"
-                        : `${product.total_quantity} ${product.unit} · ${product.lot_count} lot${product.lot_count === 1 ? "" : "s"}`}
+                        : `${product.total_quantity} ${product.unit} across ${product.lot_count} lot${product.lot_count === 1 ? "" : "s"}`}
                     </p>
                   </div>
                   <div className="tag-row">

@@ -8,10 +8,10 @@ export default async function AdminUpdatesPage() {
     <div className="stack">
       <section className="panel">
         <p className="eyebrow">Updates</p>
-        <h1>Release Notes and updates</h1>
+        <h1>Release visibility and manual updates</h1>
         <p>
-          Review advisory release metadata, acknowledge changelog notes after upgrades, 
-          and use the backup tools to export or restore Pantry data.
+          Review advisory release metadata, acknowledge changelog notes after upgrades, and keep
+          update and recovery actions in operator hands.
         </p>
       </section>
       <AdminUpdatesPanel initialReleaseStatus={releaseStatus} />

@@ -383,7 +383,12 @@ test("platform admin updates and backups pages load from the admin navigation", 
   await page.goto("/admin/updates");
   await expect(page.getByRole("heading", { name: "Release visibility and manual updates" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Backups", exact: true })).toBeVisible();
-  await expect(page.getByText("Operator-controlled only")).toBeVisible();
+  await expect(
+    page
+      .locator("article.panel")
+      .filter({ has: page.getByRole("heading", { name: "Manual Update" }) })
+      .getByText("Operator-controlled only")
+  ).toBeVisible();
 
   await page.goto("/admin/backups");
   await expect(page.getByRole("heading", { name: "Export and recovery foundations" })).toBeVisible();
@@ -585,8 +590,15 @@ test("import flow covers upload, review lines, and confirm into pantry", async (
   await expect(page.getByText(/online_order · status confirmed · created/i)).toBeVisible();
 
   await page.goto(`/app/households/${manifest.household_external_id}`);
-  await expect(page.getByRole("heading", { name: "Spice Blend" })).toBeVisible();
-  await expect(page.getByText("3.000 can across 1 lot")).toBeVisible();
+  await expect(page.getByTestId(`product-card-${manifest.product_external_ids.spice_blend}`)).toContainText(
+    "Spice Blend",
+  );
+  await expect(page.getByTestId(`product-card-${manifest.product_external_ids.spice_blend}`)).toContainText(
+    "1.000 jar across 1 lot",
+  );
+  await expect(page.getByTestId(`product-card-${manifest.product_external_ids.tomatoes}`)).toContainText(
+    "3.000 can across 1 lot",
+  );
 });
 
 test("ai flow covers unconfigured and configured-but-unavailable states", async ({ page }) => {

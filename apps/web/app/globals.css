@@ -484,7 +484,7 @@ code {
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem;
-  align-items: end;
+  align-items: flex-end;
   justify-content: flex-start;
 }
 
@@ -935,6 +935,10 @@ code {
   backdrop-filter: blur(6px);
 }
 
+.release-notes-backdrop {
+  pointer-events: none;
+}
+
 .modal-panel {
   width: min(680px, 100%);
   max-height: calc(100vh - 2rem);
@@ -946,6 +950,10 @@ code {
   background: var(--panel-strong);
   box-shadow: var(--shadow);
   overflow: auto;
+}
+
+.release-notes-panel {
+  pointer-events: auto;
 }
 
 .modal-close-button {
@@ -1282,6 +1290,11 @@ code {
 .inventory-product-cell {
   display: grid;
   gap: 0.2rem;
+}
+
+.inventory-product-name {
+  margin: 0;
+  font-size: 1rem;
 }
 
 .inventory-product-cell span {

@@ -10,6 +10,9 @@ export default async function SessionPage() {
     <div className="stack">
       <section className="panel">
         <h1>Welcome back {session.user.display_name ?? session.user.email}</h1>
+        <p className="helper-text">
+          Logged in as {session.user.display_name ?? session.user.email}
+        </p>
         <p>
           This is your Pantry dashboard, where you can access your households, view your memberships, and manage your account. Use the links below to navigate to different sections of the app and start organizing your pantry!
         </p>

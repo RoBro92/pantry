@@ -2171,6 +2171,9 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
         {restoreCannotContinue ? (
           <div className="setup-alert is-error" data-testid="setup-restore-blocked">
             <strong>This backup cannot be restored yet.</strong>
+            {restoreValidationIssues.some(
+              (issue) => issue.includes("schema revision") || issue.includes("restore-compatible"),
+            ) ? <p>Cross-version restore is not supported yet.</p> : null}
             <ul>
               {restoreValidationIssues.map((issue) => (
                 <li key={issue}>{issue}</li>

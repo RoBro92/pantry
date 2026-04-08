@@ -40,9 +40,9 @@ export function AdminReleaseNotesDialog({
   }
 
   return (
-    <div className="modal-backdrop" role="presentation">
+    <div className="modal-backdrop release-notes-backdrop" role="presentation">
       <section
-        className="modal-panel"
+        className="modal-panel release-notes-panel"
         role="dialog"
         aria-modal="true"
         aria-labelledby="whats-new-title"
