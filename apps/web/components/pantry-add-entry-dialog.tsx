@@ -178,6 +178,7 @@ export function PantryAddEntryDialog({
       title="Add to pantry"
       description="Create a product and its first stock lot in one flow, or add another lot to an existing product."
       onClose={onClose}
+      closeOnBackdropClick={false}
     >
       <form
         className="stack"

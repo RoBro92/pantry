@@ -384,7 +384,7 @@ export function AdminHouseholdManagementPanel({
           <div className="household-create-form">
             <label className="field">
               <span>Household name</span>
-              <input name="name" placeholder="Brown family" required />
+              <input name="name" placeholder="Household" required />
             </label>
             <button type="submit" className="primary-button" disabled={householdPending}>
               {householdPending ? "Creating..." : "Create household"}

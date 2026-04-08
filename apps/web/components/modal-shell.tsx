@@ -6,12 +6,27 @@ type ModalShellProps = {
   title: string;
   description?: string;
   onClose: () => void;
+  closeOnBackdropClick?: boolean;
   children: ReactNode;
 };
 
-export function ModalShell({ title, description, onClose, children }: ModalShellProps) {
+export function ModalShell({
+  title,
+  description,
+  onClose,
+  closeOnBackdropClick = true,
+  children,
+}: ModalShellProps) {
   return (
-    <div className="modal-backdrop" role="presentation" onClick={onClose}>
+    <div
+      className="modal-backdrop"
+      role="presentation"
+      onClick={(event) => {
+        if (closeOnBackdropClick && event.target === event.currentTarget) {
+          onClose();
+        }
+      }}
+    >
       <section
         className="modal-panel"
         role="dialog"

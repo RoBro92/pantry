@@ -42,7 +42,7 @@ export default async function HouseholdPantryPage({
         <p>
           Household role: <strong>{overview.effective_role}</strong>. Browse the pantry as one
           searchable list of products, with each stock lot shown where it is stored and optional
-          linked product details shown when enrichment has been confirmed.
+          linked product details shown when available.
         </p>
         <div className="page-actions">
           <Link
