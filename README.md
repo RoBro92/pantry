@@ -1,18 +1,18 @@
 # Pantry
 
-Pantry is a self-hosted household inventory and meal management application for tracking food, reducing waste, and keeping day-to-day kitchen workflows clear.
+Pantry is a self hosted household inventory and meal management application for tracking food, reducing waste, and keeping day to day kitchen workflows clear. It was built as a means to an end as i found the existing offerings such as Grocy were too bloated with features I didn't need. It was also missing some key features i wanted to make the day to day use of the program not be a chore. Think "Remove 20g of cheese for a sandwich" So Pantry was created to provide a simple interface with support for multiple households. 
 
 ## Features
 
-- Pantry inventory with rooms, storage locations, stock lots, and expiry tracking
-- Optional Open Food Facts product enrichment with confirmation-first linking
-- Recipe management with pantry coverage insights
-- Review-first import flows
-- QR location access
+- Pantry inventory with Rooms, storage locations, product-first browsing, expandable stock lots, and expiry tracking
+- Optional Open Food Facts product enrichment stored as attached metadata after confirmation first linking
+- Shopping list foundation for depleted or planned replenishment items
+- Recipe management with pantry insights
+- QR location access with quick add/remove flows
 - Diagnostics, update visibility, and manual update guidance
-- Pantry-native backup export plus guarded restore foundations
-- Optional AI-powered suggestions
-- Guided first-run setup and login flow, including restore-from-backup
+- Native backup export plus guarded restore foundations
+- Optional AI-powered suggestions for recipes based on dietary requirements for users with suggestions on additional purchase
+- Guided first run setup and login flow, including restore from backup
 
 ## Quick Start
 
@@ -41,27 +41,25 @@ Open:
 ```text
 http://<your-server-ip>:3000
 ```
-
-Pantry now uses:
-
-- `/` as the default entry point
-- the first-run wizard when setup is incomplete
-- the login page when setup is complete
-
-The setup wizard stages progress until the final confirmation step. It walks through install selection, admin and user setup, dietary preferences, the first household with rooms and storage locations, and optional instance settings before writing anything live.
-
-Pantry supports two first-run paths:
+Pantry supports two first run paths:
 
 - `Fresh install`
 - `Restore from backup`
 
-Restore currently accepts Pantry-native full instance JSON backup bundles only. Uploaded restore files are validated, staged in quarantine, and never executed as code.
+Restore currently accepts Pantry native full instance JSON backup bundles only. Uploaded restore files are validated, staged in quarantine, and never executed as code.
 
 ## Pantry Workflow
 
-The household pantry page is built as one searchable pantry view. Use `Search` to find products by name, alias, or barcode, review every stock lot with its room, storage location, dates, and notes, and use `Add product` to create a product and its first stock lot in one flow.
+The household pantry page is built as a compact product browser with inline search and filters. Search by product name, alias, or barcode, switch between table and list views, expand a product only when you need stock-lot detail, and use `Add product` to create a product and its first stock lot in one flow.
 
-When adding a product, Pantry can optionally preview Open Food Facts details such as image, ingredients, allergens, traces, labels, and a compact nutrition summary. This data is advisory only, must be confirmed before it is linked, and does not replace the Pantry product's own name or stock records.
+When adding a product, Pantry supports:
+
+- optional Open Food Facts preview and enrichment linking
+- manual ingredient tags that stay user-owned
+- barcode entry with USB-scanner friendly input and browser camera hooks where supported
+- clean duplicate-product detection that routes directly into adding another stock lot instead of creating a second product
+
+Open Food Facts data is advisory enrichment only. Pantry keeps the product name, aliases, and stock identity as user-owned records, while attached enrichment survives backups and restores for later UI, filtering, and AI use.
 
 ## Updating Pantry
 
@@ -106,6 +104,7 @@ See:
 - [docs/CONTRIBUTING.md](/Users/robinbrown/Documents/GitHub/pantry/docs/CONTRIBUTING.md)
 - [docs/DEPLOYMENT.md](/Users/robinbrown/Documents/GitHub/pantry/docs/DEPLOYMENT.md)
 - [docs/ARCHITECTURE.md](/Users/robinbrown/Documents/GitHub/pantry/docs/ARCHITECTURE.md)
+- [docs/MILESTONES.md](/Users/robinbrown/Documents/GitHub/pantry/docs/MILESTONES.md)
 - [docs/TEST_STRATEGY.md](/Users/robinbrown/Documents/GitHub/pantry/docs/TEST_STRATEGY.md)
 
 ## Troubleshooting

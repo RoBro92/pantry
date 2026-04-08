@@ -111,12 +111,18 @@ test("first-run setup handles staged users, skips optional steps, and completes 
   await wizard.getByRole("button", { name: "Next" }).click();
   await expect(page.getByRole("heading", { name: "Dietary preferences" })).toBeVisible();
   await wizard.getByRole("button", { name: "Skip for now" }).click();
-  await expect(page.getByRole("heading", { name: "First household and storage locations" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "First household and rooms" })).toBeVisible();
 
   await page.getByLabel("Household name").fill("Brown Household");
-  await page.getByLabel("First room").fill("Kitchen");
-  await page.getByLabel("Storage locations in this room").fill("Fridge");
-  await page.getByRole("button", { name: "Add" }).first().click();
+  const firstRoomCard = page.getByTestId("setup-room-card-1");
+  await firstRoomCard.getByLabel("Room name").fill("Kitchen");
+  await firstRoomCard.getByLabel("Storage locations").fill("Fridge");
+  await firstRoomCard.getByRole("button", { name: "Add" }).click();
+  await wizard.getByRole("button", { name: "Add another Room" }).click();
+  const secondRoomCard = page.getByTestId("setup-room-card-2");
+  await secondRoomCard.getByLabel("Room name").fill("Garage");
+  await secondRoomCard.getByLabel("Storage locations").fill("Bulk rack");
+  await secondRoomCard.getByRole("button", { name: "Add" }).click();
   await page
     .getByLabel("Household membership for Alex (alex)")
     .selectOption({ label: "User" });
@@ -130,8 +136,10 @@ test("first-run setup handles staged users, skips optional steps, and completes 
   );
 
   await page.reload();
-  await expect(page.getByRole("heading", { name: "First household and storage locations" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "First household and rooms" })).toBeVisible();
   await expect(page.getByLabel("Household name")).toHaveValue("Brown Household");
+  await expect(page.getByTestId("setup-room-card-1")).toContainText("Kitchen");
+  await expect(page.getByTestId("setup-room-card-2")).toContainText("Garage");
   await expect(page.getByRole("button", { name: "Fridge Remove" })).toBeVisible();
   await expect(page.getByLabel("Household membership for Alex (alex)")).toHaveValue(
     "household_user",
@@ -156,6 +164,7 @@ test("first-run setup handles staged users, skips optional steps, and completes 
   await expect(progressItems.nth(7).locator(".setup-progress-count")).toHaveText("8");
   await expect(page.getByText("Skipped for now").first()).toBeVisible();
   await expect(page.getByText(/Alex \(alex\) \(User\)/)).toBeVisible();
+  await expect(page.getByText(/Room 2: Garage/)).toBeVisible();
   await wizard.getByRole("button", { name: "Complete Setup" }).click();
 
   await expect(page).toHaveURL(/\/app$/);
@@ -276,7 +285,7 @@ test("dietary none selection persists and marks the step complete", async ({ pag
   await expect(page.getByRole("button", { name: "None Remove" })).toBeVisible();
 
   await wizard.getByRole("button", { name: "Next" }).click();
-  await expect(page.getByRole("heading", { name: "First household and storage locations" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "First household and rooms" })).toBeVisible();
   await expect(wizard.locator(".setup-progress-item").nth(2).locator(".setup-progress-count")).toHaveText(
     "✓",
   );
@@ -438,6 +447,8 @@ test("pantry flow covers room management, combined add flow, duplicate handling,
   await page.getByRole("button", { name: "Add product" }).click();
   const addEntryForm = page.getByTestId("pantry-add-entry-form");
   await addEntryForm.getByLabel("Product name").fill("Beef mince");
+  await addEntryForm.getByLabel("Manual ingredients").fill("Beef");
+  await addEntryForm.getByRole("button", { name: "Add" }).click();
   await addEntryForm.getByLabel("Storage location").selectOption({ label: "Kitchen / Freezer" });
   await addEntryForm.getByLabel("Quantity").fill("2");
   await addEntryForm.getByLabel("Unit").fill("kg");
@@ -445,23 +456,22 @@ test("pantry flow covers room management, combined add flow, duplicate handling,
   await addEntryForm.getByLabel("Purchase date").fill("2026-04-01");
   await addEntryForm.getByLabel("Expiry date").fill("2026-04-04");
   await addEntryForm.getByLabel("Notes").fill("First pack");
-  await addEntryForm.getByRole("button", { name: "Save pantry item" }).click();
+  await expect(addEntryForm.getByRole("button", { name: "Scan" })).toBeVisible();
+  await addEntryForm.getByRole("button", { name: "Create product and stock lot" }).click();
 
-  await expect(page.getByRole("heading", { name: "Beef mince" })).toBeVisible();
   const beefMinceCard = page
     .locator('[data-testid^="product-card-"]')
     .filter({ hasText: "Beef mince" });
   await expect(beefMinceCard).toContainText("2.000 kg across 1 lot");
   await expect(beefMinceCard).toContainText("Kitchen / Freezer");
   await expect(beefMinceCard).toContainText("4 Apr 2026");
+  await expect(beefMinceCard).toContainText("Beef");
 
-  await page.getByRole("button", { name: "Search" }).click();
-  const searchForm = page.getByTestId("pantry-search-form");
-  await searchForm.getByLabel("Search").fill("ground beef");
-  await searchForm.getByRole("button", { name: "Search", exact: true }).click();
+  await page.getByLabel("Search products").fill("ground beef");
+  await page.getByRole("button", { name: "Apply" }).click();
 
-  await expect(page.getByText("Search results for “ground beef”")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Beef mince" })).toBeVisible();
+  await expect(page.getByLabel("Search products")).toHaveValue("ground beef");
+  await expect(beefMinceCard).toContainText("Beef mince");
 
   await page.getByRole("button", { name: "Add product" }).click();
   const duplicateForm = page.getByTestId("pantry-add-entry-form");
@@ -470,7 +480,7 @@ test("pantry flow covers room management, combined add flow, duplicate handling,
   await duplicateForm.getByLabel("Quantity").fill("1");
   await duplicateForm.getByLabel("Unit").fill("kg");
   await duplicateForm.getByLabel("Notes").fill("Second pack");
-  await duplicateForm.getByRole("button", { name: "Save pantry item" }).click();
+  await duplicateForm.getByRole("button", { name: "Create product and stock lot" }).click();
 
   await expect(page.getByTestId("existing-product-warning")).toContainText(
     "Beef mince already exists",
@@ -499,7 +509,7 @@ test("pantry add flow warns when an alias is already used by another product", a
   await addEntryForm.getByLabel("Quantity").fill("1");
   await addEntryForm.getByLabel("Unit").fill("count");
   await addEntryForm.getByLabel("Aliases").fill("Dry pasta");
-  await addEntryForm.getByRole("button", { name: "Save pantry item" }).click();
+  await addEntryForm.getByRole("button", { name: "Create product and stock lot" }).click();
 
   await expect(page.getByText("Dry pasta is already used by Pasta")).toBeVisible();
 });

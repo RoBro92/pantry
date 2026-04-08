@@ -2,28 +2,30 @@
 
 ## Current Milestone
 
-Pantry now has a staged first-run setup wizard and a dedicated login entry flow.
+Pantry now has a product-centric pantry browser, attached Open Food Facts enrichment persistence, staged multi-room setup, and a clean shopping-list foundation.
 
 ## What Changed
 
-- Added backend setup staging with transactional finalisation
-- Added polished web login and first-run wizard routing
-- Added dietary preference persistence for households and users
-- Added setup-specific API coverage and expanded E2E coverage
-- Restored the public `docs/` set referenced by `AGENTS.md`
+- Expanded pantry product enrichment so Open Food Facts records persist as attached enrichment, not canonical product identity
+- Added structured enrichment fields for ingredients, ingredient tokens, dietary tags, nutriments, and nutrition summary text alongside the existing UI summary
+- Reworked the pantry page into a compact actions strip plus searchable product browser with expandable stock-lot detail
+- Added manual ingredient tags, barcode scan hooks, and clearer duplicate-product routing in the add flow
+- Added household shopping-list domain foundations and surfaced them in navigation
+- Upgraded the setup wizard household step to stage multiple Rooms and storage locations with refresh-safe persistence
+- Restyled recent activity into a compact pantry activity log
 
 ## Validation
 
-- `cd apps/api && pytest -q tests/test_auth_api.py tests/test_setup_api.py`
-- `cd apps/api && pytest -q`
-- `./infra/scripts/smoke-check.sh`
-- `npm run test:e2e`
-- `docker compose exec -T web sh -lc 'export NEXT_PUBLIC_APP_VERSION=$(cat /workspace/VERSION) && npm run build --workspace @pantry/web'`
+- `cd apps/api && pytest -q tests/test_open_food_facts.py tests/test_pantry_api.py`
+- `cd apps/api && pytest -q tests/test_setup_api.py`
+- `cd apps/api && pytest -q tests/test_pantry_api.py::test_pantry_entry_detects_existing_product_then_adds_new_stock_lot tests/test_setup_api.py::test_setup_finalize_commits_all_staged_data_and_authenticates`
 
 ## Known Gaps
 
-- The containerised Next.js production build completed compile, type-check, and static generation, then was killed while finishing build traces. The local dev stack was restarted and remained healthy after validation.
+- Browser camera barcode scanning is implemented as a capability-checked foundation and still depends on secure-context browser support
+- The shopping list is intentionally lightweight in this milestone and does not yet model full shopping trips, aisle ordering, or collaborative sync
+- Local web type-check/build validation can still be slower than the API suite and may need a dedicated longer-running pass in some environments
 
 ## Next Step
 
-Open the local setup wizard in a browser, validate the first-run UX manually, and then decide whether to tune the production build memory footprint further.
+Use the milestone map in [docs/MILESTONES.md](/Users/robinbrown/Documents/GitHub/pantry/docs/MILESTONES.md) to sequence the next passes: barcode hardening, richer depletion-to-shopping workflows, and deeper dietary/AI use of attached enrichment.

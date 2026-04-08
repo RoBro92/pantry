@@ -23,6 +23,7 @@ Pantry will:
 - route to the setup wizard if setup is incomplete
 - allow operators to choose a fresh install or a restore from backup
 - keep staged setup progress between refreshes
+- stage multiple Rooms and storage locations before anything is written live
 - validate restore uploads before finalization
 - finalize users, households, locations, settings, dietary preferences, and optional AI/SMTP configuration only when `Complete Setup` is clicked
 
