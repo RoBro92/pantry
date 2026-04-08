@@ -76,6 +76,6 @@ docker compose --env-file .env -f pantry.yml run --rm api python -m app.cli rese
 ## Restore Notes
 
 - Restore currently supports Pantry backup bundle v1 JSON only.
-- Full instance restore requires the same migrated schema revision as the running install.
+- Full instance restore requires the same migrated schema revision as the running install, or an older revision Pantry explicitly marks restore-compatible.
 - Uploaded restore bundles are staged under `BACKUP_STORAGE_ROOT` before use.
 - Restore replaces current database content deliberately and requires explicit confirmation in the UI.

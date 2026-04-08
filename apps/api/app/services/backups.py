@@ -73,6 +73,86 @@ class RestoreCompatibility:
 
 _SCHEMA_COMPATIBILITY: dict[tuple[str | None, str | None], RestoreCompatibility] = {
     (
+        "20260408_000013",
+        "20260408_000012",
+    ): RestoreCompatibility(
+        supported=True,
+        allowed_missing_tables=frozenset({"password_reset_tokens"}),
+        warnings=(
+            "This backup predates password reset token support. Existing reset tokens will restore as empty.",
+        ),
+    ),
+    (
+        "20260408_000013",
+        "20260408_000011",
+    ): RestoreCompatibility(
+        supported=True,
+        allowed_missing_tables=frozenset({"password_reset_tokens"}),
+        warnings=(
+            "This backup predates password reset token support. Existing reset tokens will restore as empty.",
+        ),
+    ),
+    (
+        "20260408_000013",
+        "20260407_000010",
+    ): RestoreCompatibility(
+        supported=True,
+        allowed_missing_tables=frozenset({"shopping_lists", "shopping_list_items", "password_reset_tokens"}),
+        warnings=(
+            "This backup predates shopping list foundations. Shopping list records will restore as empty.",
+            "This backup predates password reset token support. Existing reset tokens will restore as empty.",
+        ),
+    ),
+    (
+        "20260408_000013",
+        "20260407_000009",
+    ): RestoreCompatibility(
+        supported=True,
+        allowed_missing_tables=frozenset(
+            {"product_enrichments", "shopping_lists", "shopping_list_items", "password_reset_tokens"}
+        ),
+        warnings=(
+            "This backup predates product enrichment support. Product enrichment records will restore as empty.",
+            "This backup predates shopping list foundations. Shopping list records will restore as empty.",
+            "This backup predates password reset token support. Existing reset tokens will restore as empty.",
+        ),
+    ),
+    (
+        "20260408_000012",
+        "20260408_000011",
+    ): RestoreCompatibility(
+        supported=True,
+        allowed_missing_tables=frozenset({"password_reset_tokens"}),
+        warnings=(
+            "This backup predates password reset token support. Existing reset tokens will restore as empty.",
+        ),
+    ),
+    (
+        "20260408_000012",
+        "20260407_000010",
+    ): RestoreCompatibility(
+        supported=True,
+        allowed_missing_tables=frozenset({"shopping_lists", "shopping_list_items", "password_reset_tokens"}),
+        warnings=(
+            "This backup predates shopping list foundations. Shopping list records will restore as empty.",
+            "This backup predates password reset token support. Existing reset tokens will restore as empty.",
+        ),
+    ),
+    (
+        "20260408_000012",
+        "20260407_000009",
+    ): RestoreCompatibility(
+        supported=True,
+        allowed_missing_tables=frozenset(
+            {"product_enrichments", "shopping_lists", "shopping_list_items", "password_reset_tokens"}
+        ),
+        warnings=(
+            "This backup predates product enrichment support. Product enrichment records will restore as empty.",
+            "This backup predates shopping list foundations. Shopping list records will restore as empty.",
+            "This backup predates password reset token support. Existing reset tokens will restore as empty.",
+        ),
+    ),
+    (
         "20260408_000011",
         "20260407_000010",
     ): RestoreCompatibility(
@@ -485,8 +565,9 @@ def restore_instance_backup_bundle(
             for row in rows:
                 deserialized_rows.append(
                     {
-                        column.name: _deserialize_scalar(column, row.get(column.name))
+                        column.name: _deserialize_scalar(column, row[column.name])
                         for column in table.columns
+                        if column.name in row
                     }
                 )
             db.execute(table.insert(), deserialized_rows)

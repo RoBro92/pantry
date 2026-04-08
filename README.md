@@ -85,7 +85,7 @@ Platform admins can use the admin `Backups` page to:
 - export a household-specific Pantry bundle for retention or inspection
 - upload and validate a full instance restore bundle before applying it deliberately
 
-Current restore support is limited to Pantry backup bundle v1 JSON files from the same schema revision.
+Current restore support is limited to Pantry backup bundle v1 JSON files from the same schema revision or from older revisions explicitly marked restore-compatible by Pantry.
 
 ## Configuration
 

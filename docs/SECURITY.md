@@ -13,7 +13,7 @@ Pantry treats lifecycle and recovery inputs as hostile until proven otherwise.
 ## Restore Safety
 
 - Restore currently supports full instance bundles only.
-- Restore requires the same schema revision as the running Pantry install.
+- Restore requires the same schema revision as the running Pantry install, or an older revision Pantry explicitly marks restore-compatible.
 - Restore requires at least one platform admin in the uploaded bundle.
 - Restore remains explicitly destructive and requires operator confirmation in the admin UI.
 
