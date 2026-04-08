@@ -115,6 +115,17 @@ See:
 - [docs/TEST_STRATEGY.md](/Users/robinbrown/Documents/GitHub/pantry/docs/TEST_STRATEGY.md)
 - [docs/REPOSITORY_MAINTENANCE.md](/Users/robinbrown/Documents/GitHub/pantry/docs/REPOSITORY_MAINTENANCE.md)
 
+Local source development uses the repository-root compose files:
+
+```bash
+./infra/scripts/dev-stack.sh start fresh
+./infra/scripts/dev-stack.sh start demo
+```
+
+Choose the mode explicitly for local branch work. `fresh` resets to the first-run setup wizard, while `demo` resets and seeds stable local demo data before landing on the login page. This is development-only and does not change the public production or self-hosted install flow.
+
+The helper script runs the repository-root compose files with bind-mounted source, `next dev` for the web app, and `uvicorn --reload` for the API so normal UI, CSS, content, and Python edits do not require rebuilding containers.
+
 ## Development Workflow
 
 Pantry uses a branch and pull request workflow for ongoing development.

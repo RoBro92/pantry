@@ -8,6 +8,7 @@ from alembic import command
 from alembic.config import Config
 
 from app.core.db import SessionLocal
+from app.services.development_seed import DEV_MODE_CHOICES, bootstrap_development_mode
 from app.services.auth import count_platform_admins, create_platform_admin, reset_user_password
 from app.services.e2e_seed import seed_e2e_baseline
 from app.services.setup import mark_setup_completed
@@ -67,6 +68,20 @@ def seed_e2e(args: argparse.Namespace) -> None:
     print(manifest.to_json())
 
 
+def seed_development_mode(args: argparse.Namespace) -> None:
+    _run_migrations()
+
+    with SessionLocal() as db:
+        manifest = bootstrap_development_mode(db, mode=args.mode)
+
+    if getattr(args, "json_output", False):
+        print(manifest.to_json())
+        return
+
+    print(f"Prepared local development mode: {manifest.mode}.")
+    print(manifest.to_json())
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Pantry API operational commands")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -90,6 +105,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     seed_parser.add_argument("--json", action="store_true", dest="json_output")
     seed_parser.set_defaults(func=seed_e2e)
+
+    development_seed_parser = subparsers.add_parser(
+        "seed-development-mode",
+        help="Reset the local development database into an explicit fresh or demo mode.",
+    )
+    development_seed_parser.add_argument("--mode", required=True, choices=DEV_MODE_CHOICES)
+    development_seed_parser.add_argument("--json", action="store_true", dest="json_output")
+    development_seed_parser.set_defaults(func=seed_development_mode)
 
     return parser
 

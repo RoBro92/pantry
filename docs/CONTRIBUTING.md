@@ -17,11 +17,35 @@ Do not use direct-to-`main` development for normal changes.
 ## Local Setup
 
 1. Copy `infra/env/pantry.env.example` to `.env` if you are using the local source-based stack.
-2. Start the stack with `docker compose up -d --build`.
-3. Run migrations with `docker compose run --rm api alembic upgrade head`.
-4. Open `http://localhost:3000/`.
+2. Choose one explicit development bootstrap mode:
 
-Fresh installs should land in the first-run setup wizard. Completed installs should land on the login page.
+```bash
+./infra/scripts/dev-stack.sh start fresh
+./infra/scripts/dev-stack.sh start demo
+```
+
+3. Open `http://localhost:3000/`.
+
+Development bootstrap modes are local-only and intended for branch work against the source stack:
+
+- `fresh` resets to an uninitialized first-run state and lands on the setup wizard at `/setup`
+- `demo` resets the local database, seeds stable demo data, marks setup complete, and lands on `/login`
+- the helper requires an explicit mode; do not rely on implicit local bootstrapping
+- stop the stack with `./infra/scripts/dev-stack.sh down`
+- follow logs with `./infra/scripts/dev-stack.sh logs`
+
+Demo credentials:
+
+- `robin` / `weymouth` for a local platform-admin convenience account
+- `demoadmin` / `demopass` for the seeded demo platform admin
+- `demouser` / `demopass` for the seeded demo household user
+
+The local source stack is development-only:
+
+- `web` runs `next dev` with Docker-friendly polling enabled so mounted file changes trigger hot reload.
+- `api` runs `uvicorn --reload` with polling enabled so Python edits under `apps/api/app` and `apps/api/alembic` reload the server process.
+- Workspace source is bind-mounted into the containers; dependency and Next caches stay in named volumes so rebuilds are not required for normal UI or API edits.
+- the `fresh` and `demo` bootstrap commands call a development-only seed/reset path and do not change the public production or self-hosted install flow
 
 ## Expectations
 
@@ -43,7 +67,7 @@ npm run typecheck:web
 npm run build:web
 cd apps/api && pytest -q
 ./infra/scripts/smoke-check.sh
-docker compose down
+./infra/scripts/dev-stack.sh down
 ```
 
 ## Pull Requests
