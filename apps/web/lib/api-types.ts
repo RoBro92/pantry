@@ -117,6 +117,12 @@ export type SetupWizardAssignmentSummary = {
   role: "household_admin" | "household_user";
 };
 
+export type SetupWizardRoomSummary = {
+  stage_id: string;
+  name: string | null;
+  storage_locations: string[];
+};
+
 export type SetupWizardDietaryUserSummary = {
   stage_user_id: string;
   preferences: string[];
@@ -158,6 +164,7 @@ export type SetupWizardStateResponse = {
   admin_user: SetupWizardUserSummary;
   initial_users: SetupWizardUserSummary[];
   household_name: string | null;
+  rooms: SetupWizardRoomSummary[];
   location_group_name: string | null;
   storage_locations: string[];
   household_assignments: SetupWizardAssignmentSummary[];
@@ -459,12 +466,18 @@ export type ProductEnrichmentSummary = {
   source_product_name: string | null;
   source_product_url: string | null;
   product_image_url: string | null;
+  enrichment_status: string | null;
   ingredients_text: string | null;
+  ingredient_tags: string[];
+  ingredient_tokens: string[];
   allergens_text: string | null;
   traces_text: string | null;
   allergen_tags: string[];
   trace_tags: string[];
+  dietary_tags: string[];
+  nutriments_payload: Record<string, unknown>;
   nutrition_summary: ProductNutritionSummaryItem[];
+  nutrition_summary_text: string | null;
   labels: string[];
   categories: string[];
   match_status: string | null;
@@ -486,12 +499,18 @@ export type PantryEnrichmentCandidate = {
   source_product_name: string | null;
   source_product_url: string | null;
   product_image_url: string | null;
+  enrichment_status: string | null;
   ingredients_text: string | null;
+  ingredient_tags: string[];
+  ingredient_tokens: string[];
   allergens_text: string | null;
   traces_text: string | null;
   allergen_tags: string[];
   trace_tags: string[];
+  dietary_tags: string[];
+  nutriments_payload: Record<string, unknown>;
   nutrition_summary: ProductNutritionSummaryItem[];
+  nutrition_summary_text: string | null;
   labels: string[];
   categories: string[];
   match_status: string;
@@ -516,8 +535,15 @@ export type PantryProductSummary = {
   unit: string;
   total_quantity: string;
   lot_count: number;
+  stock_status: string;
+  room_summary: string;
+  storage_summary: string;
+  nearest_expiry_on: string | null;
+  near_expiry_lot_count: number;
+  manual_ingredient_tags: string[];
   aliases: string[];
   barcodes: string[];
+  is_in_shopping_list: boolean;
   enrichment: ProductEnrichmentSummary | null;
   locations: PantryProductLocationSummary[];
   stock_lots: PantryStockLotSummary[];
@@ -529,6 +555,7 @@ export type PantryCatalogProductSummary = {
   default_unit: string;
   aliases: string[];
   barcodes: string[];
+  manual_ingredient_tags: string[];
   enrichment: ProductEnrichmentSummary | null;
 };
 
@@ -544,6 +571,8 @@ export type PantryStockLotSummary = {
   note: string | null;
   purchased_on: string | null;
   expires_on: string | null;
+  depleted_at: string | null;
+  is_depleted: boolean;
   is_near_expiry: boolean;
 };
 
@@ -566,6 +595,7 @@ export type PantryOverview = {
     q: string | null;
     location_group_external_id: string | null;
     location_external_id: string | null;
+    near_expiry_only: boolean;
   };
   counts: {
     location_group_count: number;
@@ -573,6 +603,7 @@ export type PantryOverview = {
     product_count: number;
     active_lot_count: number;
     near_expiry_lot_count: number;
+    out_of_stock_product_count: number;
   };
   location_groups: PantryLocationGroupSummary[];
   locations: PantryLocationSummary[];
@@ -602,6 +633,30 @@ export type PantryEntryMutationResponse = {
   lot: PantryStockLotSummary | null;
   matched_product: PantryProductMatchSummary | null;
   alias_conflicts: PantryAliasConflictSummary[];
+};
+
+export type ShoppingListItemSummary = {
+  external_id: string;
+  label: string;
+  product_external_id: string | null;
+  product_name: string | null;
+  quantity: string | null;
+  unit: string | null;
+  note: string | null;
+  source_type: string;
+  status: string;
+  created_at: string;
+  completed_at: string | null;
+};
+
+export type ShoppingListSummary = {
+  external_id: string;
+  household_external_id: string;
+  household_name: string;
+  name: string;
+  open_item_count: number;
+  completed_item_count: number;
+  items: ShoppingListItemSummary[];
 };
 
 export type NearExpiryResponse = {

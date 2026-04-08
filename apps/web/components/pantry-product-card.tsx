@@ -106,6 +106,7 @@ export function PantryProductCard({
             <PantryLotActions
               householdExternalId={householdExternalId}
               lotExternalId={lot.external_id}
+              quantity={lot.quantity}
               currentLocationExternalId={lot.location_external_id}
               locations={locations}
             />

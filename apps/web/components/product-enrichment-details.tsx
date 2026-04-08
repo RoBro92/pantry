@@ -26,6 +26,9 @@ function formatSyncedAt(value: string | null) {
 }
 
 function summarizeNutrition(enrichment: EnrichmentLike) {
+  if (enrichment.nutrition_summary_text) {
+    return enrichment.nutrition_summary_text;
+  }
   return enrichment.nutrition_summary
     .slice(0, 6)
     .map((item) => `${item.label} ${item.value}${item.unit ? ` ${item.unit}` : ""}`)
@@ -82,6 +85,12 @@ export function ProductEnrichmentDetails({
             </p>
           ) : null}
 
+          {enrichment.ingredient_tags.length > 0 ? (
+            <p className="helper-text">
+              <strong>Ingredient tags:</strong> {summarizeTags(enrichment.ingredient_tags)}
+            </p>
+          ) : null}
+
           {enrichment.allergens_text || enrichment.allergen_tags.length > 0 ? (
             <p className="helper-text">
               <strong>Allergens:</strong>{" "}
@@ -104,6 +113,12 @@ export function ProductEnrichmentDetails({
           {enrichment.labels.length > 0 ? (
             <p className="helper-text">
               <strong>Labels:</strong> {summarizeTags(enrichment.labels)}
+            </p>
+          ) : null}
+
+          {enrichment.dietary_tags.length > 0 ? (
+            <p className="helper-text">
+              <strong>Dietary tags:</strong> {summarizeTags(enrichment.dietary_tags)}
             </p>
           ) : null}
 

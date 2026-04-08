@@ -8,6 +8,7 @@ import { postToApi } from "../lib/client-api";
 type PantryLotActionsProps = {
   householdExternalId: string;
   lotExternalId: string;
+  quantity: string;
   currentLocationExternalId: string;
   locations: PantryLocationSummary[];
 };
@@ -15,6 +16,7 @@ type PantryLotActionsProps = {
 export function PantryLotActions({
   householdExternalId,
   lotExternalId,
+  quantity,
   currentLocationExternalId,
   locations
 }: PantryLotActionsProps) {
@@ -22,7 +24,15 @@ export function PantryLotActions({
   const [removeError, setRemoveError] = useState<string | null>(null);
   const [moveError, setMoveError] = useState<string | null>(null);
   const [isRemoving, setIsRemoving] = useState(false);
+  const [isDepleting, setIsDepleting] = useState(false);
   const [isMoving, setIsMoving] = useState(false);
+
+  async function removeQuantity(value: string) {
+    await postToApi(`/api/households/${householdExternalId}/stock-lots/${lotExternalId}/remove`, {
+      quantity: value
+    });
+    router.refresh();
+  }
 
   async function handleRemove(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -32,15 +42,24 @@ export function PantryLotActions({
 
     try {
       const formData = new FormData(form);
-      await postToApi(`/api/households/${householdExternalId}/stock-lots/${lotExternalId}/remove`, {
-        quantity: String(formData.get("quantity") ?? "")
-      });
+      await removeQuantity(String(formData.get("quantity") ?? ""));
       form.reset();
-      router.refresh();
     } catch (error) {
       setRemoveError(error instanceof Error ? error.message : "Request failed.");
     } finally {
       setIsRemoving(false);
+    }
+  }
+
+  async function handleDeplete() {
+    setIsDepleting(true);
+    setRemoveError(null);
+    try {
+      await removeQuantity(quantity);
+    } catch (error) {
+      setRemoveError(error instanceof Error ? error.message : "Request failed.");
+    } finally {
+      setIsDepleting(false);
     }
   }
 
@@ -69,29 +88,47 @@ export function PantryLotActions({
 
   return (
     <div className="lot-actions" data-testid={`lot-actions-${lotExternalId}`}>
-      <form className="inline-form" onSubmit={handleRemove} data-testid={`remove-lot-form-${lotExternalId}`}>
-        <input
-          name="quantity"
-          type="number"
-          min="0.001"
-          step="0.001"
-          required
-          placeholder="Qty"
-        />
-        <button type="submit" className="ghost-button" disabled={isRemoving}>
-          {isRemoving ? "Removing..." : "Remove"}
+      <div className="lot-actions-row">
+        <form
+          className="inline-form"
+          onSubmit={handleRemove}
+          data-testid={`remove-lot-form-${lotExternalId}`}
+        >
+          <input
+            name="quantity"
+            type="number"
+            min="0.001"
+            step="0.001"
+            required
+            placeholder="Qty to remove"
+          />
+          <button type="submit" className="ghost-button" disabled={isRemoving}>
+            {isRemoving ? "Removing..." : "Remove stock"}
+          </button>
+        </form>
+        <button
+          type="button"
+          className="ghost-button"
+          disabled={isDepleting}
+          onClick={() => void handleDeplete()}
+        >
+          {isDepleting ? "Depleting..." : "Mark depleted"}
         </button>
-      </form>
+      </div>
       {removeError ? <p className="error-text compact-error">{removeError}</p> : null}
 
-      <form className="inline-form" onSubmit={handleMove} data-testid={`move-lot-form-${lotExternalId}`}>
+      <form
+        className="inline-form"
+        onSubmit={handleMove}
+        data-testid={`move-lot-form-${lotExternalId}`}
+      >
         <input
           name="quantity"
           type="number"
           min="0.001"
           step="0.001"
           required
-          placeholder="Qty"
+          placeholder="Qty to move"
         />
         <select name="destination_location_external_id" required defaultValue="">
           <option value="" disabled>
