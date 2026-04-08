@@ -36,6 +36,7 @@ class CreatePantryEntryRequest(BaseModel):
     expires_on: date | None = None
     note: str | None = None
     existing_product_external_id: str | None = None
+    allow_separate_product: bool = False
     confirmed_enrichment: "ConfirmedProductEnrichmentRequest | None" = None
 
 
@@ -140,6 +141,14 @@ class AddStockLotRequest(BaseModel):
     expires_on: date | None = None
 
 
+class UpdateStockLotRequest(BaseModel):
+    location_external_id: str
+    quantity: Decimal
+    note: str | None = None
+    purchased_on: date | None = None
+    expires_on: date | None = None
+
+
 class RemoveStockRequest(BaseModel):
     quantity: Decimal
 
@@ -147,6 +156,11 @@ class RemoveStockRequest(BaseModel):
 class MoveStockLotRequest(BaseModel):
     quantity: Decimal
     destination_location_external_id: str
+
+
+class PantryDuplicateCheckRequest(BaseModel):
+    name: str | None = None
+    barcode: str | None = None
 
 
 class LocationGroupSummary(BaseModel):
@@ -210,6 +224,9 @@ class ProductMatchSummary(BaseModel):
     name: str
     default_unit: str
     aliases: list[str]
+    match_reason: str | None = None
+    match_confidence: float | None = None
+    can_keep_separate_product: bool = False
 
 
 class ProductAliasConflictSummary(BaseModel):
@@ -293,4 +310,14 @@ class PantryEntryMutationResponse(BaseModel):
     product: ProductSummary | None = None
     lot: StockLotSummary | None = None
     matched_product: ProductMatchSummary | None = None
+    duplicate_match_reason: str | None = None
+    can_keep_separate_product: bool = False
     alias_conflicts: list[ProductAliasConflictSummary] = Field(default_factory=list)
+
+
+class PantryDuplicateCheckResponse(BaseModel):
+    status: str
+    message: str
+    matched_product: ProductMatchSummary | None = None
+    duplicate_match_reason: str | None = None
+    can_keep_separate_product: bool = False

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import re
 
+LOOKUP_TOKEN_PATTERN = re.compile(r"[a-z0-9]+")
+
 
 def compact_whitespace(value: str) -> str:
     return " ".join(value.split())
@@ -16,6 +18,23 @@ def require_text(value: str, *, field_name: str) -> str:
 
 def normalize_lookup_name(value: str) -> str:
     return require_text(value, field_name="Value").casefold()
+
+
+def lookup_tokens(value: str) -> list[str]:
+    normalized = normalize_lookup_name(value)
+    return LOOKUP_TOKEN_PATTERN.findall(normalized)
+
+
+def lookup_token_signature(value: str) -> tuple[str, ...]:
+    return tuple(sorted(dict.fromkeys(lookup_tokens(value))))
+
+
+def lookup_token_overlap(left: str, right: str) -> float:
+    left_tokens = set(lookup_tokens(left))
+    right_tokens = set(lookup_tokens(right))
+    if not left_tokens or not right_tokens:
+        return 0.0
+    return len(left_tokens & right_tokens) / max(len(left_tokens), len(right_tokens), 1)
 
 
 def normalize_unit(value: str) -> str:

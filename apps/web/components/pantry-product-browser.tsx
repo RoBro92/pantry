@@ -2,13 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import type {
-  PantryLocationSummary,
-  PantryProductSummary,
-} from "../lib/api-types";
+import type { PantryLocationSummary, PantryProductSummary } from "../lib/api-types";
 import { postToApi } from "../lib/client-api";
 import { PantryLotActions } from "./pantry-lot-actions";
 import { ProductEnrichmentDetails } from "./product-enrichment-details";
+import { StockLotEditorDialog } from "./stock-lot-editor-dialog";
 
 type PantryProductBrowserProps = {
   householdExternalId: string;
@@ -35,6 +33,10 @@ function formatExpirySummary(product: PantryProductSummary) {
   return product.stock_status === "out_of_stock" ? "Out of stock" : "No dated lots";
 }
 
+function formatLotDateSummary(purchasedOn: string | null, expiresOn: string | null) {
+  return `Purchased ${formatDateLabel(purchasedOn)} · Expires ${formatDateLabel(expiresOn)}`;
+}
+
 export function PantryProductBrowser({
   householdExternalId,
   products,
@@ -46,6 +48,7 @@ export function PantryProductBrowser({
     products[0]?.product_external_id ?? null,
   );
   const [shoppingPendingProductId, setShoppingPendingProductId] = useState<string | null>(null);
+  const [stockLotEditorProduct, setStockLotEditorProduct] = useState<PantryProductSummary | null>(null);
 
   useEffect(() => {
     if (products.some((product) => product.product_external_id === expandedProductId)) {
@@ -76,7 +79,7 @@ export function PantryProductBrowser({
               <strong>{product.product_name}</strong>
               <p className="helper-text">
                 {product.stock_status === "out_of_stock"
-                  ? "This product record is still available even though no active stock lots remain."
+                  ? "This product record still exists even though no active stock lots remain."
                   : `${product.total_quantity} ${product.unit} across ${product.lot_count} active lot${product.lot_count === 1 ? "" : "s"}.`}
               </p>
             </div>
@@ -152,6 +155,13 @@ export function PantryProductBrowser({
                   ? "Adding..."
                   : "Add to shopping list"}
             </button>
+            <button
+              type="button"
+              className="primary-button"
+              onClick={() => setStockLotEditorProduct(product)}
+            >
+              Add another lot
+            </button>
           </div>
 
           {product.enrichment ? (
@@ -169,7 +179,7 @@ export function PantryProductBrowser({
               <strong>Stock lots</strong>
               <p className="helper-text">
                 {product.stock_lots.length > 0
-                  ? "Each stock lot stays editable without duplicating the product row."
+                  ? "Each lot stays editable without fragmenting the product row."
                   : "No active stock lots remain for this product."}
               </p>
             </div>
@@ -184,42 +194,30 @@ export function PantryProductBrowser({
               {product.stock_lots.map((lot) => (
                 <article
                   key={lot.external_id}
-                  className="pantry-lot-card"
+                  className="pantry-lot-row"
                   data-testid={`stock-lot-card-${lot.external_id}`}
                 >
-                  <div className="pantry-lot-card-summary">
+                  <div className="pantry-lot-row-main">
                     <div className="stack compact-stack">
-                      <strong>
-                        {lot.quantity} {lot.unit}
-                      </strong>
-                      <p className="helper-text">
-                        {lot.location_group_name} / {lot.location_name}
-                      </p>
+                      <div className="pantry-lot-row-heading">
+                        <strong>
+                          {lot.quantity} {lot.unit}
+                        </strong>
+                        <span className="helper-text">
+                          {lot.location_group_name} / {lot.location_name}
+                        </span>
+                      </div>
+                      <p className="helper-text">{formatLotDateSummary(lot.purchased_on, lot.expires_on)}</p>
+                      {lot.note ? <p className="helper-text">{lot.note}</p> : null}
                     </div>
                     <div className="tag-row">
                       {lot.is_near_expiry ? <span className="pill is-warning">Near expiry</span> : null}
                       {lot.is_depleted ? <span className="pill is-warning">Depleted</span> : null}
                     </div>
                   </div>
-                  <dl className="lot-meta-grid">
-                    <div>
-                      <dt>Purchased</dt>
-                      <dd>{formatDateLabel(lot.purchased_on)}</dd>
-                    </div>
-                    <div>
-                      <dt>Expiry</dt>
-                      <dd>{formatDateLabel(lot.expires_on)}</dd>
-                    </div>
-                    <div>
-                      <dt>Notes</dt>
-                      <dd>{lot.note ?? "None"}</dd>
-                    </div>
-                  </dl>
                   <PantryLotActions
                     householdExternalId={householdExternalId}
-                    lotExternalId={lot.external_id}
-                    quantity={lot.quantity}
-                    currentLocationExternalId={lot.location_external_id}
+                    lot={lot}
                     locations={locations}
                   />
                 </article>
@@ -248,149 +246,170 @@ export function PantryProductBrowser({
   }
 
   return (
-    <section className="panel">
-      <div className="inventory-header">
-        <div className="stack compact-stack">
-          <p className="eyebrow">Inventory</p>
-          <h2>Products</h2>
-          <p className="section-copy">
-            One row per product, with stock-lot detail available on demand.
-          </p>
+    <>
+      <section className="panel">
+        <div className="inventory-header">
+          <div className="stack compact-stack">
+            <p className="eyebrow">Inventory</p>
+            <h2>Products</h2>
+            <p className="section-copy">
+              One row per product, with stock-lot detail available on demand.
+            </p>
+          </div>
+          <div className="view-toggle" role="tablist" aria-label="Inventory view">
+            <button
+              type="button"
+              className={view === "table" ? "primary-button compact-button" : "ghost-button compact-button"}
+              onClick={() => setView("table")}
+            >
+              Table
+            </button>
+            <button
+              type="button"
+              className={view === "list" ? "primary-button compact-button" : "ghost-button compact-button"}
+              onClick={() => setView("list")}
+            >
+              List
+            </button>
+          </div>
         </div>
-        <div className="view-toggle" role="tablist" aria-label="Inventory view">
-          <button
-            type="button"
-            className={view === "table" ? "primary-button compact-button" : "ghost-button compact-button"}
-            onClick={() => setView("table")}
-          >
-            Table
-          </button>
-          <button
-            type="button"
-            className={view === "list" ? "primary-button compact-button" : "ghost-button compact-button"}
-            onClick={() => setView("list")}
-          >
-            List
-          </button>
-        </div>
-      </div>
 
-      {view === "table" ? (
-        <div className="table-wrap pantry-table-wrap">
-          <table className="data-table pantry-inventory-table">
-            <thead>
-              <tr>
-                <th>Product</th>
-                <th>Total</th>
-                <th>Stored in</th>
-                <th>Expiry</th>
-                <th>Status</th>
-                <th>Detail</th>
-              </tr>
-            </thead>
+        {view === "table" ? (
+          <div className="table-wrap pantry-table-wrap">
+            <table className="data-table pantry-inventory-table">
+              <thead>
+                <tr>
+                  <th>Product</th>
+                  <th>Total</th>
+                  <th>Stored in</th>
+                  <th>Expiry</th>
+                  <th>Status</th>
+                  <th>Detail</th>
+                </tr>
+              </thead>
+              {products.map((product) => {
+                const isExpanded = expandedProductId === product.product_external_id;
+                return (
+                  <tbody
+                    key={product.product_external_id}
+                    data-testid={`product-card-${product.product_external_id}`}
+                  >
+                    <tr>
+                      <td>
+                        <div className="inventory-product-cell">
+                          <h3 className="inventory-product-name">{product.product_name}</h3>
+                          {product.manual_ingredient_tags.length > 0 ? (
+                            <span>Manual ingredients: {product.manual_ingredient_tags.join(", ")}</span>
+                          ) : null}
+                          <span>
+                            {product.enrichment ? "Open Food Facts linked" : "User-owned product record"}
+                          </span>
+                        </div>
+                      </td>
+                      <td>
+                        {product.stock_status === "out_of_stock"
+                          ? "Out of stock"
+                          : `${product.total_quantity} ${product.unit} across ${product.lot_count} lot${product.lot_count === 1 ? "" : "s"}`}
+                      </td>
+                      <td>
+                        <div className="inventory-product-cell">
+                          <strong>{product.room_summary}</strong>
+                          <span>{product.storage_summary}</span>
+                        </div>
+                      </td>
+                      <td>{formatExpirySummary(product)}</td>
+                      <td>
+                        <div className="tag-row">
+                          {product.near_expiry_lot_count > 0 ? (
+                            <span className="pill is-warning">Near expiry</span>
+                          ) : null}
+                          {product.enrichment ? <span className="pill">Enriched</span> : null}
+                          <span className={`pill${product.stock_status === "out_of_stock" ? " is-warning" : ""}`}>
+                            {product.stock_status === "out_of_stock" ? "Out of stock" : "In stock"}
+                          </span>
+                          {product.is_in_shopping_list ? <span className="pill">Shopping</span> : null}
+                        </div>
+                      </td>
+                      <td>
+                        <button
+                          type="button"
+                          className="ghost-button compact-button"
+                          onClick={() =>
+                            setExpandedProductId(isExpanded ? null : product.product_external_id)
+                          }
+                        >
+                          {isExpanded ? "Hide" : "Show"}
+                        </button>
+                      </td>
+                    </tr>
+                    {isExpanded ? (
+                      <tr className="inventory-expanded-row">
+                        <td colSpan={6}>{renderProductDetail(product)}</td>
+                      </tr>
+                    ) : null}
+                  </tbody>
+                );
+              })}
+            </table>
+          </div>
+        ) : (
+          <div className="inventory-list">
             {products.map((product) => {
               const isExpanded = expandedProductId === product.product_external_id;
               return (
-                <tbody
+                <article
                   key={product.product_external_id}
+                  className="inventory-list-card"
                   data-testid={`product-card-${product.product_external_id}`}
                 >
-                  <tr>
-                    <td>
-                      <div className="inventory-product-cell">
-                        <h3 className="inventory-product-name">{product.product_name}</h3>
-                        {product.manual_ingredient_tags.length > 0 ? (
-                          <span>Manual ingredients: {product.manual_ingredient_tags.join(", ")}</span>
-                        ) : null}
-                        <span>
-                          {product.enrichment ? "Open Food Facts linked" : "User-owned product record"}
-                        </span>
-                      </div>
-                    </td>
-                    <td>
-                      {product.stock_status === "out_of_stock"
-                        ? "Out of stock"
-                        : `${product.total_quantity} ${product.unit} across ${product.lot_count} lot${product.lot_count === 1 ? "" : "s"}`}
-                    </td>
-                    <td>
-                      <div className="inventory-product-cell">
-                        <strong>{product.room_summary}</strong>
-                        <span>{product.storage_summary}</span>
-                      </div>
-                    </td>
-                    <td>{formatExpirySummary(product)}</td>
-                    <td>
-                      <div className="tag-row">
-                        {product.near_expiry_lot_count > 0 ? (
-                          <span className="pill is-warning">Near expiry</span>
-                        ) : null}
-                        {product.enrichment ? <span className="pill">Enriched</span> : null}
-                        <span className={`pill${product.stock_status === "out_of_stock" ? " is-warning" : ""}`}>
-                          {product.stock_status === "out_of_stock" ? "Out of stock" : "In stock"}
-                        </span>
-                        {product.is_in_shopping_list ? <span className="pill">Shopping</span> : null}
-                      </div>
-                    </td>
-                    <td>
-                      <button
-                        type="button"
-                        className="ghost-button compact-button"
-                        onClick={() =>
-                          setExpandedProductId(isExpanded ? null : product.product_external_id)
-                        }
-                      >
-                        {isExpanded ? "Hide" : "Show"}
-                      </button>
-                    </td>
-                  </tr>
-                  {isExpanded ? (
-                    <tr className="inventory-expanded-row">
-                      <td colSpan={6}>{renderProductDetail(product)}</td>
-                    </tr>
-                  ) : null}
-                </tbody>
+                  <div className="inventory-list-summary">
+                    <div className="stack compact-stack">
+                      <h3>{product.product_name}</h3>
+                      <p className="helper-text">
+                        {product.stock_status === "out_of_stock"
+                          ? "Out of stock"
+                          : `${product.total_quantity} ${product.unit} across ${product.lot_count} lot${product.lot_count === 1 ? "" : "s"}`}
+                      </p>
+                    </div>
+                    <div className="tag-row">
+                      {product.near_expiry_lot_count > 0 ? <span className="pill is-warning">Near expiry</span> : null}
+                      {product.enrichment ? <span className="pill">Enriched</span> : null}
+                    </div>
+                  </div>
+                  <p className="helper-text">{product.storage_summary}</p>
+                  <button
+                    type="button"
+                    className="ghost-button compact-button"
+                    onClick={() => setExpandedProductId(isExpanded ? null : product.product_external_id)}
+                  >
+                    {isExpanded ? "Hide detail" : "Show detail"}
+                  </button>
+                  {isExpanded ? renderProductDetail(product) : null}
+                </article>
               );
             })}
-          </table>
-        </div>
-      ) : (
-        <div className="inventory-list">
-          {products.map((product) => {
-            const isExpanded = expandedProductId === product.product_external_id;
-            return (
-              <article
-                key={product.product_external_id}
-                className="inventory-list-card"
-                data-testid={`product-card-${product.product_external_id}`}
-              >
-                <div className="inventory-list-summary">
-                  <div className="stack compact-stack">
-                    <h3>{product.product_name}</h3>
-                    <p className="helper-text">
-                      {product.stock_status === "out_of_stock"
-                        ? "Out of stock"
-                        : `${product.total_quantity} ${product.unit} across ${product.lot_count} lot${product.lot_count === 1 ? "" : "s"}`}
-                    </p>
-                  </div>
-                  <div className="tag-row">
-                    {product.near_expiry_lot_count > 0 ? <span className="pill is-warning">Near expiry</span> : null}
-                    {product.enrichment ? <span className="pill">Enriched</span> : null}
-                  </div>
-                </div>
-                <p className="helper-text">{product.storage_summary}</p>
-                <button
-                  type="button"
-                  className="ghost-button compact-button"
-                  onClick={() => setExpandedProductId(isExpanded ? null : product.product_external_id)}
-                >
-                  {isExpanded ? "Hide detail" : "Show detail"}
-                </button>
-                {isExpanded ? renderProductDetail(product) : null}
-              </article>
-            );
-          })}
-        </div>
-      )}
-    </section>
+          </div>
+        )}
+      </section>
+
+      {stockLotEditorProduct ? (
+        <StockLotEditorDialog
+          householdExternalId={householdExternalId}
+          locations={locations}
+          productExternalId={stockLotEditorProduct.product_external_id}
+          mode="create"
+          initialValues={{
+            productName: stockLotEditorProduct.product_name,
+            quantity: "1.000",
+            unit: stockLotEditorProduct.unit,
+            locationExternalId: stockLotEditorProduct.locations[0]?.location_external_id ?? "",
+            purchasedOn: null,
+            expiresOn: null,
+            note: null,
+          }}
+          onClose={() => setStockLotEditorProduct(null)}
+        />
+      ) : null}
+    </>
   );
 }

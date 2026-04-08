@@ -7,6 +7,7 @@ type ModalShellProps = {
   description?: string;
   onClose: () => void;
   closeOnBackdropClick?: boolean;
+  panelClassName?: string;
   children: ReactNode;
 };
 
@@ -15,6 +16,7 @@ export function ModalShell({
   description,
   onClose,
   closeOnBackdropClick = true,
+  panelClassName,
   children,
 }: ModalShellProps) {
   return (
@@ -28,7 +30,7 @@ export function ModalShell({
       }}
     >
       <section
-        className="modal-panel"
+        className={panelClassName ?? "modal-panel"}
         role="dialog"
         aria-modal="true"
         aria-label={title}
