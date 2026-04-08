@@ -44,6 +44,9 @@ def put_smtp_config(
             from_name=payload.from_name,
             security=payload.security,
             is_enabled=payload.is_enabled,
+            password_reset_enabled=payload.password_reset_enabled,
+            password_reset_subject_template=payload.password_reset_subject_template,
+            password_reset_body_template=payload.password_reset_body_template,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc

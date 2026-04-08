@@ -76,6 +76,7 @@ class StagedSetupSMTPConfigSummary(BaseModel):
     from_name: str | None = None
     security: str | None = None
     is_enabled: bool = False
+    password_reset_enabled: bool = False
 
 
 class SetupWizardStateResponse(BaseModel):
@@ -175,6 +176,7 @@ class SetupSMTPConfigUpdateRequest(BaseModel):
     from_name: str | None = None
     security: str | None = None
     is_enabled: bool = False
+    password_reset_enabled: bool = False
     mark_skipped: bool = False
 
 

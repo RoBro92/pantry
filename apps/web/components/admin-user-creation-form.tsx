@@ -48,12 +48,13 @@ export function AdminUserCreationForm() {
       <p className="eyebrow">Users</p>
       <h2>Create user</h2>
       <p className="section-copy">
-        Create a normal user account first, then assign that user to one or more households.
+        Create a normal user account first, then assign that user to one or more households. Use
+        an email address if you want that person to use self-service password reset later.
       </p>
       <div className="recipe-form-grid">
         <label className="field">
-          <span>Email</span>
-          <input type="email" name="email" required />
+          <span>Username or email</span>
+          <input name="email" autoCapitalize="none" autoCorrect="off" spellCheck={false} required />
         </label>
         <label className="field">
           <span>Display name</span>

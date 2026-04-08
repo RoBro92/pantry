@@ -247,6 +247,32 @@ def test_platform_admin_smtp_validation_rejects_url_like_hosts(client, db_sessio
     assert "must not include a path" in response.json()["detail"] or "hostname or IP address" in response.json()["detail"]
 
 
+def test_platform_admin_smtp_validation_requires_reset_link_placeholder(client, db_session):
+    create_platform_admin(
+        db_session,
+        email="smtp-template@example.com",
+        password=PASSWORD,
+        display_name="SMTP Template Admin",
+    )
+    login(client, email="smtp-template@example.com")
+
+    response = client.put(
+        "/api/platform-admin/smtp",
+        json={
+            "host": "smtp.example.com",
+            "port": 587,
+            "from_email": "pantry@example.com",
+            "security": "starttls",
+            "is_enabled": True,
+            "password_reset_enabled": True,
+            "password_reset_subject_template": "Reset your password",
+            "password_reset_body_template": "This template forgot the reset link.",
+        },
+    )
+    assert response.status_code == 400
+    assert "{{reset_link}}" in response.json()["detail"]
+
+
 def test_platform_admin_can_create_users_households_and_memberships(client, db_session):
     admin = create_platform_admin(
         db_session,

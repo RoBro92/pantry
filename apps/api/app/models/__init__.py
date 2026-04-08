@@ -11,6 +11,7 @@ from app.models.instance_setting import InstanceSetting
 from app.models.location import Location
 from app.models.location_group import LocationGroup
 from app.models.membership import Membership
+from app.models.password_reset_token import PasswordResetToken
 from app.models.product import Product
 from app.models.product_alias import ProductAlias
 from app.models.product_enrichment import ProductEnrichment
@@ -39,6 +40,7 @@ __all__ = [
     "Location",
     "LocationGroup",
     "Membership",
+    "PasswordResetToken",
     "Product",
     "ProductAlias",
     "ProductEnrichment",

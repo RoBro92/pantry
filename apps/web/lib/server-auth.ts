@@ -11,6 +11,8 @@ import type {
   LocationAccessResponse,
   NearExpiryResponse,
   PantryOverview,
+  PasswordResetAvailabilityResponse,
+  PasswordResetTokenStatusResponse,
   PublicBaseURLSummary,
   ReleaseCheckResponse,
   RecipeDetailResponse,
@@ -21,7 +23,7 @@ import type {
   SetupStatusResponse,
   SetupWizardStateResponse
 } from "./api-types";
-import { apiGet, apiGetIfOk } from "./server-api";
+import { apiGet, apiGetIfOk, apiPublicGet } from "./server-api";
 
 export async function getSession(): Promise<SessionResponse | null> {
   return apiGetIfOk<SessionResponse>("/api/auth/session");
@@ -33,6 +35,19 @@ export async function getSetupStatus(): Promise<SetupStatusResponse> {
 
 export async function getSetupWizardState(): Promise<SetupWizardStateResponse> {
   return apiGet<SetupWizardStateResponse>("/api/setup/wizard");
+}
+
+export async function getPasswordResetAvailability(): Promise<PasswordResetAvailabilityResponse> {
+  return apiPublicGet<PasswordResetAvailabilityResponse>("/api/auth/password-reset/status");
+}
+
+export async function getPasswordResetTokenStatus(
+  token: string
+): Promise<PasswordResetTokenStatusResponse> {
+  const search = new URLSearchParams({ token });
+  return apiPublicGet<PasswordResetTokenStatusResponse>(
+    `/api/auth/password-reset/token-status?${search.toString()}`
+  );
 }
 
 export async function requireSession(): Promise<SessionResponse> {

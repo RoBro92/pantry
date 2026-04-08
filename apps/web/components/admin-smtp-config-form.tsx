@@ -19,6 +19,15 @@ export function AdminSMTPConfigForm({ initialConfig }: AdminSMTPConfigFormProps)
   const [fromName, setFromName] = useState(initialConfig.stored.from_name ?? "");
   const [security, setSecurity] = useState(initialConfig.stored.security ?? "starttls");
   const [isEnabled, setIsEnabled] = useState(initialConfig.stored.is_enabled);
+  const [passwordResetEnabled, setPasswordResetEnabled] = useState(
+    initialConfig.password_reset.is_enabled
+  );
+  const [passwordResetSubject, setPasswordResetSubject] = useState(
+    initialConfig.password_reset.template.subject
+  );
+  const [passwordResetBody, setPasswordResetBody] = useState(
+    initialConfig.password_reset.template.body_template
+  );
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
@@ -36,9 +45,22 @@ export function AdminSMTPConfigForm({ initialConfig }: AdminSMTPConfigFormProps)
         from_email: fromEmail || null,
         from_name: fromName || null,
         security,
-        is_enabled: isEnabled
+        is_enabled: isEnabled,
+        password_reset_enabled: passwordResetEnabled,
+        password_reset_subject_template: passwordResetSubject,
+        password_reset_body_template: passwordResetBody
       });
       setConfig(response);
+      setHost(response.stored.host ?? "");
+      setPort(response.stored.port ? String(response.stored.port) : "");
+      setUsername(response.stored.username ?? "");
+      setFromEmail(response.stored.from_email ?? "");
+      setFromName(response.stored.from_name ?? "");
+      setSecurity(response.stored.security ?? "starttls");
+      setIsEnabled(response.stored.is_enabled);
+      setPasswordResetEnabled(response.password_reset.is_enabled);
+      setPasswordResetSubject(response.password_reset.template.subject);
+      setPasswordResetBody(response.password_reset.template.body_template);
       setPassword("");
       setStatusMessage("SMTP configuration saved.");
     } catch (error) {
@@ -67,10 +89,10 @@ export function AdminSMTPConfigForm({ initialConfig }: AdminSMTPConfigFormProps)
     <div className="stack">
       <section className="panel">
         <p className="eyebrow">Instance SMTP</p>
-        <h1>SMTP Foundation</h1>
+        <h1>SMTP and password reset email</h1>
         <p>
-          This stores installation-level SMTP readiness for future recovery and notification flows.
-          Passwords are saved encrypted at rest and are never returned in plaintext after save.
+          Configure Pantry’s instance-level outbound email. Passwords are saved encrypted at rest
+          and never returned in plaintext after save.
         </p>
         <p className="section-copy">
           Effective source: <strong>{getConfigSourceLabel(config.effective_source)}</strong>
@@ -122,9 +144,62 @@ export function AdminSMTPConfigForm({ initialConfig }: AdminSMTPConfigFormProps)
           </label>
         </div>
         <label className="checkbox-row">
-          <input type="checkbox" checked={isEnabled} onChange={(event) => setIsEnabled(event.target.checked)} />
-          <span>Enable SMTP for future email-capable flows once those features land.</span>
+          <input
+            type="checkbox"
+            checked={isEnabled}
+            onChange={(event) => {
+              setIsEnabled(event.target.checked);
+              if (!event.target.checked) {
+                setPasswordResetEnabled(false);
+              }
+            }}
+          />
+          <span>Enable SMTP for Pantry’s product-facing email flows.</span>
         </label>
+        <div className="modal-form-section">
+          <div className="stack compact-stack">
+            <h2>Password reset email</h2>
+            <p className="helper-text">
+              Self-service reset stays hidden until SMTP is enabled, configured, and has passed a
+              connectivity test.
+            </p>
+          </div>
+          <label className="checkbox-row">
+            <input
+              type="checkbox"
+              checked={passwordResetEnabled}
+              disabled={!isEnabled}
+              onChange={(event) => setPasswordResetEnabled(event.target.checked)}
+            />
+            <span>Allow Pantry to send password reset links.</span>
+          </label>
+          <label className="field">
+            <span>Email subject</span>
+            <input
+              value={passwordResetSubject}
+              onChange={(event) => setPasswordResetSubject(event.target.value)}
+            />
+          </label>
+          <label className="field">
+            <span>Body template</span>
+            <textarea
+              rows={8}
+              value={passwordResetBody}
+              onChange={(event) => setPasswordResetBody(event.target.value)}
+            />
+          </label>
+          <p className="helper-text">
+            Include <code>{"{{reset_link}}"}</code> so the email can send a working reset link.
+          </p>
+          {config.password_reset.is_available ? (
+            <p className="status-note">Password reset emails are ready to use.</p>
+          ) : (
+            <p className="helper-text is-error">
+              {config.password_reset.unavailable_reason ??
+                "Password reset emails are not available yet."}
+            </p>
+          )}
+        </div>
         <div className="page-actions">
           <button type="button" className="primary-button" disabled={isSaving} onClick={handleSave}>
             {isSaving ? "Saving..." : "Save SMTP"}
@@ -163,6 +238,14 @@ export function AdminSMTPConfigForm({ initialConfig }: AdminSMTPConfigFormProps)
           <p className="eyebrow">Last Test</p>
           <h2>{config.last_test_status}</h2>
           <p>{config.last_test_error ?? "No SMTP test has been recorded yet."}</p>
+        </article>
+        <article className="status-card">
+          <p className="eyebrow">Password Reset</p>
+          <h2>{config.password_reset.is_available ? "Ready" : "Not ready"}</h2>
+          <p>
+            {config.password_reset.unavailable_reason ??
+              "Password reset emails are enabled and ready for the sign-in page."}
+          </p>
         </article>
       </section>
     </div>

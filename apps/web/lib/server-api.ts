@@ -37,3 +37,14 @@ export async function apiGetIfOk<T>(path: string): Promise<T | null> {
   return (await response.json()) as T;
 }
 
+export async function apiPublicGet<T>(path: string): Promise<T> {
+  const response = await fetch(`${appConfig.internalApiBaseUrl}${path}`, {
+    cache: "no-store"
+  });
+
+  if (!response.ok) {
+    throw new Error(`API request failed for ${path}: ${response.status}`);
+  }
+
+  return (await response.json()) as T;
+}

@@ -138,6 +138,7 @@ def _default_payload() -> dict[str, object]:
             "from_name": "",
             "security": None,
             "is_enabled": False,
+            "password_reset_enabled": False,
         },
     }
 
@@ -549,6 +550,7 @@ def get_setup_wizard_state(db: Session) -> SetupWizardStateResponse:
             from_name=_normalize_optional_text(str(smtp.get("from_name") or "")),
             security=smtp.get("security"),
             is_enabled=bool(smtp.get("is_enabled")),
+            password_reset_enabled=bool(smtp.get("password_reset_enabled")),
         ),
         can_complete=len(_missing_requirements(payload)) == 0,
         missing_requirements=_missing_requirements(payload),
@@ -820,6 +822,7 @@ def update_setup_smtp(db: Session, payload: SetupSMTPConfigUpdateRequest) -> Set
             "from_name": "",
             "security": None,
             "is_enabled": False,
+            "password_reset_enabled": False,
         }
         state.encrypted_smtp_password = None
     else:
@@ -845,6 +848,7 @@ def update_setup_smtp(db: Session, payload: SetupSMTPConfigUpdateRequest) -> Set
             "from_name": _normalize_optional_text(payload.from_name),
             "security": security,
             "is_enabled": payload.is_enabled,
+            "password_reset_enabled": payload.password_reset_enabled and payload.is_enabled,
         }
         if password:
             state.encrypted_smtp_password = encrypt_secret(password)
@@ -995,6 +999,7 @@ def finalize_setup(db: Session) -> User:
             settings.smtp_from_name = smtp_payload.get("from_name")
             settings.smtp_security = smtp_payload.get("security")
             settings.smtp_enabled = bool(smtp_payload.get("is_enabled"))
+            settings.password_reset_enabled = bool(smtp_payload.get("password_reset_enabled"))
             settings.smtp_last_test_status = "never"
             settings.smtp_last_tested_at = None
             settings.smtp_last_test_error = None
