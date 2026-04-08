@@ -26,6 +26,7 @@ Pantry will:
 - stage multiple Rooms and storage locations before anything is written live
 - validate restore uploads before finalization
 - finalize users, households, locations, settings, dietary preferences, and optional AI/SMTP configuration only when `Complete Setup` is clicked
+- keep password reset emails disabled by default until an operator deliberately enables them after SMTP is ready
 
 ## Manual Install Checklist
 
@@ -49,8 +50,11 @@ Pantry keeps lifecycle operations in the platform admin console:
 
 - `Updates`: advisory-only release metadata, changelog visibility, breaking change notes, and manual operator commands
 - `Backups`: full instance export, household export, restore upload validation, and explicit destructive restore
+- `SMTP`: delivery settings, connectivity testing, and the password reset email subject/body template used for self-service reset links
 
 GHCR remains image hosting only. Pantry does not self-update.
+
+Self-service password reset links remain unavailable until SMTP is configured, a successful SMTP test has been recorded, and password reset emails are enabled for the instance.
 
 ## Operational Commands
 

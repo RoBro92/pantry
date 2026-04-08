@@ -4,9 +4,10 @@ Pantry is a self hosted household inventory and meal management application for 
 
 ## Features
 
-- Pantry inventory with Rooms, storage locations, product-first browsing, expandable stock lots, and expiry tracking
-- Optional Open Food Facts product enrichment stored as attached metadata after confirmation first linking
-- Shopping list foundation for depleted or planned replenishment items
+- Pantry inventory with Rooms, storage locations, product-first browsing, condensed stock-lot actions, and expiry tracking
+- Optional Open Food Facts product enrichment with compact barcode lookup, duplicate-aware product creation, and user-owned product identity
+- Shopping lists with active, awaiting-purchase, merge, return, export, and reconciliation flows
+- Password change in user settings plus optional self-service password reset by email when SMTP is configured, tested, and enabled
 - Recipe management with pantry insights
 - QR location access with quick add/remove flows
 - Diagnostics, update visibility, and manual update guidance
@@ -54,12 +55,19 @@ The household pantry page is built as a compact product browser with inline sear
 
 When adding a product, Pantry supports:
 
+- duplicate detection before you commit, including exact barcode matching and name-similarity checks
 - optional Open Food Facts preview and enrichment linking
 - manual ingredient tags that stay user-owned
-- barcode entry with USB-scanner friendly input and browser camera hooks where supported
-- clean duplicate-product detection that routes directly into adding another stock lot instead of creating a second product
+- barcode entry with USB-scanner friendly input, inline lookup, and browser camera hooks where supported
+- clean duplicate-product detection that routes directly into adding another stock lot instead of creating a second product when Pantry already knows the item
 
 Open Food Facts data is advisory enrichment only. Pantry keeps the product name, aliases, and stock identity as user-owned records, while attached enrichment survives backups and restores for later UI, filtering, and AI use.
+
+## Accounts And Access
+
+Logged-in users can change their own password from Settings. Self-service password reset from the login page stays hidden unless a platform admin has configured SMTP, run a successful SMTP test, and explicitly enabled password reset emails for the instance.
+
+Accounts without an email address can still sign in normally, but they cannot use self-service password reset and will need an admin-led reset instead.
 
 ## Updating Pantry
 

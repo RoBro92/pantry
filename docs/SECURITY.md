@@ -23,6 +23,13 @@ Pantry treats lifecycle and recovery inputs as hostile until proven otherwise.
 - Pantry blocks membership removals that would leave a household without an admin where that safeguard applies.
 - Household deletion requires explicit confirmation of the target household name, plus an extra acknowledgement when deleting the final household.
 
+## Password Reset Safety
+
+- Pantry sends password reset links only after SMTP is configured, a successful SMTP test has been recorded, and password reset email delivery is explicitly enabled.
+- Self-service reset uses a one-time reset link sent to the account email address; this milestone does not email temporary passwords.
+- Username-only accounts cannot use self-service reset and still require an operator-led password reset.
+- Reset links are validated server-side for expiry, reuse, and account eligibility before any password change is accepted.
+
 ## Scope
 
 This milestone does not add SaaS backup automation or self-updating behaviour. Recovery remains operator-driven and local-installation focused.
