@@ -97,8 +97,7 @@ export function PantryControls({
             <p className="eyebrow">Pantry</p>
             <h1 className="pantry-page-title">{householdName}</h1>
             <p className="section-copy">
-              Search by product name, alias, or barcode, keep product identity user-owned, and
-              drill into stock-lot detail only when you need it.
+              Search by product name, alias, or barcode. 
             </p>
           </div>
           <div className="pantry-action-pills">
@@ -244,14 +243,14 @@ export function PantryControls({
         <div className="pantry-toolbar-footnote">
           {hasActiveFilters ? (
             <p className="helper-text">
-              Active filters stay focused on the main product list. Out-of-stock products remain
+              Active filters stay focused on the main product list. Out of stock products remain
               visible unless you narrow the results further.
             </p>
           ) : (
             <p className="helper-text">
               {counts.out_of_stock_product_count > 0
                 ? `${counts.out_of_stock_product_count} saved product record${counts.out_of_stock_product_count === 1 ? "" : "s"} currently have no active stock lots.`
-                : "Search stays product-centric, so matching products keep their stock lots grouped together."}
+                : "Search stays product focussed and matching products will group together."}
             </p>
           )}
         </div>

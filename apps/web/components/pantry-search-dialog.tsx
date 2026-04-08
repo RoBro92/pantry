@@ -49,7 +49,7 @@ export function PantrySearchDialog({
   return (
     <ModalShell
       title="Search pantry"
-      description="Search by product name, alias, or barcode, and narrow the list by room or storage location."
+      description="Search by product name, alias, or barcode."
       onClose={onClose}
     >
       <form

@@ -1345,9 +1345,9 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
       return (
         <section className="setup-step-card" data-testid="setup-household-step">
           <p className="eyebrow">Step {stepOrder.indexOf("household") + 1}</p>
-          <h1>First household and rooms</h1>
+          <h1>Create household and rooms</h1>
           <p className="step-copy">
-            Create the first household, stage multiple rooms with their storage locations, and
+            Create the primary household, multiple rooms with their storage locations, and
             choose who belongs to it.
           </p>
 
@@ -1365,16 +1365,16 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                 setWizard((current) => ({ ...current, household_name: event.target.value }))
               }
               onBlur={() => void persistStep("household", { suppressErrors: true })}
-              placeholder="Brown household"
+              placeholder="Your House"
             />
           </label>
 
           <div className="setup-subsection">
             <div className="setup-subsection-heading">
               <div className="stack compact-stack">
-                <h2>Rooms and storage locations</h2>
+                <h2>Rooms and Storage</h2>
                 <p className="helper-text">
-                  Pantry uses Rooms for high-level spaces such as Kitchen, Garage, or Utility room,
+                  Pantry uses Rooms for high level spaces such as Kitchen, Garage, or Utility room,
                   with storage locations inside each one.
                 </p>
               </div>
