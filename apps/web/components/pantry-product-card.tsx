@@ -17,6 +17,10 @@ function formatDateLabel(value: string | null) {
   });
 }
 
+function formatLotDateSummary(purchasedOn: string | null, expiresOn: string | null) {
+  return `Purchased ${formatDateLabel(purchasedOn)} · Expires ${formatDateLabel(expiresOn)}`;
+}
+
 export function PantryProductCard({
   householdExternalId,
   product,
@@ -75,39 +79,27 @@ export function PantryProductCard({
         {product.stock_lots.map((lot) => (
           <article
             key={lot.external_id}
-            className="pantry-lot-card"
+            className="pantry-lot-row"
             data-testid={`stock-lot-card-${lot.external_id}`}
           >
-            <div className="pantry-lot-card-summary">
+            <div className="pantry-lot-row-main">
               <div className="stack compact-stack">
-                <strong>
-                  {lot.quantity} {lot.unit}
-                </strong>
-                <p className="helper-text">
-                  {lot.location_group_name} / {lot.location_name}
-                </p>
+                <div className="pantry-lot-row-heading">
+                  <strong>
+                    {lot.quantity} {lot.unit}
+                  </strong>
+                  <span className="helper-text">
+                    {lot.location_group_name} / {lot.location_name}
+                  </span>
+                </div>
+                <p className="helper-text">{formatLotDateSummary(lot.purchased_on, lot.expires_on)}</p>
+                {lot.note ? <p className="helper-text">{lot.note}</p> : null}
               </div>
               {lot.is_near_expiry ? <span className="pill is-warning">Near expiry</span> : null}
             </div>
-            <dl className="lot-meta-grid">
-              <div>
-                <dt>Purchased</dt>
-                <dd>{formatDateLabel(lot.purchased_on)}</dd>
-              </div>
-              <div>
-                <dt>Expiry</dt>
-                <dd>{formatDateLabel(lot.expires_on)}</dd>
-              </div>
-              <div>
-                <dt>Notes</dt>
-                <dd>{lot.note ?? "None"}</dd>
-              </div>
-            </dl>
             <PantryLotActions
               householdExternalId={householdExternalId}
-              lotExternalId={lot.external_id}
-              quantity={lot.quantity}
-              currentLocationExternalId={lot.location_external_id}
+              lot={lot}
               locations={locations}
             />
           </article>

@@ -13,7 +13,7 @@ Pantry treats lifecycle and recovery inputs as hostile until proven otherwise.
 ## Restore Safety
 
 - Restore currently supports full instance bundles only.
-- Restore requires the same schema revision as the running Pantry install.
+- Restore requires the same schema revision as the running Pantry install, or an older revision Pantry explicitly marks restore-compatible.
 - Restore requires at least one platform admin in the uploaded bundle.
 - Restore remains explicitly destructive and requires operator confirmation in the admin UI.
 
@@ -22,6 +22,13 @@ Pantry treats lifecycle and recovery inputs as hostile until proven otherwise.
 - Household membership changes and household deletion are audit logged.
 - Pantry blocks membership removals that would leave a household without an admin where that safeguard applies.
 - Household deletion requires explicit confirmation of the target household name, plus an extra acknowledgement when deleting the final household.
+
+## Password Reset Safety
+
+- Pantry sends password reset links only after SMTP is configured, a successful SMTP test has been recorded, and password reset email delivery is explicitly enabled.
+- Self-service reset uses a one-time reset link sent to the account email address; this milestone does not email temporary passwords.
+- Username-only accounts cannot use self-service reset and still require an operator-led password reset.
+- Reset links are validated server-side for expiry, reuse, and account eligibility before any password change is accepted.
 
 ## Scope
 

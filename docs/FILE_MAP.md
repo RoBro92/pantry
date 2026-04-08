@@ -19,13 +19,16 @@ Quick reference for the public repository layout.
 
 ## Documentation
 
+- `AGENTS.md`: public repo-operational guidance for Codex-assisted and contributor work
 - `README.md`: overview and first-run guidance
 - `docs/ARCHITECTURE.md`: runtime and setup architecture
 - `docs/CONTRIBUTING.md`: local setup and contribution flow
 - `docs/DEPLOYMENT.md`: self-hosted deployment guidance
+- `docs/REPOSITORY_MAINTENANCE.md`: branch protection and repository admin guidance
 - `docs/MILESTONES.md`: current delivery slice and follow-on milestone map
 - `docs/VERSIONING.md`: release metadata policy and update visibility model
 - `docs/SECURITY.md`: upload, restore, and operator safety notes
 - `docs/TEST_STRATEGY.md`: validation expectations
 - `docs/PROJECT_STATE.md`: current milestone state and recent validations
 - `docs/DECISIONS.md`: durable architecture decisions
+- `private-docs/`: non-public planning and internal working material; do not move this content into public contributor docs by default

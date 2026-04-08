@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { LoginForm } from "../../../components/login-form";
-import { getSession, getSetupStatus } from "../../../lib/server-auth";
+import { getPasswordResetAvailability, getSession, getSetupStatus } from "../../../lib/server-auth";
 
 type LoginPageProps = {
   searchParams: Promise<{
@@ -9,7 +9,11 @@ type LoginPageProps = {
 };
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {
-  const [session, setupStatus] = await Promise.all([getSession(), getSetupStatus()]);
+  const [session, setupStatus, passwordResetAvailability] = await Promise.all([
+    getSession(),
+    getSetupStatus(),
+    getPasswordResetAvailability()
+  ]);
   const params = await searchParams;
   const nextPath = params.next && params.next.startsWith("/") ? params.next : "/app";
   if (session) {
@@ -29,7 +33,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
             Sign in to view your pantry inventory, manage your shopping lists, and more.
           </p>
         </div>
-        <LoginForm nextPath={nextPath} />
+        <LoginForm nextPath={nextPath} canResetPassword={passwordResetAvailability.is_available} />
       </section>
     </main>
   );

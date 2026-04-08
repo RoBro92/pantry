@@ -25,7 +25,13 @@ from app.services.pantry_catalog import (
     merge_manual_ingredient_tags,
 )
 from app.services.product_enrichment import ProductEnrichmentError, apply_confirmed_product_enrichment
-from app.services.pantry_normalization import normalize_unit, require_text
+from app.services.pantry_normalization import (
+    lookup_token_overlap,
+    lookup_token_signature,
+    normalize_lookup_name,
+    normalize_unit,
+    require_text,
+)
 
 
 def _validate_positive_quantity(quantity: Decimal) -> Decimal:
@@ -141,23 +147,35 @@ def create_or_add_pantry_entry(
     purchased_on: date | None,
     expires_on: date | None,
     existing_product_external_id: str | None = None,
+    allow_separate_product: bool = False,
     confirmed_enrichment=None,
     allow_create_product: bool = True,
 ) -> dict[str, object]:
     display_name = require_text(name, field_name="Product name")
-    matched_product, match_message = _find_existing_product(
+    duplicate_match = detect_pantry_duplicate(
         db,
         household=household,
         display_name=display_name,
         barcode=barcode,
     )
+    matched_product = duplicate_match["matched_product"]
+    can_keep_separate_product = bool(duplicate_match["can_keep_separate_product"])
+
+    if (
+        matched_product is not None
+        and duplicate_match["match_reason"] == "name_similarity"
+        and allow_separate_product
+    ):
+        matched_product = None
 
     if matched_product is not None:
         if existing_product_external_id != matched_product.external_id:
             return {
                 "status": "existing_product",
-                "message": match_message,
+                "message": duplicate_match["message"],
                 "matched_product": matched_product,
+                "duplicate_match_reason": duplicate_match["match_reason"],
+                "can_keep_separate_product": can_keep_separate_product,
                 "alias_conflicts": [],
             }
 
@@ -224,6 +242,8 @@ def create_or_add_pantry_entry(
             "product": refreshed_product,
             "lot": refreshed_lot,
             "matched_product": refreshed_product,
+            "duplicate_match_reason": duplicate_match["match_reason"],
+            "can_keep_separate_product": can_keep_separate_product,
             "alias_conflicts": [],
         }
 
@@ -287,34 +307,134 @@ def create_or_add_pantry_entry(
         "product": refreshed_product,
         "lot": refreshed_lot,
         "matched_product": None,
+        "duplicate_match_reason": None,
+        "can_keep_separate_product": False,
         "alias_conflicts": [],
     }
 
 
-def _find_existing_product(
+def detect_pantry_duplicate(
     db: Session,
     *,
     household: Household,
     display_name: str,
     barcode: str | None,
-) -> tuple[Product | None, str]:
+) -> dict[str, object]:
+    candidate_name = display_name.strip()
     barcode_product = None
     if barcode and barcode.strip():
         barcode_product = get_product_by_barcode(db, household=household, barcode=barcode)
 
-    name_product = get_product_by_lookup_name(db, household=household, lookup_name=display_name)
-    matched_product = barcode_product or name_product
+    name_product = (
+        get_product_by_lookup_name(db, household=household, lookup_name=candidate_name)
+        if candidate_name
+        else None
+    )
+    similar_product, similarity_score = _find_similar_product_match(
+        db,
+        household=household,
+        display_name=candidate_name,
+    )
+    matched_product = barcode_product or name_product or similar_product
     if matched_product is None:
-        return None, ""
+        return {
+            "matched_product": None,
+            "message": "",
+            "match_reason": None,
+            "match_confidence": None,
+            "can_keep_separate_product": False,
+        }
 
     if barcode_product is not None and name_product is not None and barcode_product.id != name_product.id:
-        return barcode_product, (
-            f"The barcode entered here already belongs to {barcode_product.name}. "
-            "Add this as another stock lot to that product or clear the barcode."
-        )
+        return {
+            "matched_product": barcode_product,
+            "message": (
+                f"The barcode entered here already belongs to {barcode_product.name}. "
+                "Add this as another stock lot to that product or clear the barcode."
+            ),
+            "match_reason": "barcode_exact",
+            "match_confidence": 1.0,
+            "can_keep_separate_product": False,
+        }
     if barcode_product is not None:
-        return barcode_product, f"{barcode_product.name} already exists for this barcode."
-    return name_product, f"{name_product.name} already exists."
+        return {
+            "matched_product": barcode_product,
+            "message": f"{barcode_product.name} already exists for this barcode.",
+            "match_reason": "barcode_exact",
+            "match_confidence": 1.0,
+            "can_keep_separate_product": False,
+        }
+    if name_product is not None:
+        return {
+            "matched_product": name_product,
+            "message": f"{name_product.name} already exists.",
+            "match_reason": "name_exact",
+            "match_confidence": 1.0,
+            "can_keep_separate_product": False,
+        }
+    return {
+        "matched_product": similar_product,
+        "message": (
+            f"{similar_product.name} looks like an existing product. "
+            "Add another stock lot there or keep this as a separate product."
+        ),
+        "match_reason": "name_similarity",
+        "match_confidence": similarity_score,
+        "can_keep_separate_product": True,
+    }
+
+
+def _find_similar_product_match(
+    db: Session,
+    *,
+    household: Household,
+    display_name: str,
+) -> tuple[Product | None, float | None]:
+    if not display_name.strip():
+        return None, None
+    query_signature = lookup_token_signature(display_name)
+    if len(query_signature) < 2:
+        return None, None
+
+    query_signature_set = set(query_signature)
+    normalized_display_name = normalize_lookup_name(display_name)
+    products = db.scalars(
+        select(Product)
+        .where(Product.household_id == household.id)
+        .options(
+            selectinload(Product.aliases),
+            selectinload(Product.barcodes),
+            selectinload(Product.enrichments),
+        )
+    ).all()
+
+    best_product: Product | None = None
+    best_score = 0.0
+    for product in products:
+        candidate_names = [product.name, *[alias.name for alias in product.aliases]]
+        for candidate_name in candidate_names:
+            if normalize_lookup_name(candidate_name) == normalized_display_name:
+                continue
+
+            candidate_signature = set(lookup_token_signature(candidate_name))
+            if len(candidate_signature) < 2:
+                continue
+
+            overlap = lookup_token_overlap(display_name, candidate_name)
+            score = overlap
+            if candidate_signature == query_signature_set:
+                score = max(score, 1.0)
+            elif (
+                query_signature_set.issubset(candidate_signature)
+                or candidate_signature.issubset(query_signature_set)
+            ) and overlap >= 0.67:
+                score = max(score, 0.78)
+
+            if score >= 0.67 and score > best_score:
+                best_product = product
+                best_score = score
+
+    return best_product, (round(best_score, 2) if best_product is not None else None)
 
 
 def _merge_existing_product_metadata(
@@ -453,6 +573,58 @@ def remove_stock_from_lot(
     return get_stock_lot_by_external_id(db, household=household, external_id=lot.external_id) or lot
 
 
+def update_stock_lot(
+    db: Session,
+    *,
+    household: Household,
+    actor: User,
+    lot_external_id: str,
+    quantity: Decimal,
+    location_external_id: str,
+    note: str | None,
+    purchased_on: date | None,
+    expires_on: date | None,
+) -> StockLot:
+    lot = get_stock_lot_by_external_id(db, household=household, external_id=lot_external_id)
+    if lot is None or lot.depleted_at is not None:
+        raise ValueError("Stock lot not found.")
+
+    location = get_location_by_external_id(db, household=household, external_id=location_external_id)
+    if location is None:
+        raise ValueError("Location not found.")
+
+    normalized_quantity = _validate_positive_quantity(quantity)
+    normalized_note = require_text(note, field_name="Note") if note else None
+    if purchased_on and expires_on and expires_on < purchased_on:
+        raise ValueError("Expiry date cannot be earlier than purchase date.")
+
+    lot.quantity = normalized_quantity
+    lot.location_id = location.id
+    lot.location = location
+    lot.note = normalized_note
+    lot.purchased_on = purchased_on
+    lot.expires_on = expires_on
+    db.add(lot)
+    record_audit_event(
+        db,
+        household=household,
+        actor=actor,
+        action="stock.updated",
+        target_type="stock_lot",
+        target_external_id=lot.external_id,
+        event_metadata={
+            "product_name": lot.product.name,
+            "location_name": location.name,
+            "location_group_name": location.location_group.name,
+            "quantity": str(normalized_quantity),
+            "unit": lot.unit,
+        },
+    )
+    db.commit()
+    db.refresh(lot)
+    return get_stock_lot_by_external_id(db, household=household, external_id=lot.external_id) or lot
+
+
 def move_stock_lot(
     db: Session,
     *,
@@ -534,3 +706,35 @@ def move_stock_lot(
         else None
     )
     return refreshed_lot, refreshed_created_lot
+
+
+def buy_more_from_stock_lot(
+    db: Session,
+    *,
+    household: Household,
+    actor: User,
+    lot_external_id: str,
+) -> StockLot:
+    lot = get_stock_lot_by_external_id(db, household=household, external_id=lot_external_id)
+    if lot is None or lot.depleted_at is not None:
+        raise ValueError("Stock lot not found.")
+
+    from app.services.shopping_lists import add_item_to_default_shopping_list
+
+    add_item_to_default_shopping_list(
+        db,
+        household=household,
+        actor=actor,
+        product_external_id=lot.product.external_id,
+        quantity=lot.quantity,
+        unit=lot.unit,
+        note=lot.note,
+        source_type="pantry_depleted",
+    )
+    return remove_stock_from_lot(
+        db,
+        household=household,
+        actor=actor,
+        lot_external_id=lot.external_id,
+        quantity=lot.quantity,
+    )

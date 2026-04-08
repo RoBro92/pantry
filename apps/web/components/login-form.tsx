@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 import { appConfig } from "../lib/app-config";
@@ -7,9 +8,10 @@ import { readApiErrorMessage } from "../lib/client-api";
 
 type LoginFormProps = {
   nextPath?: string;
+  canResetPassword?: boolean;
 };
 
-export function LoginForm({ nextPath = "/app" }: LoginFormProps) {
+export function LoginForm({ nextPath = "/app", canResetPassword = false }: LoginFormProps) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -75,6 +77,14 @@ export function LoginForm({ nextPath = "/app" }: LoginFormProps) {
           required
         />
       </label>
+      {canResetPassword ? (
+        <p className="helper-text login-helper-row">
+          <span>Need help signing in?</span>
+          <Link href="/forgot-password" className="inline-link">
+            Forgot password?
+          </Link>
+        </p>
+      ) : null}
       {error ? <p className="error-text">{error}</p> : null}
       <div className="wizard-actions login-actions">
         <button type="submit" className="primary-button" disabled={isSubmitting}>

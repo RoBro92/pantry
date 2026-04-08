@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
@@ -29,5 +29,8 @@ class InstanceSetting(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     smtp_last_test_status: Mapped[str] = mapped_column(String(32), nullable=False, default="never")
     smtp_last_tested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     smtp_last_test_error: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    password_reset_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    password_reset_subject_template: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    password_reset_body_template: Mapped[str | None] = mapped_column(Text(), nullable=True)
     release_notes_seen_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
     release_notes_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

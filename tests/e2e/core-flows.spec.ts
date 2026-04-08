@@ -457,12 +457,13 @@ test("pantry flow covers room management, combined add flow, duplicate handling,
   await addEntryForm.getByLabel("Storage location").selectOption({ label: "Kitchen / Freezer" });
   await addEntryForm.getByLabel("Quantity").fill("2");
   await addEntryForm.getByLabel("Unit").fill("kg");
-  await addEntryForm.getByLabel("Aliases").fill("Ground beef");
+  await addEntryForm.getByLabel("Aliases").fill("Ground beef,mince beef");
   await addEntryForm.getByLabel("Purchase date").fill("2026-04-01");
   await addEntryForm.getByLabel("Expiry date").fill("2026-04-04");
   await addEntryForm.getByLabel("Notes").fill("First pack");
+  await expect(addEntryForm.getByRole("button", { name: "Look up" })).toBeVisible();
   await expect(addEntryForm.getByRole("button", { name: "Scan" })).toBeVisible();
-  await addEntryForm.getByRole("button", { name: "Create product and stock lot" }).click();
+  await addEntryForm.getByRole("button", { name: "Add to pantry" }).click();
 
   const beefMinceCard = page
     .locator('[data-testid^="product-card-"]')
@@ -472,24 +473,23 @@ test("pantry flow covers room management, combined add flow, duplicate handling,
   await expect(beefMinceCard).toContainText("4 Apr 2026");
   await expect(beefMinceCard).toContainText("Beef");
 
-  await page.getByLabel("Search products").fill("ground beef");
+  await page.getByLabel("Search products").fill("mince beef");
   await page.getByRole("button", { name: "Apply" }).click();
 
-  await expect(page.getByLabel("Search products")).toHaveValue("ground beef");
+  await expect(page.getByLabel("Search products")).toHaveValue("mince beef");
   await expect(beefMinceCard).toContainText("Beef mince");
 
   await page.getByRole("button", { name: "Add product" }).click();
   const duplicateForm = page.getByTestId("pantry-add-entry-form");
-  await duplicateForm.getByLabel("Product name").fill("Beef mince");
+  await duplicateForm.getByLabel("Product name").fill("Mince beef");
   await duplicateForm.getByLabel("Storage location").selectOption({ label: "Kitchen / Shelf A" });
   await duplicateForm.getByLabel("Quantity").fill("1");
   await duplicateForm.getByLabel("Unit").fill("kg");
   await duplicateForm.getByLabel("Notes").fill("Second pack");
-  await duplicateForm.getByRole("button", { name: "Create product and stock lot" }).click();
+  await duplicateForm.getByRole("button", { name: "Add to pantry" }).click();
 
-  await expect(page.getByTestId("existing-product-warning")).toContainText(
-    "Beef mince already exists",
-  );
+  await expect(page.getByText("Beef mince already looks like the right product")).toBeVisible();
+  await expect(duplicateForm.getByRole("button", { name: "Keep as separate product" })).toBeVisible();
   await duplicateForm
     .getByRole("button", { name: "Add stock lot to existing product" })
     .click();
@@ -514,7 +514,7 @@ test("pantry add flow warns when an alias is already used by another product", a
   await addEntryForm.getByLabel("Quantity").fill("1");
   await addEntryForm.getByLabel("Unit").fill("count");
   await addEntryForm.getByLabel("Aliases").fill("Dry pasta");
-  await addEntryForm.getByRole("button", { name: "Create product and stock lot" }).click();
+  await addEntryForm.getByRole("button", { name: "Add to pantry" }).click();
 
   await expect(page.getByText("Dry pasta is already used by Pasta")).toBeVisible();
 });

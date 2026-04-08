@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { type FormEvent, useRef, useState } from "react";
+import { type FormEvent, type ReactNode, useRef, useState } from "react";
 import type {
   SetupStatusResponse,
   SetupWizardAssignmentSummary,
@@ -415,6 +415,52 @@ function TokenEditor({
   );
 }
 
+function ReviewSummaryCard({
+  title,
+  badge,
+  onEdit,
+  children,
+}: {
+  title: string;
+  badge?: string;
+  onEdit?: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <article className="review-summary-card">
+      <div className="setup-card-toolbar">
+        <div className="stack compact-stack">
+          <strong>{title}</strong>
+          {badge ? <span className="pill">{badge}</span> : null}
+        </div>
+        {onEdit ? (
+          <button type="button" className="ghost-button compact-button" onClick={onEdit}>
+            Edit
+          </button>
+        ) : null}
+      </div>
+      <div className="review-summary-content">{children}</div>
+    </article>
+  );
+}
+
+function ReviewSummaryRow({
+  label,
+  value,
+  wrap = false,
+}: {
+  label: string;
+  value: React.ReactNode;
+  wrap?: boolean;
+}) {
+  return (
+    <div className="review-summary-row">
+      <span className="review-summary-label">{label}</span>
+      <span className={wrap ? "review-summary-value is-wrap" : "review-summary-value"}>{value}</span>
+    </div>
+  );
+}
+
 export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -648,6 +694,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
             from_name: snapshot.smtp_config.from_name,
             security: snapshot.smtp_config.security,
             is_enabled: snapshot.smtp_config.is_enabled,
+            password_reset_enabled: snapshot.smtp_config.password_reset_enabled,
             mark_skipped: snapshot.skipped_optional_steps.includes("smtp")
           }),
           "SMTP settings saved.",
@@ -742,7 +789,8 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                   from_email: "",
                   from_name: "",
                   security: null,
-                  is_enabled: false
+                  is_enabled: false,
+                  password_reset_enabled: false
                 }
               };
 
@@ -1220,6 +1268,9 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                 />
               </label>
             </div>
+            <p className="helper-text">
+              Use an email address if this account should be able to request its own password reset later.
+            </p>
             <PasswordFields
               label={
                 wizard.admin_user.password_saved && !adminPasswordDraft.password
@@ -1309,6 +1360,9 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                       />
                     </label>
                   </div>
+                  <p className="helper-text">
+                    Username-only accounts still need an admin-led password reset later.
+                  </p>
                   <PasswordFields
                     label={
                       user.password_saved && !(userPasswordDrafts[user.stage_id] ?? EMPTY_PASSWORD_DRAFT).password
@@ -1739,8 +1793,8 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
           <p className="eyebrow">Step {stepOrder.indexOf("smtp") + 1}</p>
           <h1>SMTP configuration</h1>
           <p className="step-copy">
-            Optional. Save email delivery settings now for notifications and other outbound mail
-            features later.
+            Optional. Save email delivery settings now. Pantry can later use this for password
+            reset links and other product-facing outbound mail.
           </p>
           <label className="checkbox-row">
             <input
@@ -1753,12 +1807,43 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                   skipped_optional_steps: current.skipped_optional_steps.filter(
                     (step) => step !== "smtp"
                   ),
-                  smtp_config: { ...current.smtp_config, is_enabled: event.target.checked }
+                  smtp_config: {
+                    ...current.smtp_config,
+                    is_enabled: event.target.checked,
+                    password_reset_enabled: event.target.checked
+                      ? current.smtp_config.password_reset_enabled
+                      : false
+                  }
                 }))
               }
             />
             <span>Enable SMTP for this installation.</span>
           </label>
+          <label className="checkbox-row">
+            <input
+              type="checkbox"
+              name="setup_smtp_password_reset_enabled"
+              checked={wizard.smtp_config.password_reset_enabled}
+              disabled={!wizard.smtp_config.is_enabled}
+              onChange={(event) =>
+                setWizard((current) => ({
+                  ...current,
+                  skipped_optional_steps: current.skipped_optional_steps.filter(
+                    (step) => step !== "smtp"
+                  ),
+                  smtp_config: {
+                    ...current.smtp_config,
+                    password_reset_enabled: event.target.checked
+                  }
+                }))
+              }
+            />
+            <span>Allow password reset emails after setup completes.</span>
+          </label>
+          <p className="helper-text">
+            This uses Pantry’s default reset email template. Full template editing stays in the
+            admin SMTP settings page.
+          </p>
           <div className="content-grid">
             <label className="field">
               <span>SMTP host</span>
@@ -1927,203 +2012,224 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
         </p>
 
         {wizard.installation_mode === "restore_backup" ? (
-          <div className="review-grid">
-            <article className="review-card">
-              <div className="setup-card-toolbar">
-                <strong>Install selection</strong>
-                <button
-                  type="button"
-                  className="ghost-button"
-                  onClick={() => void handleStepJump("welcome")}
-                >
-                  Edit
-                </button>
-              </div>
-              <p>{wizard.staged_restore?.original_filename ?? "No staged restore uploaded yet"}</p>
-              <p>
-                {wizard.staged_restore
-                  ? `${wizard.staged_restore.bundle.scope} · Pantry ${wizard.staged_restore.bundle.app_version}`
-                  : "Upload a full instance backup bundle."}
-              </p>
-              <p>
-                {wizard.staged_restore?.supported_for_restore
-                  ? "Validated and ready to apply during finalization."
-                  : "The staged backup is not ready to restore yet."}
-              </p>
-            </article>
-            <article className="review-card">
-              <div className="setup-card-toolbar">
-                <strong>Safety checks</strong>
-              </div>
-              {wizard.staged_restore ? (
-                <ul className="callout-list">
-                  {wizard.staged_restore.warnings.map((warning) => (
-                    <li key={warning}>{warning}</li>
-                  ))}
-                </ul>
-              ) : (
-                <p>Restore validation warnings will appear here after upload.</p>
-              )}
-            </article>
+          <div className="setup-review-layout">
+            <div className="stack">
+              <ReviewSummaryCard
+                title="Install selection"
+                badge="Restore"
+                onEdit={() => void handleStepJump("welcome")}
+              >
+                <ReviewSummaryRow
+                  label="Backup"
+                  value={wizard.staged_restore?.original_filename ?? "No staged restore uploaded yet"}
+                  wrap
+                />
+                <ReviewSummaryRow
+                  label="Bundle"
+                  value={
+                    wizard.staged_restore
+                      ? `${wizard.staged_restore.bundle.scope} · Pantry ${wizard.staged_restore.bundle.app_version}`
+                      : "Upload a full instance backup bundle."
+                  }
+                />
+                <ReviewSummaryRow
+                  label="Status"
+                  value={
+                    wizard.staged_restore?.supported_for_restore
+                      ? "Validated and ready to apply during finalization."
+                      : "The staged backup is not ready to restore yet."
+                  }
+                />
+              </ReviewSummaryCard>
+            </div>
+
+            <div className="stack">
+              <ReviewSummaryCard title="Safety checks">
+                {wizard.staged_restore ? (
+                  <ul className="callout-list">
+                    {wizard.staged_restore.warnings.map((warning) => (
+                      <li key={warning}>{warning}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>Restore validation warnings will appear here after upload.</p>
+                )}
+              </ReviewSummaryCard>
+            </div>
           </div>
         ) : (
-          <div className="review-grid">
-            <article className="review-card">
-              <div className="setup-card-toolbar">
-                <strong>Install selection</strong>
-                <button
-                  type="button"
-                  className="ghost-button"
-                  onClick={() => void handleStepJump("welcome")}
-                >
-                  Edit
-                </button>
-              </div>
-              <p>Fresh install</p>
-            </article>
-            <article className="review-card">
-              <div className="setup-card-toolbar">
-                <strong>Users</strong>
-                <button type="button" className="ghost-button" onClick={() => void handleStepJump("users")}>
-                  Edit
-                </button>
-              </div>
-              <p>{summarizeUser(wizard.admin_user)}</p>
-              {wizard.initial_users.map((user) => (
-                <p key={user.stage_id}>{summarizeUser(user)}</p>
-              ))}
-            </article>
-            <article className="review-card">
-              <div className="setup-card-toolbar">
-                <strong>Dietary preferences</strong>
-                <button
-                  type="button"
-                  className="ghost-button"
-                  onClick={() => void handleStepJump("dietary")}
-                >
-                  Edit
-                </button>
-              </div>
-              <p>
-                {wizard.household_dietary_preferences.includes(DIETARY_NONE_OPTION)
-                  ? "None selected"
-                  : wizard.household_dietary_preferences.length > 0
-                    ? wizard.household_dietary_preferences.join(", ")
-                    : wizard.skipped_optional_steps.includes("dietary")
-                      ? "Skipped for now"
-                      : "Not configured"}
-              </p>
-              <p>
-                Personal preferences:{" "}
-                {wizard.user_dietary_preferences.length > 0
-                  ? wizard.user_dietary_preferences
-                      .map((preference) => {
-                        const user = allUsers.find(
-                          (candidate) => candidate.stage_id === preference.stage_user_id
-                        );
-                        const summary = preference.preferences.includes(DIETARY_NONE_OPTION)
-                          ? "None selected"
-                          : preference.preferences.join(", ");
-                        return `${user ? summarizeUser(user) : "Staged user"} (${summary})`;
+          <div className="setup-review-layout">
+            <div className="stack">
+              <ReviewSummaryCard
+                title="Install selection"
+                badge="Fresh install"
+                onEdit={() => void handleStepJump("welcome")}
+              >
+                <ReviewSummaryRow label="Mode" value="Fresh install" />
+              </ReviewSummaryCard>
+
+              <ReviewSummaryCard title="Users" onEdit={() => void handleStepJump("users")}>
+                <ReviewSummaryRow label="Admin" value={summarizeUser(wizard.admin_user)} />
+                <ReviewSummaryRow
+                  label="Admin password"
+                  value={renderSavedPasswordHint(wizard.admin_user)}
+                />
+                {wizard.initial_users.length > 0 ? (
+                  <div className="review-summary-list">
+                    {wizard.initial_users.map((user) => (
+                      <p key={user.stage_id}>
+                        {summarizeUser(user)} · {renderSavedPasswordHint(user)}
+                      </p>
+                    ))}
+                  </div>
+                ) : (
+                  <p>No extra users staged yet.</p>
+                )}
+              </ReviewSummaryCard>
+
+              <ReviewSummaryCard
+                title="Household and rooms"
+                onEdit={() => void handleStepJump("household")}
+              >
+                <ReviewSummaryRow label="Household" value={wizard.household_name || "Not configured yet"} />
+                <div className="review-summary-list">
+                  {wizard.rooms.map((room, index) => (
+                    <p key={room.stage_id}>
+                      Room {index + 1}: {room.name || "Not configured yet"} ·{" "}
+                      {room.storage_locations.length > 0
+                        ? room.storage_locations.join(", ")
+                        : "No storage locations yet"}
+                    </p>
+                  ))}
+                </div>
+                <ReviewSummaryRow
+                  label="Members"
+                  value={
+                    configuredUsers
+                      .map((user) => {
+                        if (user.is_platform_admin) {
+                          return `${summarizeUser(user)} (${getHouseholdRoleLabel("household_admin")})`;
+                        }
+                        const assignment = findAssignment(wizard.household_assignments, user.stage_id);
+                        if (!assignment) {
+                          return null;
+                        }
+                        return `${summarizeUser(user)} (${getHouseholdRoleLabel(assignment.role)})`;
                       })
-                      .join(", ")
-                  : wizard.skipped_optional_steps.includes("dietary")
-                    ? "Skipped for now"
-                    : "Not configured"}
-              </p>
-            </article>
-            <article className="review-card">
-              <div className="setup-card-toolbar">
-                <strong>Household and rooms</strong>
-                <button
-                  type="button"
-                  className="ghost-button"
-                  onClick={() => void handleStepJump("household")}
-                >
-                  Edit
-                </button>
-              </div>
-              <p>{wizard.household_name || "Not configured yet"}</p>
-              <div className="review-room-list">
-                {wizard.rooms.map((room, index) => (
-                  <p key={room.stage_id}>
-                    Room {index + 1}: {room.name || "Not configured yet"} ·{" "}
-                    {room.storage_locations.length > 0
-                      ? room.storage_locations.join(", ")
-                      : "No storage locations yet"}
-                  </p>
-                ))}
-              </div>
-              <p>
-                Members:{" "}
-                {configuredUsers
-                  .map((user) => {
-                    if (user.is_platform_admin) {
-                      return `${summarizeUser(user)} (${getHouseholdRoleLabel("household_admin")})`;
-                    }
-                    const assignment = findAssignment(wizard.household_assignments, user.stage_id);
-                    if (!assignment) {
-                      return null;
-                    }
-                    return `${summarizeUser(user)} (${getHouseholdRoleLabel(assignment.role)})`;
-                  })
-                  .filter(Boolean)
-                  .join(", ") || "No household members selected yet"}
-              </p>
-            </article>
-            <article className="review-card">
-              <div className="setup-card-toolbar">
-                <strong>Public URL</strong>
-                <button
-                  type="button"
-                  className="ghost-button"
-                  onClick={() => void handleStepJump("public_url")}
-                >
-                  Edit
-                </button>
-              </div>
-              <p>
-                {wizard.public_base_url
-                  ? wizard.public_base_url
-                  : wizard.skipped_optional_steps.includes("public_url")
-                    ? "Skipped for now"
-                    : "Not configured"}
-              </p>
-            </article>
-            <article className="review-card">
-              <div className="setup-card-toolbar">
-                <strong>AI</strong>
-                <button type="button" className="ghost-button" onClick={() => void handleStepJump("ai")}>
-                  Edit
-                </button>
-              </div>
-              <p>
-                {wizard.ai_config.is_enabled
-                  ? `${wizard.ai_config.provider_type} · ${wizard.ai_config.base_url} · ${wizard.ai_config.default_model}`
-                  : wizard.skipped_optional_steps.includes("ai")
-                    ? "Skipped for now"
-                    : "Not configured"}
-              </p>
-            </article>
-            <article className="review-card">
-              <div className="setup-card-toolbar">
-                <strong>SMTP</strong>
-                <button
-                  type="button"
-                  className="ghost-button"
-                  onClick={() => void handleStepJump("smtp")}
-                >
-                  Edit
-                </button>
-              </div>
-              <p>
-                {wizard.smtp_config.is_enabled
-                  ? `${wizard.smtp_config.host}:${wizard.smtp_config.port ?? ""}`
-                  : wizard.skipped_optional_steps.includes("smtp")
-                    ? "Skipped for now"
-                    : "Not configured"}
-              </p>
-            </article>
+                      .filter(Boolean)
+                      .join(", ") || "No household members selected yet"
+                  }
+                  wrap
+                />
+              </ReviewSummaryCard>
+            </div>
+
+            <div className="stack">
+              <ReviewSummaryCard
+                title="Dietary preferences"
+                badge={wizard.skipped_optional_steps.includes("dietary") ? "Skipped for now" : undefined}
+                onEdit={() => void handleStepJump("dietary")}
+              >
+                <ReviewSummaryRow
+                  label="Household"
+                  value={
+                    wizard.household_dietary_preferences.includes(DIETARY_NONE_OPTION)
+                      ? "None selected"
+                      : wizard.household_dietary_preferences.length > 0
+                        ? wizard.household_dietary_preferences.join(", ")
+                        : wizard.skipped_optional_steps.includes("dietary")
+                          ? "Skipped for now"
+                          : "Not configured"
+                  }
+                  wrap
+                />
+                <ReviewSummaryRow
+                  label="Personal"
+                  value={
+                    wizard.user_dietary_preferences.length > 0
+                      ? wizard.user_dietary_preferences
+                          .map((preference) => {
+                            const user = allUsers.find(
+                              (candidate) => candidate.stage_id === preference.stage_user_id
+                            );
+                            const summary = preference.preferences.includes(DIETARY_NONE_OPTION)
+                              ? "None selected"
+                              : preference.preferences.join(", ");
+                            return `${user ? summarizeUser(user) : "Staged user"} (${summary})`;
+                          })
+                          .join(", ")
+                      : wizard.skipped_optional_steps.includes("dietary")
+                        ? "Skipped for now"
+                        : "Not configured"
+                  }
+                  wrap
+                />
+              </ReviewSummaryCard>
+
+              <ReviewSummaryCard
+                title="Public URL"
+                badge={wizard.skipped_optional_steps.includes("public_url") ? "Skipped for now" : undefined}
+                onEdit={() => void handleStepJump("public_url")}
+              >
+                <ReviewSummaryRow
+                  label="Browser URL"
+                  value={
+                    wizard.public_base_url
+                      ? wizard.public_base_url
+                      : wizard.skipped_optional_steps.includes("public_url")
+                        ? "Skipped for now"
+                        : "Not configured"
+                  }
+                  wrap
+                />
+              </ReviewSummaryCard>
+
+              <ReviewSummaryCard
+                title="AI"
+                badge={wizard.skipped_optional_steps.includes("ai") ? "Skipped for now" : undefined}
+                onEdit={() => void handleStepJump("ai")}
+              >
+                <ReviewSummaryRow
+                  label="Configuration"
+                  value={
+                    wizard.ai_config.is_enabled
+                      ? `${wizard.ai_config.provider_type} · ${wizard.ai_config.base_url} · ${wizard.ai_config.default_model}`
+                      : wizard.skipped_optional_steps.includes("ai")
+                        ? "Skipped for now"
+                        : "Not configured"
+                  }
+                  wrap
+                />
+              </ReviewSummaryCard>
+
+              <ReviewSummaryCard
+                title="SMTP"
+                badge={wizard.skipped_optional_steps.includes("smtp") ? "Skipped for now" : undefined}
+                onEdit={() => void handleStepJump("smtp")}
+              >
+                <ReviewSummaryRow
+                  label="Delivery"
+                  value={
+                    wizard.smtp_config.is_enabled
+                      ? `${wizard.smtp_config.host}:${wizard.smtp_config.port ?? ""}`
+                      : wizard.skipped_optional_steps.includes("smtp")
+                        ? "Skipped for now"
+                        : "Not configured"
+                  }
+                  wrap
+                />
+                <ReviewSummaryRow
+                  label="Password reset"
+                  value={
+                    wizard.smtp_config.password_reset_enabled
+                      ? "Allowed after setup completes"
+                      : wizard.skipped_optional_steps.includes("smtp")
+                        ? "Skipped for now"
+                        : "Disabled"
+                  }
+                />
+              </ReviewSummaryCard>
+            </div>
           </div>
         )}
 

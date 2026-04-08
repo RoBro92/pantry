@@ -26,6 +26,7 @@ Pantry will:
 - stage multiple Rooms and storage locations before anything is written live
 - validate restore uploads before finalization
 - finalize users, households, locations, settings, dietary preferences, and optional AI/SMTP configuration only when `Complete Setup` is clicked
+- keep password reset emails disabled by default until an operator deliberately enables them after SMTP is ready
 
 ## Manual Install Checklist
 
@@ -49,8 +50,11 @@ Pantry keeps lifecycle operations in the platform admin console:
 
 - `Updates`: advisory-only release metadata, changelog visibility, breaking change notes, and manual operator commands
 - `Backups`: full instance export, household export, restore upload validation, and explicit destructive restore
+- `SMTP`: delivery settings, connectivity testing, and the password reset email subject/body template used for self-service reset links
 
 GHCR remains image hosting only. Pantry does not self-update.
+
+Self-service password reset links remain unavailable until SMTP is configured, a successful SMTP test has been recorded, and password reset emails are enabled for the instance.
 
 ## Operational Commands
 
@@ -72,6 +76,6 @@ docker compose --env-file .env -f pantry.yml run --rm api python -m app.cli rese
 ## Restore Notes
 
 - Restore currently supports Pantry backup bundle v1 JSON only.
-- Full instance restore requires the same migrated schema revision as the running install.
+- Full instance restore requires the same migrated schema revision as the running install, or an older revision Pantry explicitly marks restore-compatible.
 - Uploaded restore bundles are staged under `BACKUP_STORAGE_ROOT` before use.
 - Restore replaces current database content deliberately and requires explicit confirmation in the UI.

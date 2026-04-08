@@ -46,6 +46,7 @@ Pantry is a small monorepo with three runtime services, a staged first-run setup
 - Pantry product identity stays user-owned even when external enrichment is linked
 - Products remain durable records even if every stock lot is depleted
 - Shopping lists are a household domain surface, not a hosted sync feature
+- Shopping lists move deliberately between `active`, `awaiting purchase`, `merged`, `returned`, and `reconciled` states instead of acting like a single disposable checklist
 - Imports remain review-first
 - External food data enrichment is confirmation-first, source-attributed, and stored separately from Pantry product identity
 - Open Food Facts is the first external enrichment source; provider-specific logic stays isolated in a dedicated service module
@@ -53,4 +54,5 @@ Pantry is a small monorepo with three runtime services, a staged first-run setup
 - Uploaded files are treated as hostile input
 - Backup uploads are validated as data only, staged in quarantine, and never executed
 - Secrets are encrypted before being stored in database-backed configuration or staged setup state
+- Self-service password reset is instance-scoped and only becomes available when SMTP delivery is configured, successfully tested, and explicitly enabled
 - Provider-specific AI details stay in the configuration layer, not core pantry domain models

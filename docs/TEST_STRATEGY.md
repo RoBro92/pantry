@@ -2,6 +2,8 @@
 
 Run the smallest validation set that still covers the changed surface area.
 
+For normal code changes, run validation from a branch before opening or merging a pull request.
+
 ## Application Changes
 
 Use the local stack when user-visible routing, setup, or runtime wiring changed:
@@ -20,6 +22,12 @@ cd apps/api && pytest -q
 ./infra/scripts/smoke-check.sh
 npm run test:e2e
 ```
+
+Pull requests should at minimum stay green on the repository validation workflow:
+
+- `API Tests`
+- `Web Checks`
+- `Repo Sanity`
 
 ## Setup And Login Changes
 

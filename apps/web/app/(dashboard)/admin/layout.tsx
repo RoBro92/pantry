@@ -14,8 +14,8 @@ export default async function AdminLayout({
   return (
     <div className="stack">
       <section className="panel">
-        <p className="eyebrow">Platform Admin</p>
-        <h1>Installation Console</h1>
+        <p className="eyebrow">Admin Dashboard</p>
+        <h1>Installation console</h1>
         <p>
           This dashboard provides administrative tools for managing your Pantry install.
         </p>

@@ -41,3 +41,33 @@ class SessionResponse(BaseModel):
 
 class LogoutResponse(BaseModel):
     ok: bool
+
+
+class PasswordChangeRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+
+class PasswordActionResponse(BaseModel):
+    ok: bool
+    message: str
+
+
+class PasswordResetAvailabilityResponse(BaseModel):
+    is_available: bool
+    requires_email_address: bool = True
+    reason: str | None = None
+
+
+class PasswordResetRequest(BaseModel):
+    email: str
+
+
+class PasswordResetConfirmRequest(BaseModel):
+    token: str
+    password: str
+
+
+class PasswordResetTokenStatusResponse(BaseModel):
+    is_valid: bool
+    reason: str | None = None

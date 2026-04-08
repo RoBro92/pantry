@@ -145,6 +145,7 @@ export type SetupWizardSMTPConfigSummary = {
   from_name: string | null;
   security: string | null;
   is_enabled: boolean;
+  password_reset_enabled: boolean;
 };
 
 export type SetupWizardStateResponse = {
@@ -231,6 +232,18 @@ export type SMTPConfigValue = {
   is_enabled: boolean;
 };
 
+export type PasswordResetEmailTemplate = {
+  subject: string;
+  body_template: string;
+};
+
+export type PasswordResetEmailSettings = {
+  is_enabled: boolean;
+  is_available: boolean;
+  unavailable_reason: string | null;
+  template: PasswordResetEmailTemplate;
+};
+
 export type SMTPConfigResponse = {
   effective: SMTPConfigValue;
   effective_source: string;
@@ -240,6 +253,7 @@ export type SMTPConfigResponse = {
   last_test_status: string;
   last_tested_at: string | null;
   last_test_error: string | null;
+  password_reset: PasswordResetEmailSettings;
 };
 
 export type SMTPTestResponse = {
@@ -247,6 +261,22 @@ export type SMTPTestResponse = {
   status: string;
   message: string | null;
   config: SMTPConfigResponse;
+};
+
+export type PasswordActionResponse = {
+  ok: boolean;
+  message: string;
+};
+
+export type PasswordResetAvailabilityResponse = {
+  is_available: boolean;
+  requires_email_address: boolean;
+  reason: string | null;
+};
+
+export type PasswordResetTokenStatusResponse = {
+  is_valid: boolean;
+  reason: string | null;
 };
 
 export type DiagnosticsResponse = {
@@ -618,6 +648,9 @@ export type PantryProductMatchSummary = {
   name: string;
   default_unit: string;
   aliases: string[];
+  match_reason: string | null;
+  match_confidence: number | null;
+  can_keep_separate_product: boolean;
 };
 
 export type PantryAliasConflictSummary = {
@@ -632,7 +665,17 @@ export type PantryEntryMutationResponse = {
   product: PantryCatalogProductSummary | null;
   lot: PantryStockLotSummary | null;
   matched_product: PantryProductMatchSummary | null;
+  duplicate_match_reason: string | null;
+  can_keep_separate_product: boolean;
   alias_conflicts: PantryAliasConflictSummary[];
+};
+
+export type PantryDuplicateCheckResponse = {
+  status: string;
+  message: string;
+  matched_product: PantryProductMatchSummary | null;
+  duplicate_match_reason: string | null;
+  can_keep_separate_product: boolean;
 };
 
 export type ShoppingListItemSummary = {
@@ -647,16 +690,30 @@ export type ShoppingListItemSummary = {
   status: string;
   created_at: string;
   completed_at: string | null;
+  purchased_at: string | null;
+  not_purchased_at: string | null;
+};
+
+export type ShoppingListDetailSummary = {
+  external_id: string;
+  name: string;
+  lifecycle_state: string;
+  item_count: number;
+  unresolved_item_count: number;
+  purchased_item_count: number;
+  not_purchased_item_count: number;
+  generated_at: string | null;
+  reconciled_at: string | null;
+  merged_into_list_external_id: string | null;
+  items: ShoppingListItemSummary[];
 };
 
 export type ShoppingListSummary = {
-  external_id: string;
   household_external_id: string;
   household_name: string;
-  name: string;
-  open_item_count: number;
-  completed_item_count: number;
-  items: ShoppingListItemSummary[];
+  active_list: ShoppingListDetailSummary;
+  pending_lists: ShoppingListDetailSummary[];
+  history_lists: ShoppingListDetailSummary[];
 };
 
 export type NearExpiryResponse = {

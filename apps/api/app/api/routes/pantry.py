@@ -23,9 +23,12 @@ from app.schemas.pantry import (
     NearExpiryResponse,
     PantryOverviewResponse,
     PantryEntryMutationResponse,
+    PantryDuplicateCheckRequest,
+    PantryDuplicateCheckResponse,
     ProductSummary,
     RemoveStockRequest,
     StockMutationResponse,
+    UpdateStockLotRequest,
 )
 from app.services.pantry_catalog import create_location, create_location_group, create_product, get_product_by_external_id
 from app.services.location_links import serialize_location_link
@@ -37,9 +40,12 @@ from app.services.pantry_queries import (
 )
 from app.services.pantry_stock import (
     add_stock_lot,
+    buy_more_from_stock_lot,
     create_or_add_pantry_entry,
+    detect_pantry_duplicate,
     move_stock_lot,
     remove_stock_from_lot,
+    update_stock_lot,
 )
 from app.services.product_enrichment import (
     ProductEnrichmentError,
@@ -208,6 +214,7 @@ def post_pantry_entry(
             purchased_on=payload.purchased_on,
             expires_on=payload.expires_on,
             existing_product_external_id=payload.existing_product_external_id,
+            allow_separate_product=payload.allow_separate_product,
             confirmed_enrichment=payload.confirmed_enrichment,
             allow_create_product=access.can_administer,
         )
@@ -232,11 +239,54 @@ def post_pantry_entry(
                 "name": matched_product.name,
                 "default_unit": matched_product.default_unit,
                 "aliases": [alias.name for alias in matched_product.aliases],
+                "match_reason": str(result.get("duplicate_match_reason") or ""),
+                "match_confidence": None,
+                "can_keep_separate_product": bool(result.get("can_keep_separate_product", False)),
             }
             if matched_product is not None
             else None
         ),
+        duplicate_match_reason=str(result.get("duplicate_match_reason") or "") or None,
+        can_keep_separate_product=bool(result.get("can_keep_separate_product", False)),
         alias_conflicts=list(result.get("alias_conflicts", [])),
+    )
+
+
+@router.post("/pantry/entries/duplicate-check", response_model=PantryDuplicateCheckResponse)
+def post_pantry_duplicate_check(
+    payload: PantryDuplicateCheckRequest,
+    db: Session = Depends(get_db_session),
+    access: HouseholdAccess = Depends(require_household_access()),
+):
+    try:
+        duplicate = detect_pantry_duplicate(
+            db,
+            household=access.household,
+            display_name=payload.name or "",
+            barcode=payload.barcode,
+        )
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
+
+    matched_product = duplicate["matched_product"]
+    return PantryDuplicateCheckResponse(
+        status="matched" if matched_product is not None else "none",
+        message=str(duplicate["message"]),
+        matched_product=(
+            {
+                "external_id": matched_product.external_id,
+                "name": matched_product.name,
+                "default_unit": matched_product.default_unit,
+                "aliases": [alias.name for alias in matched_product.aliases],
+                "match_reason": duplicate["match_reason"],
+                "match_confidence": duplicate["match_confidence"],
+                "can_keep_separate_product": bool(duplicate["can_keep_separate_product"]),
+            }
+            if matched_product is not None
+            else None
+        ),
+        duplicate_match_reason=duplicate["match_reason"],
+        can_keep_separate_product=bool(duplicate["can_keep_separate_product"]),
     )
 
 
@@ -287,6 +337,32 @@ def post_remove_stock(
     return StockMutationResponse(lot=build_stock_lot_summary(lot))
 
 
+@router.put("/stock-lots/{lot_external_id}", response_model=StockMutationResponse)
+def put_stock_lot(
+    lot_external_id: str,
+    payload: UpdateStockLotRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
+    access: HouseholdAccess = Depends(require_household_access()),
+):
+    try:
+        lot = update_stock_lot(
+            db,
+            household=access.household,
+            actor=current_user,
+            lot_external_id=lot_external_id,
+            quantity=payload.quantity,
+            location_external_id=payload.location_external_id,
+            note=payload.note,
+            purchased_on=payload.purchased_on,
+            expires_on=payload.expires_on,
+        )
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
+
+    return StockMutationResponse(lot=build_stock_lot_summary(lot))
+
+
 @router.post("/stock-lots/{lot_external_id}/move", response_model=StockMutationResponse)
 def post_move_stock(
     lot_external_id: str,
@@ -311,3 +387,23 @@ def post_move_stock(
         lot=build_stock_lot_summary(lot),
         created_lot=build_stock_lot_summary(created_lot) if created_lot is not None else None,
     )
+
+
+@router.post("/stock-lots/{lot_external_id}/buy-more", response_model=StockMutationResponse)
+def post_buy_more_stock(
+    lot_external_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
+    access: HouseholdAccess = Depends(require_household_access()),
+):
+    try:
+        lot = buy_more_from_stock_lot(
+            db,
+            household=access.household,
+            actor=current_user,
+            lot_external_id=lot_external_id,
+        )
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
+
+    return StockMutationResponse(lot=build_stock_lot_summary(lot))

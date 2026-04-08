@@ -98,6 +98,11 @@ def _event_summary(event: AuditEvent) -> AuditEventSummary:
             f"Moved {metadata['quantity']} {metadata['unit']} {metadata['product_name']} "
             f"to {metadata['to_location_group_name']} / {metadata['to_location_name']}"
         )
+    elif action == "stock.updated":
+        summary = (
+            f"Updated {metadata['product_name']} lot in "
+            f"{metadata['location_group_name']} / {metadata['location_name']}"
+        )
     elif action == "product.created":
         summary = f"Created product {metadata['name']}"
     elif action == "product.metadata_updated":
@@ -112,6 +117,18 @@ def _event_summary(event: AuditEvent) -> AuditEventSummary:
         summary = f"Added {metadata.get('product_name') or metadata['label']} to the shopping list"
     elif action == "shopping_list.item_completed":
         summary = f"Completed {metadata.get('product_name') or metadata['label']} on the shopping list"
+    elif action == "shopping_list.item_updated":
+        summary = f"Updated {metadata.get('product_name') or metadata['label']} on the shopping list"
+    elif action == "shopping_list.item_linked_product":
+        summary = f"Linked {metadata['product_name']} to a shopping item"
+    elif action == "shopping_list.exported":
+        summary = f"Exported {metadata['name']}"
+    elif action == "shopping_list.pending_merged":
+        summary = f"Merged pending shopping lists into {metadata['name']}"
+    elif action == "shopping_list.returned_to_active":
+        summary = f"Moved {metadata['name']} back into the active shopping list"
+    elif action == "shopping_list.reconciled":
+        summary = f"Finished reconciling {metadata['name']}"
     elif action == "setup.completed":
         summary = "Completed first-run setup"
     else:

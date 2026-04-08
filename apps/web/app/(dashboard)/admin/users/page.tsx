@@ -11,7 +11,7 @@ export default async function AdminUsersPage() {
       <AdminUserCreationForm />
       <DataTable
         title="Users"
-        columns={["Email", "Display Name", "Platform Role", "Memberships", "Status"]}
+        columns={["Sign-in ID", "Display Name", "Access", "Memberships", "Status"]}
       >
         {users.map((user) => (
           <tr key={user.external_id}>

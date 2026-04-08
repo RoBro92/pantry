@@ -1,12 +1,13 @@
 # Pantry
 
-Pantry is a self hosted household inventory and meal management application for tracking food, reducing waste, and keeping day to day kitchen workflows clear. It was built as a means to an end as i found the existing offerings such as Grocy were too bloated with features I didn't need. It was also missing some key features i wanted to make the day to day use of the program not be a chore. Think "Remove 20g of cheese for a sandwich" So Pantry was created to provide a simple interface with support for multiple households. 
+Pantry is a self-hosted household inventory and meal management application for tracking food, reducing waste, and keeping day-to-day kitchen workflows clear. It was built to stay practical and lightweight, with support for multiple households and everyday actions that should feel quick rather than cumbersome.
 
 ## Features
 
-- Pantry inventory with Rooms, storage locations, product-first browsing, expandable stock lots, and expiry tracking
-- Optional Open Food Facts product enrichment stored as attached metadata after confirmation first linking
-- Shopping list foundation for depleted or planned replenishment items
+- Pantry inventory with Rooms, storage locations, product-first browsing, condensed stock-lot actions, and expiry tracking
+- Optional Open Food Facts product enrichment with compact barcode lookup, duplicate-aware product creation, and user-owned product identity
+- Shopping lists with active, awaiting-purchase, merge, return, export, and reconciliation flows
+- Password change in user settings plus optional self-service password reset by email when SMTP is configured, tested, and enabled
 - Recipe management with pantry insights
 - QR location access with quick add/remove flows
 - Diagnostics, update visibility, and manual update guidance
@@ -54,12 +55,19 @@ The household pantry page is built as a compact product browser with inline sear
 
 When adding a product, Pantry supports:
 
+- duplicate detection before you commit, including exact barcode matching and name-similarity checks
 - optional Open Food Facts preview and enrichment linking
 - manual ingredient tags that stay user-owned
-- barcode entry with USB-scanner friendly input and browser camera hooks where supported
-- clean duplicate-product detection that routes directly into adding another stock lot instead of creating a second product
+- barcode entry with USB-scanner friendly input, inline lookup, and browser camera hooks where supported
+- clean duplicate-product detection that routes directly into adding another stock lot instead of creating a second product when Pantry already knows the item
 
 Open Food Facts data is advisory enrichment only. Pantry keeps the product name, aliases, and stock identity as user-owned records, while attached enrichment survives backups and restores for later UI, filtering, and AI use.
+
+## Accounts And Access
+
+Logged-in users can change their own password from Settings. Self-service password reset from the login page stays hidden unless a platform admin has configured SMTP, run a successful SMTP test, and explicitly enabled password reset emails for the instance.
+
+Accounts without an email address can still sign in normally, but they cannot use self-service password reset and will need an admin-led reset instead.
 
 ## Updating Pantry
 
@@ -77,7 +85,7 @@ Platform admins can use the admin `Backups` page to:
 - export a household-specific Pantry bundle for retention or inspection
 - upload and validate a full instance restore bundle before applying it deliberately
 
-Current restore support is limited to Pantry backup bundle v1 JSON files from the same schema revision.
+Current restore support is limited to Pantry backup bundle v1 JSON files from the same schema revision or from older revisions explicitly marked restore-compatible by Pantry.
 
 ## Configuration
 
@@ -104,8 +112,27 @@ See:
 - [docs/CONTRIBUTING.md](/Users/robinbrown/Documents/GitHub/pantry/docs/CONTRIBUTING.md)
 - [docs/DEPLOYMENT.md](/Users/robinbrown/Documents/GitHub/pantry/docs/DEPLOYMENT.md)
 - [docs/ARCHITECTURE.md](/Users/robinbrown/Documents/GitHub/pantry/docs/ARCHITECTURE.md)
-- [docs/MILESTONES.md](/Users/robinbrown/Documents/GitHub/pantry/docs/MILESTONES.md)
 - [docs/TEST_STRATEGY.md](/Users/robinbrown/Documents/GitHub/pantry/docs/TEST_STRATEGY.md)
+- [docs/REPOSITORY_MAINTENANCE.md](/Users/robinbrown/Documents/GitHub/pantry/docs/REPOSITORY_MAINTENANCE.md)
+
+## Development Workflow
+
+Pantry uses a branch and pull request workflow for ongoing development.
+
+1. Branch from `main`.
+2. Make one focused, reviewable change.
+3. Run the relevant local validation.
+4. Open a pull request and review the diff and checks.
+5. Merge back to `main` after the change is ready.
+
+Recommended branch prefixes:
+
+- `feature/...`
+- `fix/...`
+- `docs/...`
+- `release/...`
+
+Public contributor and Codex guidance lives in [AGENTS.md](/Users/robinbrown/Documents/GitHub/pantry/AGENTS.md). Internal planning material belongs in `private-docs/`, not the public repo.
 
 ## Troubleshooting
 

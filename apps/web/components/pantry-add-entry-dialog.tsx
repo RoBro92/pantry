@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 import type {
+  PantryDuplicateCheckResponse,
   PantryEnrichmentPreviewResponse,
   PantryEntryMutationResponse,
   PantryLocationSummary,
@@ -19,6 +20,11 @@ type PantryAddEntryDialogProps = {
   canAdminister: boolean;
   locations: PantryLocationSummary[];
   onClose: () => void;
+  title?: string;
+  description?: string;
+  submitLabel?: string;
+  initialValues?: Partial<FormState>;
+  onCompleted?: (response: PantryEntryMutationResponse) => Promise<void> | void;
 };
 
 type FormState = {
@@ -34,6 +40,8 @@ type FormState = {
   manualIngredientInput: string;
   manualIngredientTags: string[];
 };
+
+type DuplicateDecision = "existing" | "separate" | null;
 
 const UNIT_OPTIONS = ["g", "kg", "oz", "lb", "ml", "l", "count", "pack", "bottle", "jar", "can"];
 
@@ -51,6 +59,14 @@ const EMPTY_FORM: FormState = {
   manualIngredientTags: [],
 };
 
+function createInitialForm(initialValues?: Partial<FormState>): FormState {
+  return {
+    ...EMPTY_FORM,
+    ...initialValues,
+    manualIngredientTags: initialValues?.manualIngredientTags ?? [],
+  };
+}
+
 function splitAliases(value: string) {
   return value
     .split(",")
@@ -67,17 +83,26 @@ export function PantryAddEntryDialog({
   canAdminister,
   locations,
   onClose,
+  title = "Add to pantry",
+  description = "Create a product and its first stock lot in one compact flow, with duplicate detection before you commit.",
+  submitLabel = "Add to pantry",
+  initialValues,
+  onCompleted,
 }: PantryAddEntryDialogProps) {
   const router = useRouter();
-  const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const [form, setForm] = useState<FormState>(createInitialForm(initialValues));
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [matchedProduct, setMatchedProduct] = useState<PantryProductMatchSummary | null>(null);
+  const [duplicateDecision, setDuplicateDecision] = useState<DuplicateDecision>(null);
   const [lookupPending, setLookupPending] = useState(false);
+  const [duplicateCheckPending, setDuplicateCheckPending] = useState(false);
   const [lookupPreview, setLookupPreview] = useState<PantryEnrichmentPreviewResponse | null>(null);
+  const [lookupStatus, setLookupStatus] = useState<string | null>(null);
   const [selectedEnrichmentSourceProductId, setSelectedEnrichmentSourceProductId] = useState<string | null>(null);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [lastBarcodeLookupValue, setLastBarcodeLookupValue] = useState("");
 
   const selectedCandidate =
     lookupPreview?.candidates.find(
@@ -86,7 +111,25 @@ export function PantryAddEntryDialog({
 
   function resetEnrichmentPreview() {
     setLookupPreview(null);
+    setLookupStatus(null);
     setSelectedEnrichmentSourceProductId(null);
+  }
+
+  function clearDuplicateState() {
+    setMatchedProduct(null);
+    setDuplicateDecision(null);
+  }
+
+  function applyDuplicateResult(response: PantryDuplicateCheckResponse) {
+    setMatchedProduct(response.matched_product);
+    setDuplicateDecision(
+      response.matched_product
+        ? response.can_keep_separate_product
+          ? "existing"
+          : "existing"
+        : null,
+    );
+    setStatusMessage(response.matched_product ? response.message : null);
   }
 
   function addManualIngredient(value: string) {
@@ -108,24 +151,67 @@ export function PantryAddEntryDialog({
     }));
   }
 
-  async function findProductDetails() {
+  async function runDuplicateCheck() {
+    const candidateName = form.name.trim();
+    const candidateBarcode = form.barcode.trim();
+    if (!candidateName && !candidateBarcode) {
+      clearDuplicateState();
+      return;
+    }
+
+    setDuplicateCheckPending(true);
+    try {
+      const response = await postToApi<PantryDuplicateCheckResponse>(
+        `/api/households/${householdExternalId}/pantry/entries/duplicate-check`,
+        {
+          name: candidateName || null,
+          barcode: candidateBarcode || null,
+        },
+      );
+      applyDuplicateResult(response);
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error ? requestError.message : "Could not check for duplicates.",
+      );
+    } finally {
+      setDuplicateCheckPending(false);
+    }
+  }
+
+  async function findProductDetails(source: "manual" | "blur" = "manual") {
+    const candidateName = form.name.trim();
+    const candidateBarcode = form.barcode.trim();
+    if (!candidateName && !candidateBarcode) {
+      return;
+    }
+
     setLookupPending(true);
     setError(null);
-    setStatusMessage(null);
 
     try {
       const response = await postToApi<PantryEnrichmentPreviewResponse>(
         `/api/households/${householdExternalId}/pantry/enrichment/preview`,
         {
-          product_name: form.name,
-          barcode: form.barcode.trim() || null,
+          product_name: candidateName,
+          barcode: candidateBarcode || null,
         },
       );
       setLookupPreview(response);
       setSelectedEnrichmentSourceProductId(null);
+      if (response.candidates.length > 0) {
+        setLookupStatus(response.message);
+      } else if (response.status === "no_match" && candidateBarcode) {
+        setLookupStatus("No Open Food Facts result found.");
+      } else {
+        setLookupStatus(response.message);
+      }
+      if (source === "blur") {
+        setLastBarcodeLookupValue(candidateBarcode);
+      }
     } catch (requestError) {
       setLookupPreview(null);
       setSelectedEnrichmentSourceProductId(null);
+      setLookupStatus(null);
       setError(
         requestError instanceof Error ? requestError.message : "Could not look up product details.",
       );
@@ -134,7 +220,17 @@ export function PantryAddEntryDialog({
     }
   }
 
-  async function submit(existingProductExternalId?: string) {
+  async function handleSuccessfulMutation(response: PantryEntryMutationResponse) {
+    clearDuplicateState();
+    setStatusMessage(response.message);
+    setForm(createInitialForm(initialValues));
+    resetEnrichmentPreview();
+    router.refresh();
+    await onCompleted?.(response);
+    window.setTimeout(() => onClose(), 250);
+  }
+
+  async function submit() {
     setPending(true);
     setError(null);
     setStatusMessage(null);
@@ -153,7 +249,13 @@ export function PantryAddEntryDialog({
           purchased_on: form.purchasedOn || null,
           expires_on: form.expiresOn || null,
           note: form.note.trim() || null,
-          existing_product_external_id: existingProductExternalId ?? null,
+          existing_product_external_id:
+            matchedProduct && duplicateDecision !== "separate"
+              ? matchedProduct.external_id
+              : null,
+          allow_separate_product:
+            Boolean(matchedProduct?.can_keep_separate_product) &&
+            duplicateDecision === "separate",
           confirmed_enrichment: selectedCandidate
             ? {
                 source_name: selectedCandidate.source_name,
@@ -166,6 +268,9 @@ export function PantryAddEntryDialog({
 
       if (response.status === "existing_product" && response.matched_product) {
         setMatchedProduct(response.matched_product);
+        setDuplicateDecision(
+          response.can_keep_separate_product ? "existing" : "existing",
+        );
         setStatusMessage(response.message);
         if (response.matched_product.default_unit !== form.unit) {
           setForm((current) => ({ ...current, unit: response.matched_product!.default_unit }));
@@ -174,7 +279,7 @@ export function PantryAddEntryDialog({
       }
 
       if (response.status === "alias_conflict") {
-        setMatchedProduct(null);
+        clearDuplicateState();
         setError(
           response.alias_conflicts.length > 0
             ? response.alias_conflicts
@@ -186,17 +291,12 @@ export function PantryAddEntryDialog({
       }
 
       if (response.status === "creation_not_allowed") {
-        setMatchedProduct(null);
+        clearDuplicateState();
         setError(response.message);
         return;
       }
 
-      setMatchedProduct(null);
-      setStatusMessage(response.message);
-      setForm(EMPTY_FORM);
-      resetEnrichmentPreview();
-      router.refresh();
-      window.setTimeout(() => onClose(), 350);
+      await handleSuccessfulMutation(response);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Could not save pantry item.");
     } finally {
@@ -207,38 +307,46 @@ export function PantryAddEntryDialog({
   return (
     <>
       <ModalShell
-        title="Add to pantry"
-        description="Create a product and its first stock lot in one pass, or route straight into adding another lot when the product already exists."
+        title={title}
+        description={description}
         onClose={onClose}
         closeOnBackdropClick={false}
+        panelClassName="modal-panel modal-panel-wide"
       >
         <form
-          className="stack"
+          className="stack pantry-add-form"
           data-testid="pantry-add-entry-form"
           onSubmit={(event) => {
             event.preventDefault();
-            void submit(matchedProduct?.external_id ?? undefined);
+            void submit();
           }}
         >
           <section className="modal-form-section">
-            <div className="stack compact-stack">
-              <h3 className="modal-section-title">Product identity</h3>
-              <p className="helper-text">
-                Pantry keeps the product name, aliases, and manual ingredient tags user-owned even
-                if you attach Open Food Facts enrichment.
-              </p>
+            <div className="setup-card-toolbar">
+              <div className="stack compact-stack">
+                <h3 className="modal-section-title">Product and lot</h3>
+                <p className="helper-text">
+                  Keep the product identity user-owned, then attach optional enrichment only if it
+                  helps.
+                </p>
+              </div>
+              <span className="pill">
+                {duplicateCheckPending ? "Checking duplicates..." : "Duplicate-aware"}
+              </span>
             </div>
-            <div className="content-grid">
+
+            <div className="content-grid pantry-add-grid">
               <label className="field">
                 <span>Product name</span>
                 <input
                   name="name"
                   value={form.name}
                   onChange={(event) => {
-                    setMatchedProduct(null);
+                    clearDuplicateState();
                     resetEnrichmentPreview();
                     setForm((current) => ({ ...current, name: event.target.value }));
                   }}
+                  onBlur={() => void runDuplicateCheck()}
                   placeholder="Beef mince"
                   required
                 />
@@ -246,17 +354,32 @@ export function PantryAddEntryDialog({
 
               <label className="field">
                 <span>Barcode</span>
-                <div className="inline-action-field">
+                <div className="inline-action-field is-multi-action">
                   <input
                     name="barcode"
                     value={form.barcode}
                     onChange={(event) => {
+                      clearDuplicateState();
                       resetEnrichmentPreview();
-                      setMatchedProduct(null);
                       setForm((current) => ({ ...current, barcode: event.target.value }));
+                    }}
+                    onBlur={() => {
+                      const trimmedBarcode = form.barcode.trim();
+                      void runDuplicateCheck();
+                      if (trimmedBarcode && trimmedBarcode !== lastBarcodeLookupValue) {
+                        void findProductDetails("blur");
+                      }
                     }}
                     placeholder="5000111046244"
                   />
+                  <button
+                    type="button"
+                    className="ghost-button compact-button"
+                    disabled={lookupPending || (!form.name.trim() && !form.barcode.trim())}
+                    onClick={() => void findProductDetails("manual")}
+                  >
+                    {lookupPending ? "Looking up..." : "Look up"}
+                  </button>
                   <button
                     type="button"
                     className="ghost-button compact-button"
@@ -264,23 +387,47 @@ export function PantryAddEntryDialog({
                   >
                     Scan
                   </button>
+                  <details className="inline-help-details">
+                    <summary>?</summary>
+                    <p className="helper-text">
+                      USB scanners can type directly into this field. Pantry also tries an Open Food
+                      Facts lookup when you leave the field.
+                    </p>
+                  </details>
                 </div>
-                <p className="helper-text">
-                  USB barcode scanners can type directly into this field. Camera scanning opens only
-                  when the browser supports it.
-                </p>
               </label>
 
               <label className="field">
-                <span>Aliases</span>
+                <span>Quantity</span>
                 <input
-                  name="aliases"
-                  value={form.aliases}
+                  name="quantity"
+                  type="number"
+                  min="0.001"
+                  step="0.001"
+                  value={form.quantity}
                   onChange={(event) =>
-                    setForm((current) => ({ ...current, aliases: event.target.value }))
+                    setForm((current) => ({ ...current, quantity: event.target.value }))
                   }
-                  placeholder="Ground beef, minced beef"
+                  placeholder="1"
+                  required
                 />
+              </label>
+
+              <label className="field">
+                <span>Unit</span>
+                <select
+                  name="unit"
+                  value={form.unit}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, unit: event.target.value }))
+                  }
+                >
+                  {UNIT_OPTIONS.map((unitOption) => (
+                    <option key={unitOption} value={unitOption}>
+                      {unitOption}
+                    </option>
+                  ))}
+                </select>
               </label>
 
               <label className="field">
@@ -301,7 +448,59 @@ export function PantryAddEntryDialog({
                   ))}
                 </select>
               </label>
+
+              <label className="field">
+                <span>Aliases</span>
+                <input
+                  name="aliases"
+                  value={form.aliases}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, aliases: event.target.value }))
+                  }
+                  placeholder="Ground beef, minced beef"
+                />
+              </label>
+
+              <label className="field">
+                <span>Purchased</span>
+                <input
+                  type="date"
+                  name="purchased_on"
+                  value={form.purchasedOn}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, purchasedOn: event.target.value }))
+                  }
+                />
+              </label>
+
+              <label className="field">
+                <span>Expires</span>
+                <input
+                  type="date"
+                  name="expires_on"
+                  value={form.expiresOn}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, expiresOn: event.target.value }))
+                  }
+                />
+              </label>
             </div>
+
+            <p className="helper-text">
+              Aliases accept either <code>ingredient,ingredient</code> or <code>ingredient, ingredient</code>.
+            </p>
+
+            <label className="field">
+              <span>Note</span>
+              <input
+                name="note"
+                value={form.note}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, note: event.target.value }))
+                }
+                placeholder="Family pack"
+              />
+            </label>
 
             <TextTagInput
               label="Manual ingredients"
@@ -314,193 +513,112 @@ export function PantryAddEntryDialog({
               onRemoveTag={removeManualIngredient}
               placeholder="Add an ingredient such as Beef"
               inputName="manual_ingredient"
-              helperText="Manual ingredient tags stay alongside Open Food Facts ingredient enrichment so Pantry can keep both user-entered context and imported detail."
+              helperText="Use commas or spaced commas for aliases. Manual ingredient tags stay alongside any imported enrichment."
             />
           </section>
 
-          <section className="modal-form-section">
-            <div className="setup-card-toolbar">
-              <div className="stack compact-stack">
-                <h3 className="modal-section-title">Open Food Facts enrichment</h3>
-                <p className="helper-text">
-                  Optional enrichment adds ingredients, allergens, dietary tags, nutrition, and an
-                  image URL without replacing Pantry’s product identity.
-                </p>
+          {lookupStatus || lookupPreview || selectedCandidate ? (
+            <section className="modal-form-section">
+              <div className="inline-status-card">
+                <div className="stack compact-stack">
+                  <strong>Open Food Facts</strong>
+                  <p className="helper-text">
+                    {selectedCandidate
+                      ? `${selectedCandidate.source_product_name ?? "Selected match"} will be linked on save.`
+                      : lookupStatus ?? "Optional enrichment is ready if you want it."}
+                  </p>
+                </div>
+                <div className="page-actions">
+                  {lookupPreview?.candidates.length ? (
+                    <details className="compact-disclosure">
+                      <summary>
+                        Review {lookupPreview.candidates.length} match
+                        {lookupPreview.candidates.length === 1 ? "" : "es"}
+                      </summary>
+                      <div className="compact-disclosure-body">
+                        <ProductEnrichmentPreview
+                          preview={lookupPreview}
+                          selectedSourceProductId={selectedEnrichmentSourceProductId}
+                          onSelect={setSelectedEnrichmentSourceProductId}
+                          onClearSelection={() => setSelectedEnrichmentSourceProductId(null)}
+                        />
+                      </div>
+                    </details>
+                  ) : null}
+                  {(lookupPreview || lookupStatus || selectedCandidate) && !lookupPending ? (
+                    <button type="button" className="ghost-button compact-button" onClick={resetEnrichmentPreview}>
+                      Clear
+                    </button>
+                  ) : null}
+                </div>
               </div>
-              <div className="page-actions">
-                <button
-                  type="button"
-                  className="ghost-button"
-                  disabled={lookupPending || (!form.name.trim() && !form.barcode.trim())}
-                  onClick={() => void findProductDetails()}
-                >
-                  {lookupPending ? "Looking up..." : "Look up OFF details"}
-                </button>
-                {lookupPreview ? (
-                  <button type="button" className="ghost-button" onClick={resetEnrichmentPreview}>
-                    Clear preview
-                  </button>
-                ) : null}
-              </div>
-            </div>
-
-            {lookupPreview ? (
-              <ProductEnrichmentPreview
-                preview={lookupPreview}
-                selectedSourceProductId={selectedEnrichmentSourceProductId}
-                onSelect={setSelectedEnrichmentSourceProductId}
-                onClearSelection={() => setSelectedEnrichmentSourceProductId(null)}
-              />
-            ) : (
-              <div className="info-callout">
-                <strong>Lookup stays optional</strong>
-                <p>
-                  You can save the product and stock lot without any external enrichment if the
-                  product is homemade, local, or not present in Open Food Facts.
-                </p>
-              </div>
-            )}
-          </section>
-
-          <section className="modal-form-section">
-            <div className="stack compact-stack">
-              <h3 className="modal-section-title">Stock lot details</h3>
-              <p className="helper-text">
-                Add the first quantity now, or let Pantry route this straight into another lot on
-                an existing product.
-              </p>
-            </div>
-            <div className="split-fields">
-              <label className="field">
-                <span>Quantity</span>
-                <input
-                  name="quantity"
-                  type="number"
-                  min="0.001"
-                  step="0.001"
-                  value={form.quantity}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, quantity: event.target.value }))
-                  }
-                  required
-                />
-              </label>
-              <label className="field">
-                <span>Unit</span>
-                <input
-                  name="unit"
-                  list="pantry-unit-options"
-                  value={form.unit}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, unit: event.target.value }))
-                  }
-                  placeholder="g"
-                  required
-                />
-              </label>
-              <label className="field">
-                <span>Purchase date</span>
-                <input
-                  name="purchased_on"
-                  type="date"
-                  value={form.purchasedOn}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, purchasedOn: event.target.value }))
-                  }
-                />
-              </label>
-              <label className="field">
-                <span>Expiry date</span>
-                <input
-                  name="expires_on"
-                  type="date"
-                  value={form.expiresOn}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, expiresOn: event.target.value }))
-                  }
-                />
-              </label>
-            </div>
-
-            <label className="field">
-              <span>Notes</span>
-              <textarea
-                name="note"
-                rows={3}
-                value={form.note}
-                onChange={(event) => setForm((current) => ({ ...current, note: event.target.value }))}
-                placeholder="Family pack from the market"
-              />
-            </label>
-          </section>
-
-          {!canAdminister ? (
-            <div className="info-callout">
-              <strong>Household-admin creation only</strong>
-              <p>
-                You can add stock to existing products, but creating a brand new product still
-                requires the Household Admin role.
-              </p>
-            </div>
+            </section>
           ) : null}
 
           {matchedProduct ? (
-            <div className="info-callout" data-testid="existing-product-warning">
-              <strong>{matchedProduct.name} already exists</strong>
-              <p>
-                Pantry matched this product already. Saving now will add another stock lot to the
-                existing record and preserve its current product identity.
-              </p>
-              <p>Saved unit: {matchedProduct.default_unit}.</p>
-              {matchedProduct.aliases.length > 0 ? (
-                <p>Known aliases: {matchedProduct.aliases.join(", ")}.</p>
-              ) : null}
-            </div>
-          ) : null}
-
-          {selectedCandidate ? (
-            <div className="info-callout">
-              <strong>Enrichment will be linked on save</strong>
-              <p>
-                Pantry will keep its own product name, aliases, and manual ingredients while
-                storing the selected Open Food Facts record as optional advisory enrichment.
-              </p>
-            </div>
+            <section className="modal-form-section">
+              <div className="inline-status-card is-warning">
+                <div className="stack compact-stack">
+                  <strong>{matchedProduct.name} already looks like the right product</strong>
+                  <p className="helper-text">
+                    {matchedProduct.match_reason === "barcode_exact"
+                      ? "This barcode already belongs to that product, so Pantry will route this lot there."
+                      : matchedProduct.match_reason === "name_similarity"
+                        ? "Pantry found a likely existing product before you add this lot."
+                        : "Pantry found an existing product with the same identity."}
+                  </p>
+                </div>
+                <div className="duplicate-choice-row">
+                  <button
+                    type="button"
+                    className={
+                      duplicateDecision === "existing"
+                        ? "primary-button compact-button"
+                        : "ghost-button compact-button"
+                    }
+                    onClick={() => setDuplicateDecision("existing")}
+                  >
+                    Add lot to existing product
+                  </button>
+                  {matchedProduct.can_keep_separate_product ? (
+                    <button
+                      type="button"
+                      className={
+                        duplicateDecision === "separate"
+                          ? "primary-button compact-button"
+                          : "ghost-button compact-button"
+                      }
+                      onClick={() => setDuplicateDecision("separate")}
+                    >
+                      Keep as separate product
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            </section>
           ) : null}
 
           {error ? <p className="error-text">{error}</p> : null}
           {statusMessage ? <p className="status-note">{statusMessage}</p> : null}
 
           <div className="page-actions">
-            <button
-              type="submit"
-              className="primary-button"
-              disabled={pending || locations.length === 0}
-            >
-              {pending
-                ? "Saving..."
-                : matchedProduct
-                  ? "Add stock lot to existing product"
-                  : "Create product and stock lot"}
+            <button type="submit" className="primary-button" disabled={pending}>
+              {pending ? "Saving..." : submitLabel}
             </button>
           </div>
         </form>
-
-        <datalist id="pantry-unit-options">
-          {UNIT_OPTIONS.map((unit) => (
-            <option key={unit} value={unit} />
-          ))}
-        </datalist>
       </ModalShell>
 
       {isScannerOpen ? (
         <BarcodeScannerDialog
-          onDetected={(value) => {
-            resetEnrichmentPreview();
-            setMatchedProduct(null);
-            setForm((current) => ({ ...current, barcode: value }));
-          }}
           onClose={() => setIsScannerOpen(false)}
+          onDetected={(barcode) => {
+            clearDuplicateState();
+            resetEnrichmentPreview();
+            setForm((current) => ({ ...current, barcode }));
+            setLastBarcodeLookupValue("");
+            setIsScannerOpen(false);
+          }}
         />
       ) : null}
     </>
