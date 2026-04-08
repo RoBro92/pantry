@@ -23,7 +23,15 @@ class ShoppingList(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     normalized_name: Mapped[str] = mapped_column(String(255), nullable=False)
     is_default: Mapped[bool] = mapped_column(Boolean(), nullable=False, default=False)
+    lifecycle_state: Mapped[str] = mapped_column(String(32), nullable=False, default="active")
+    generated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reconciled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    merged_into_list_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("shopping_lists.id"),
+        nullable=True,
+    )
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     household = relationship("Household", back_populates="shopping_lists")
     items = relationship("ShoppingListItem", back_populates="shopping_list")
+    merged_into_list = relationship("ShoppingList", remote_side="ShoppingList.id")

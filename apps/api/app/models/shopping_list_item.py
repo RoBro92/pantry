@@ -28,6 +28,8 @@ class ShoppingListItem(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     source_type: Mapped[str] = mapped_column(String(64), nullable=False, default="manual")
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="open")
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    purchased_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    not_purchased_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     household = relationship("Household", back_populates="shopping_list_items")
     shopping_list = relationship("ShoppingList", back_populates="items")

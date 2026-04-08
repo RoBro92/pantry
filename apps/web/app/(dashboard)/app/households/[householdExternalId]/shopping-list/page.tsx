@@ -1,5 +1,5 @@
 import { ShoppingListPanel } from "../../../../../../components/shopping-list-panel";
-import { getShoppingList, requireSession } from "../../../../../../lib/server-auth";
+import { getPantryOverview, getShoppingList, requireSession } from "../../../../../../lib/server-auth";
 
 type ShoppingListPageProps = {
   params: Promise<{
@@ -12,7 +12,17 @@ export default async function HouseholdShoppingListPage({
 }: ShoppingListPageProps) {
   await requireSession();
   const { householdExternalId } = await params;
-  const shoppingList = await getShoppingList(householdExternalId);
+  const [shoppingList, pantryOverview] = await Promise.all([
+    getShoppingList(householdExternalId),
+    getPantryOverview(householdExternalId),
+  ]);
 
-  return <ShoppingListPanel householdExternalId={householdExternalId} shoppingList={shoppingList} />;
+  return (
+    <ShoppingListPanel
+      householdExternalId={householdExternalId}
+      shoppingList={shoppingList}
+      locations={pantryOverview.locations}
+      canAdminister={pantryOverview.can_administer}
+    />
+  );
 }
