@@ -6,6 +6,7 @@ import type {
   SetupStatusResponse,
   SetupWizardAssignmentSummary,
   SetupWizardDietaryUserSummary,
+  SetupWizardRoomSummary,
   SetupWizardStateResponse,
   SetupWizardUserSummary,
   SessionResponse
@@ -78,6 +79,49 @@ function createStageId() {
     return crypto.randomUUID();
   }
   return `stage-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function createEmptyRoom(stageId = createStageId()): SetupWizardRoomSummary {
+  return {
+    stage_id: stageId,
+    name: "",
+    storage_locations: []
+  };
+}
+
+function deriveLegacyRoomFields(rooms: SetupWizardRoomSummary[]) {
+  const firstRoom = rooms[0];
+  return {
+    location_group_name: firstRoom?.name ?? "",
+    storage_locations: firstRoom?.storage_locations ?? []
+  };
+}
+
+function syncWizardRooms(
+  wizard: SetupWizardStateResponse,
+  rooms: SetupWizardRoomSummary[]
+): SetupWizardStateResponse {
+  const nextRooms = rooms.length > 0 ? rooms : [createEmptyRoom()];
+  return {
+    ...wizard,
+    rooms: nextRooms,
+    ...deriveLegacyRoomFields(nextRooms)
+  };
+}
+
+function buildHouseholdPayload(snapshot: SetupWizardStateResponse) {
+  const syncedSnapshot = syncWizardRooms(snapshot, snapshot.rooms);
+  return {
+    household_name: syncedSnapshot.household_name ?? "",
+    rooms: syncedSnapshot.rooms.map((room) => ({
+      stage_id: room.stage_id,
+      name: room.name ?? "",
+      storage_locations: room.storage_locations
+    })),
+    location_group_name: syncedSnapshot.location_group_name ?? "",
+    storage_locations: syncedSnapshot.storage_locations,
+    household_assignments: syncedSnapshot.household_assignments
+  };
 }
 
 function findAssignment(
@@ -378,7 +422,10 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
   const [currentStep, setCurrentStep] = useState<SetupStepKey>(initialStep);
   const [adminPasswordDraft, setAdminPasswordDraft] = useState<PasswordDraft>(EMPTY_PASSWORD_DRAFT);
   const [userPasswordDrafts, setUserPasswordDrafts] = useState<Record<string, PasswordDraft>>({});
-  const [newLocation, setNewLocation] = useState("");
+  const [expandedRoomStageId, setExpandedRoomStageId] = useState<string | null>(
+    initialState.rooms[0]?.stage_id ?? null
+  );
+  const [newRoomLocations, setNewRoomLocations] = useState<Record<string, string>>({});
   const [newHouseholdDietaryPreference, setNewHouseholdDietaryPreference] = useState("");
   const [newUserDietaryPreference, setNewUserDietaryPreference] = useState<Record<string, string>>({});
   const [aiApiKey, setAiApiKey] = useState("");
@@ -420,6 +467,9 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
       latestAppliedSaveIdRef.current = saveId;
     }
     setWizard(nextState);
+    if (!nextState.rooms.some((room) => room.stage_id === expandedRoomStageId)) {
+      setExpandedRoomStageId(nextState.rooms[0]?.stage_id ?? null);
+    }
     setError(null);
     setStatusMessage(savedMessage ?? "Progress saved.");
   }
@@ -457,12 +507,10 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
     const saveId = ++saveCounterRef.current;
     try {
       updateWizard(
-        await putToApi<SetupWizardStateResponse>("/api/setup/wizard/household", {
-          household_name: snapshot.household_name ?? "",
-          location_group_name: snapshot.location_group_name ?? "",
-          storage_locations: snapshot.storage_locations,
-          household_assignments: snapshot.household_assignments
-        }),
+        await putToApi<SetupWizardStateResponse>(
+          "/api/setup/wizard/household",
+          buildHouseholdPayload(snapshot)
+        ),
         "Household details saved.",
         saveId
       );
@@ -541,12 +589,10 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
 
       if (step === "household") {
         updateWizard(
-          await putToApi<SetupWizardStateResponse>("/api/setup/wizard/household", {
-            household_name: snapshot.household_name ?? "",
-            location_group_name: snapshot.location_group_name ?? "",
-            storage_locations: snapshot.storage_locations,
-            household_assignments: snapshot.household_assignments
-          }),
+          await putToApi<SetupWizardStateResponse>(
+            "/api/setup/wizard/household",
+            buildHouseholdPayload(snapshot)
+          ),
           "Household details saved.",
           saveId
         );
@@ -864,25 +910,78 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
     }
   }
 
-  function addStorageLocation(value: string) {
+  function addRoom() {
+    const nextWizard = syncWizardRooms(wizard, [...wizard.rooms, createEmptyRoom()]);
+    const nextRoom = nextWizard.rooms[nextWizard.rooms.length - 1];
+    setWizard(nextWizard);
+    setExpandedRoomStageId(nextRoom?.stage_id ?? null);
+    void persistHouseholdSnapshot(nextWizard);
+  }
+
+  function removeRoom(stageId: string) {
+    const remainingRooms = wizard.rooms.filter((room) => room.stage_id !== stageId);
+    const nextWizard = syncWizardRooms(wizard, remainingRooms);
+    setWizard(nextWizard);
+    if (expandedRoomStageId === stageId) {
+      setExpandedRoomStageId(nextWizard.rooms[0]?.stage_id ?? null);
+    }
+    setNewRoomLocations((current) => {
+      const nextValues = { ...current };
+      delete nextValues[stageId];
+      return nextValues;
+    });
+    void persistHouseholdSnapshot(nextWizard);
+  }
+
+  function updateRoomName(stageId: string, value: string) {
+    setWizard((current) =>
+      syncWizardRooms(
+        current,
+        current.rooms.map((room) =>
+          room.stage_id === stageId
+            ? {
+                ...room,
+                name: value
+              }
+            : room
+        )
+      )
+    );
+  }
+
+  function addStorageLocation(stageId: string, value: string) {
     const trimmed = value.trim();
     if (!trimmed) {
       return;
     }
-    const nextWizard = {
-      ...wizard,
-      storage_locations: Array.from(new Set([...wizard.storage_locations, trimmed]))
-    };
+    const nextWizard = syncWizardRooms(
+      wizard,
+      wizard.rooms.map((room) =>
+        room.stage_id === stageId
+          ? {
+              ...room,
+              storage_locations: Array.from(new Set([...room.storage_locations, trimmed]))
+            }
+          : room
+      )
+    );
     setWizard(nextWizard);
-    setNewLocation("");
+    setNewRoomLocations((current) => ({ ...current, [stageId]: "" }));
     void persistHouseholdSnapshot(nextWizard);
   }
 
-  function removeStorageLocation(location: string) {
-    const nextWizard = {
-      ...wizard,
-      storage_locations: wizard.storage_locations.filter((item) => item !== location)
-    };
+  function removeStorageLocation(stageId: string, location: string) {
+    const nextWizard = syncWizardRooms(
+      wizard,
+      wizard.rooms.map((room) =>
+        room.stage_id === stageId
+          ? {
+              ...room,
+              storage_locations: room.storage_locations.filter((item) => item !== location)
+            }
+          : room
+      )
+    );
     setWizard(nextWizard);
     void persistHouseholdSnapshot(nextWizard);
   }
@@ -1246,64 +1345,131 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
       return (
         <section className="setup-step-card" data-testid="setup-household-step">
           <p className="eyebrow">Step {stepOrder.indexOf("household") + 1}</p>
-          <h1>First household and storage locations</h1>
+          <h1>First household and rooms</h1>
           <p className="step-copy">
-            Create the first household, name the first room, add its storage locations, and choose
-            who belongs to it.
+            Create the first household, stage multiple rooms with their storage locations, and
+            choose who belongs to it.
           </p>
 
-          <div className="content-grid">
-            <label className="field">
-              <span>Household name</span>
-              <input
-                type="text"
-                name="setup_household_name"
-                value={wizard.household_name ?? ""}
-                autoComplete="organization"
-                autoCapitalize="words"
-                autoCorrect="off"
-                spellCheck={false}
-                onChange={(event) =>
-                  setWizard((current) => ({ ...current, household_name: event.target.value }))
-                }
-                onBlur={() => void persistStep("household", { suppressErrors: true })}
-                placeholder="household"
-              />
-            </label>
-            <label className="field">
-              <span>First room</span>
-              <input
-                type="text"
-                name="setup_location_group_name"
-                value={wizard.location_group_name ?? ""}
-                autoComplete="off"
-                autoCapitalize="words"
-                autoCorrect="off"
-                spellCheck={false}
-                onChange={(event) =>
-                  setWizard((current) => ({ ...current, location_group_name: event.target.value }))
-                }
-                onBlur={() => void persistStep("household", { suppressErrors: true })}
-                placeholder="Kitchen"
-              />
-            </label>
+          <label className="field">
+            <span>Household name</span>
+            <input
+              type="text"
+              name="setup_household_name"
+              value={wizard.household_name ?? ""}
+              autoComplete="organization"
+              autoCapitalize="words"
+              autoCorrect="off"
+              spellCheck={false}
+              onChange={(event) =>
+                setWizard((current) => ({ ...current, household_name: event.target.value }))
+              }
+              onBlur={() => void persistStep("household", { suppressErrors: true })}
+              placeholder="Brown household"
+            />
+          </label>
+
+          <div className="setup-subsection">
+            <div className="setup-subsection-heading">
+              <div className="stack compact-stack">
+                <h2>Rooms and storage locations</h2>
+                <p className="helper-text">
+                  Pantry uses Rooms for high-level spaces such as Kitchen, Garage, or Utility room,
+                  with storage locations inside each one.
+                </p>
+              </div>
+              <button type="button" className="ghost-button" onClick={addRoom}>
+                Add another Room
+              </button>
+            </div>
+
+            <div className="setup-room-stack">
+              {wizard.rooms.map((room, index) => {
+                const isExpanded =
+                  expandedRoomStageId === room.stage_id ||
+                  (expandedRoomStageId === null && index === 0);
+                const roomLabel = room.name?.trim() || `Room ${index + 1}`;
+                return (
+                  <article
+                    key={room.stage_id}
+                    className={`setup-room-card${isExpanded ? " is-expanded" : ""}`}
+                    data-testid={`setup-room-card-${index + 1}`}
+                  >
+                    <div className="setup-room-header">
+                      <button
+                        type="button"
+                        className="setup-room-toggle"
+                        aria-expanded={isExpanded}
+                        onClick={() =>
+                          setExpandedRoomStageId(isExpanded ? null : room.stage_id)
+                        }
+                      >
+                        <div className="stack compact-stack">
+                          <span className="eyebrow">Room {index + 1}</span>
+                          <strong>{roomLabel}</strong>
+                          <p className="helper-text">
+                            {room.storage_locations.length > 0
+                              ? room.storage_locations.join(", ")
+                              : "No storage locations yet"}
+                          </p>
+                        </div>
+                      </button>
+                      {wizard.rooms.length > 1 ? (
+                        <button
+                          type="button"
+                          className="ghost-button compact-button"
+                          onClick={() => removeRoom(room.stage_id)}
+                        >
+                          Remove Room
+                        </button>
+                      ) : (
+                        <span className="pill">Required</span>
+                      )}
+                    </div>
+
+                    {isExpanded ? (
+                      <div className="setup-room-body">
+                        <label className="field">
+                          <span>Room name</span>
+                          <input
+                            type="text"
+                            name={`setup_room_name_${room.stage_id}`}
+                            value={room.name ?? ""}
+                            autoComplete="off"
+                            autoCapitalize="words"
+                            autoCorrect="off"
+                            spellCheck={false}
+                            onChange={(event) =>
+                              updateRoomName(room.stage_id, event.target.value)
+                            }
+                            onBlur={() => void persistStep("household", { suppressErrors: true })}
+                            placeholder="Kitchen"
+                          />
+                        </label>
+
+                        <TokenEditor
+                          tokens={room.storage_locations}
+                          suggestions={LOCATION_SUGGESTIONS}
+                          newValue={newRoomLocations[room.stage_id] ?? ""}
+                          onNewValueChange={(value) =>
+                            setNewRoomLocations((current) => ({
+                              ...current,
+                              [room.stage_id]: value
+                            }))
+                          }
+                          onAddToken={(value) => addStorageLocation(room.stage_id, value)}
+                          onRemoveToken={(value) => removeStorageLocation(room.stage_id, value)}
+                          label="Storage locations"
+                          placeholder="Add a storage location such as Fridge"
+                          inputName={`setup_storage_location_${room.stage_id}`}
+                        />
+                      </div>
+                    ) : null}
+                  </article>
+                );
+              })}
+            </div>
           </div>
-
-          <TokenEditor
-            tokens={wizard.storage_locations}
-            suggestions={LOCATION_SUGGESTIONS}
-            newValue={newLocation}
-            onNewValueChange={setNewLocation}
-            onAddToken={(value) => addStorageLocation(value)}
-            onRemoveToken={removeStorageLocation}
-            label="Storage locations in this room"
-            placeholder="Add a storage location such as Fridge"
-            inputName="setup_storage_location"
-          />
-          <p className="helper-text">
-            Pantry uses rooms for high-level spaces such as Kitchen or Garage, with storage
-            locations inside each room.
-          </p>
 
           <div className="setup-subsection">
             <div className="setup-subsection-heading">
@@ -1878,12 +2044,16 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                 </button>
               </div>
               <p>{wizard.household_name || "Not configured yet"}</p>
-              <p>
-                Room {wizard.location_group_name || "Not configured yet"}:{" "}
-                {wizard.storage_locations.length > 0
-                  ? wizard.storage_locations.join(", ")
-                  : "No storage locations yet"}
-              </p>
+              <div className="review-room-list">
+                {wizard.rooms.map((room, index) => (
+                  <p key={room.stage_id}>
+                    Room {index + 1}: {room.name || "Not configured yet"} ·{" "}
+                    {room.storage_locations.length > 0
+                      ? room.storage_locations.join(", ")
+                      : "No storage locations yet"}
+                  </p>
+                ))}
+              </div>
               <p>
                 Members:{" "}
                 {configuredUsers
