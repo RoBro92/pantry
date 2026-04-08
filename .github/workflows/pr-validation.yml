@@ -1,0 +1,94 @@
+name: Pull Request Validation
+
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+
+concurrency:
+  group: pr-validation-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  api-tests:
+    name: API Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: apps/api/requirements-dev.txt
+
+      - name: Install API dependencies
+        run: python -m pip install -r apps/api/requirements-dev.txt
+
+      - name: Run API test suite
+        working-directory: apps/api
+        run: pytest -q
+
+  web-checks:
+    name: Web Checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install workspace dependencies
+        run: npm ci
+
+      - name: Run frontend typecheck
+        run: npm run typecheck:web
+
+      - name: Run frontend build
+        run: npm run build:web
+
+  repo-sanity:
+    name: Repo Sanity
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Validate workflow YAML
+        run: ruby -e 'require "yaml"; Dir[".github/workflows/*.{yml,yaml}"].each { |path| YAML.load_file(path); puts "validated #{path}" }'
+
+      - name: Validate release and helper shell syntax
+        run: |
+          bash -n \
+            infra/scripts/read-version.sh \
+            infra/scripts/release-manifest.sh \
+            infra/scripts/check-release-metadata.sh \
+            infra/scripts/install-pantry.sh \
+            infra/scripts/update-pantry.sh \
+            infra/scripts/healthcheck-pantry.sh \
+            infra/scripts/lib/pantry-selfhost.sh \
+            infra/scripts/validate-release.sh \
+            infra/scripts/bump-version.sh \
+            infra/scripts/tag-release.sh \
+            infra/scripts/smoke-check.sh \
+            infra/scripts/e2e-seed.sh \
+            infra/scripts/e2e-reset-uninitialized.sh \
+            infra/scripts/worker-once.sh
+
+      - name: Render release compose file
+        run: docker compose --env-file infra/env/pantry.env.example -f infra/compose/pantry.yml config >/dev/null
