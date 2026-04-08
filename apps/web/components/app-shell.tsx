@@ -25,6 +25,7 @@ export function AppShell({ session, releaseStatus, children }: AppShellProps) {
           </p>
           <nav className="nav-list">
             <Link href="/app">Dashboard</Link>
+            <Link href="/app/settings">Settings</Link>
             {session.memberships.map((membership) => (
               <div key={membership.external_id} className="nav-group">
                 <span className="nav-group-title">{membership.household_name}</span>
@@ -45,8 +46,9 @@ export function AppShell({ session, releaseStatus, children }: AppShellProps) {
             ))}
             {session.user.platform_role === "platform_admin" ? (
               <div className="nav-group">
-                <span className="nav-group-title">Platform Admin</span>
-                <Link href="/admin">Dashboard</Link>
+                <Link href="/admin" className="sidebar-admin-link">
+                  Admin Dashboard
+                </Link>
               </div>
             ) : null}
           </nav>

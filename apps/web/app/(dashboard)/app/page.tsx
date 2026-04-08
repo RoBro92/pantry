@@ -46,6 +46,9 @@ export default async function SessionPage() {
                 membership from the installation console to start using pantry.
               </p>
               <div className="page-actions">
+                <Link href="/app/settings" className="secondary-link">
+                  Account settings
+                </Link>
                 <Link href="/admin/households" className="primary-link">
                   Open household setup
                 </Link>
@@ -95,12 +98,12 @@ export default async function SessionPage() {
       </section>
 
       {session.user.platform_role === "platform_admin" ? (
-        <section className="panel">
-          <p className="eyebrow">Platform Admin</p>
-          <p>
-            The admin dashboard provides installation-level tools for managing households, users,
-            and memberships across Pantry.
-          </p>
+      <section className="panel">
+        <p className="eyebrow">Admin</p>
+        <p>
+          The admin dashboard provides installation-level tools for managing households, users,
+          and memberships across Pantry.
+        </p>
           <Link href="/admin" className="primary-link">
             Open admin dashboard
           </Link>
