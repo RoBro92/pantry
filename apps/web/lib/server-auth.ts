@@ -17,6 +17,7 @@ import type {
   RecipeListResponse,
   SMTPConfigResponse,
   SessionResponse,
+  ShoppingListSummary,
   SetupStatusResponse,
   SetupWizardStateResponse
 } from "./api-types";
@@ -86,15 +87,15 @@ export async function getReleaseStatus(): Promise<ReleaseCheckResponse> {
 
 function withQuery(
   path: string,
-  params: Record<string, string | null | undefined>
+  params: Record<string, string | boolean | null | undefined>
 ): string {
   const search = new URLSearchParams();
 
   Object.entries(params).forEach(([key, value]) => {
-    if (!value) {
+    if (value === null || value === undefined || value === "" || value === false) {
       return;
     }
-    search.set(key, value);
+    search.set(key, String(value));
   });
 
   const query = search.toString();
@@ -107,11 +108,18 @@ export async function getPantryOverview(
     q?: string | null;
     location_group_external_id?: string | null;
     location_external_id?: string | null;
+    near_expiry_only?: boolean | null;
   } = {}
 ): Promise<PantryOverview> {
   return apiGet<PantryOverview>(
     withQuery(`/api/households/${householdExternalId}/pantry/overview`, params)
   );
+}
+
+export async function getShoppingList(
+  householdExternalId: string
+): Promise<ShoppingListSummary> {
+  return apiGet<ShoppingListSummary>(`/api/households/${householdExternalId}/shopping-list`);
 }
 
 export async function getNearExpiry(

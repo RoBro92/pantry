@@ -13,12 +13,12 @@ type AppShellProps = {
 
 export function AppShell({ session, releaseStatus, children }: AppShellProps) {
   return (
-    <main className="page-shell">
+    <main className="page-shell dashboard-page-shell">
       {releaseStatus ? <AdminReleaseNotesDialog initialReleaseStatus={releaseStatus} /> : null}
       <div className="shell-grid">
         <aside className="sidebar panel">
           <p className="eyebrow">Pantry {appConfig.version}</p>
-          <h1 className="shell-title">Home</h1>
+          <h1 className="shell-title">Navigation</h1>
           <p className="sidebar-copy">
             {session.memberships.length} household
             {session.memberships.length === 1 ? "" : "s"} visible
@@ -29,6 +29,9 @@ export function AppShell({ session, releaseStatus, children }: AppShellProps) {
               <div key={membership.external_id} className="nav-group">
                 <span className="nav-group-title">{membership.household_name}</span>
                 <Link href={`/app/households/${membership.household_external_id}`}>Pantry</Link>
+                <Link href={`/app/households/${membership.household_external_id}/shopping-list`}>
+                  Shopping List
+                </Link>
                 <Link href={`/app/households/${membership.household_external_id}/imports`}>
                   Imports
                 </Link>
