@@ -39,6 +39,8 @@ HOUSEHOLD_EXPORT_TABLES = {
     "product_aliases",
     "barcodes",
     "stock_lots",
+    "shopping_lists",
+    "shopping_list_items",
     "recipes",
     "recipe_ingredients",
     "recipe_url_imports",
@@ -70,6 +72,27 @@ class RestoreCompatibility:
 
 
 _SCHEMA_COMPATIBILITY: dict[tuple[str | None, str | None], RestoreCompatibility] = {
+    (
+        "20260408_000011",
+        "20260407_000010",
+    ): RestoreCompatibility(
+        supported=True,
+        allowed_missing_tables=frozenset({"shopping_lists", "shopping_list_items"}),
+        warnings=(
+            "This backup predates shopping list foundations. Shopping list records will restore as empty.",
+        ),
+    ),
+    (
+        "20260408_000011",
+        "20260407_000009",
+    ): RestoreCompatibility(
+        supported=True,
+        allowed_missing_tables=frozenset({"product_enrichments", "shopping_lists", "shopping_list_items"}),
+        warnings=(
+            "This backup predates product enrichment support. Product enrichment records will restore as empty.",
+            "This backup predates shopping list foundations. Shopping list records will restore as empty.",
+        ),
+    ),
     (
         "20260407_000010",
         "20260407_000009",

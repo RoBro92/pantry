@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from sqlalchemy import ForeignKey, String, UniqueConstraint
+from sqlalchemy import JSON, ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
@@ -22,12 +22,14 @@ class Product(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     normalized_name: Mapped[str] = mapped_column(String(255), nullable=False)
     default_unit: Mapped[str] = mapped_column(String(32), nullable=False)
+    manual_ingredient_tags: Mapped[list[str] | None] = mapped_column(JSON(), nullable=True)
 
     household = relationship("Household", back_populates="products")
     aliases = relationship("ProductAlias", back_populates="product")
     barcodes = relationship("Barcode", back_populates="product")
     enrichments = relationship("ProductEnrichment", back_populates="product")
     stock_lots = relationship("StockLot", back_populates="product")
+    shopping_list_items = relationship("ShoppingListItem", back_populates="product")
     recipe_ingredients = relationship("RecipeIngredient", back_populates="product")
     import_lines = relationship("ImportLine", back_populates="product", foreign_keys="ImportLine.product_id")
     suggested_import_lines = relationship(

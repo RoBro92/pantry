@@ -34,6 +34,7 @@ from app.schemas.setup import (
     StagedSetupAIConfigSummary,
     StagedSetupAssignmentSummary,
     StagedSetupDietaryUserSummary,
+    StagedSetupRoomSummary,
     StagedSetupSMTPConfigSummary,
     StagedSetupUserSummary,
 )
@@ -82,6 +83,7 @@ RESTORE_STEP_ORDER = ["welcome", "review"]
 REQUIRED_STEPS = {"welcome", "users", "household"}
 OPTIONAL_STEPS = {"public_url", "dietary", "ai", "smtp"}
 DEFAULT_LOCATION_GROUP_NAME = "Kitchen"
+DEFAULT_SETUP_ROOM_STAGE_ID = "room-1"
 DEFAULT_ADMIN_STAGE_ID = "platform-admin"
 SETUP_MODE_FRESH_INSTALL = "fresh_install"
 SETUP_MODE_RESTORE_BACKUP = "restore_backup"
@@ -89,6 +91,14 @@ SETUP_MODE_RESTORE_BACKUP = "restore_backup"
 
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _default_room_payload(*, stage_id: str = DEFAULT_SETUP_ROOM_STAGE_ID) -> dict[str, object]:
+    return {
+        "stage_id": stage_id,
+        "name": DEFAULT_LOCATION_GROUP_NAME,
+        "storage_locations": [],
+    }
 
 
 def _default_payload() -> dict[str, object]:
@@ -105,8 +115,7 @@ def _default_payload() -> dict[str, object]:
         "initial_users": [],
         "household": {
             "name": "",
-            "location_group_name": DEFAULT_LOCATION_GROUP_NAME,
-            "storage_locations": [],
+            "rooms": [_default_room_payload()],
             "assignments": [],
         },
         "public_base_url": "",
@@ -131,6 +140,35 @@ def _default_payload() -> dict[str, object]:
             "is_enabled": False,
         },
     }
+
+
+def _normalize_setup_rooms(raw_rooms: list[dict[str, object]] | None) -> list[dict[str, object]]:
+    if not raw_rooms:
+        return [_default_room_payload()]
+
+    normalized_rooms: list[dict[str, object]] = []
+    seen_room_names: set[str] = set()
+    for index, room in enumerate(raw_rooms):
+        stage_id = str(room.get("stage_id") or f"room-{index + 1}")
+        room_name = _normalize_optional_text(room.get("name") if isinstance(room.get("name"), str) else None)
+        normalized_room_name = normalize_lookup_name(room_name) if room_name else None
+        if normalized_room_name:
+            if normalized_room_name in seen_room_names:
+                raise ValueError("Each staged room must have a unique name.")
+            seen_room_names.add(normalized_room_name)
+
+        storage_locations = dedupe_preserving_order(
+            [str(item).strip() for item in room.get("storage_locations") or [] if str(item).strip()]
+        )
+        normalized_rooms.append(
+            {
+                "stage_id": stage_id,
+                "name": room_name,
+                "storage_locations": storage_locations,
+            }
+        )
+
+    return normalized_rooms or [_default_room_payload()]
 
 
 def _get_setup_state_record(db: Session) -> SetupState | None:
@@ -162,7 +200,19 @@ def _merged_payload(payload: dict[str, object] | None) -> dict[str, object]:
     if isinstance(source.get("initial_users"), list):
         merged["initial_users"] = source["initial_users"]
     if isinstance(source.get("household"), dict):
-        merged["household"].update(source["household"])  # type: ignore[arg-type]
+        household = source["household"]
+        merged["household"]["name"] = household.get("name") or ""
+        merged["household"]["assignments"] = household.get("assignments") or []
+        raw_rooms = household.get("rooms") if isinstance(household.get("rooms"), list) else None
+        if raw_rooms is None:
+            raw_rooms = [
+                {
+                    "stage_id": DEFAULT_SETUP_ROOM_STAGE_ID,
+                    "name": household.get("location_group_name"),
+                    "storage_locations": household.get("storage_locations") or [],
+                }
+            ]
+        merged["household"]["rooms"] = _normalize_setup_rooms(raw_rooms)  # type: ignore[arg-type]
     if isinstance(source.get("public_base_url"), str):
         merged["public_base_url"] = source["public_base_url"]
     if isinstance(source.get("skipped_optional_steps"), list):
@@ -177,6 +227,9 @@ def _merged_payload(payload: dict[str, object] | None) -> dict[str, object]:
         merged["ai"].update(source["ai"])  # type: ignore[arg-type]
     if isinstance(source.get("smtp"), dict):
         merged["smtp"].update(source["smtp"])  # type: ignore[arg-type]
+
+    household = merged["household"]
+    household["rooms"] = _normalize_setup_rooms(household.get("rooms") if isinstance(household.get("rooms"), list) else None)
 
     return merged
 
@@ -236,6 +289,14 @@ def _serialize_user(user: dict[str, object], *, is_platform_admin: bool) -> Stag
     )
 
 
+def _serialize_room(room: dict[str, object]) -> StagedSetupRoomSummary:
+    return StagedSetupRoomSummary(
+        stage_id=str(room.get("stage_id") or DEFAULT_SETUP_ROOM_STAGE_ID),
+        name=_normalize_optional_text(room.get("name") if isinstance(room.get("name"), str) else None),
+        storage_locations=[str(item) for item in room.get("storage_locations") or []],
+    )
+
+
 def _current_step_keys(payload: dict[str, object]) -> list[str]:
     if payload.get("installation_mode") == SETUP_MODE_RESTORE_BACKUP:
         return RESTORE_STEP_ORDER
@@ -288,6 +349,7 @@ def _compute_step_completion(payload: dict[str, object]) -> dict[str, bool]:
     smtp = payload["smtp"]
     staged_restore = payload.get("staged_restore") if isinstance(payload.get("staged_restore"), dict) else None
     skipped_optional_steps = set(payload.get("skipped_optional_steps") or [])
+    rooms = _normalize_setup_rooms(household.get("rooms") if isinstance(household.get("rooms"), list) else None)
     install_selection_complete = bool(
         installation_mode == SETUP_MODE_FRESH_INSTALL
         or (staged_restore and staged_restore.get("supported_for_restore"))
@@ -299,7 +361,10 @@ def _compute_step_completion(payload: dict[str, object]) -> dict[str, bool]:
         and bool(admin_user.get("password_hash"))
         and all(bool(user.get("login")) and bool(user.get("password_hash")) for user in initial_users)
     )
-    household_complete = bool(str(household.get("name") or "").strip()) and len(household.get("storage_locations") or []) > 0
+    household_complete = bool(str(household.get("name") or "").strip()) and bool(rooms) and all(
+        bool(str(room.get("name") or "").strip()) and len(room.get("storage_locations") or []) > 0
+        for room in rooms
+    )
     public_url_complete = bool(str(payload.get("public_base_url") or "").strip()) or "public_url" in skipped_optional_steps
     dietary_complete = (
         bool(dietary.get("household_preferences") or dietary.get("user_preferences"))
@@ -351,7 +416,7 @@ def _missing_requirements(payload: dict[str, object]) -> list[str]:
     if not completion["users"]:
         missing.append("Create a platform admin login and save a password.")
     if not completion["household"]:
-        missing.append("Add the first household and at least one storage location.")
+        missing.append("Add the first household and at least one room with storage locations.")
     return missing
 
 
@@ -393,6 +458,10 @@ def get_setup_status(db: Session) -> SetupStatusResponse:
                 payload["admin_user"].get("login"),
                 payload["initial_users"],
                 payload["household"].get("name"),
+                any(
+                    room.get("name") or room.get("storage_locations")
+                    for room in payload["household"].get("rooms") or []
+                ),
                 payload.get("public_base_url"),
             ]
         )
@@ -431,6 +500,8 @@ def get_setup_wizard_state(db: Session) -> SetupWizardStateResponse:
     dietary = payload["dietary"]
     ai = payload["ai"]
     smtp = payload["smtp"]
+    rooms = _normalize_setup_rooms(household.get("rooms") if isinstance(household.get("rooms"), list) else None)
+    first_room = rooms[0] if rooms else _default_room_payload()
 
     return SetupWizardStateResponse(
         status=get_setup_status(db),
@@ -440,8 +511,9 @@ def get_setup_wizard_state(db: Session) -> SetupWizardStateResponse:
         admin_user=_serialize_user(admin_user, is_platform_admin=True),
         initial_users=[_serialize_user(user, is_platform_admin=False) for user in initial_users],
         household_name=_normalize_optional_text(str(household.get("name") or "")),
-        location_group_name=_normalize_optional_text(str(household.get("location_group_name") or DEFAULT_LOCATION_GROUP_NAME)),
-        storage_locations=[str(item) for item in household.get("storage_locations") or []],
+        rooms=[_serialize_room(room) for room in rooms],
+        location_group_name=_normalize_optional_text(str(first_room.get("name") or DEFAULT_LOCATION_GROUP_NAME)),
+        storage_locations=[str(item) for item in first_room.get("storage_locations") or []],
         household_assignments=[
             StagedSetupAssignmentSummary(
                 stage_user_id=str(item.get("stage_user_id") or ""),
@@ -605,11 +677,28 @@ def update_setup_users(db: Session, payload: SetupUsersUpdateRequest) -> SetupWi
 def update_setup_household(db: Session, payload: SetupHouseholdUpdateRequest) -> SetupWizardStateResponse:
     state = _get_or_create_setup_state(db)
     merged = _merged_payload(state.payload)
+    raw_rooms = (
+        [
+            {
+                "stage_id": room.stage_id,
+                "name": room.name,
+                "storage_locations": room.storage_locations,
+            }
+            for room in payload.rooms
+        ]
+        if payload.rooms
+        else [
+            {
+                "stage_id": DEFAULT_SETUP_ROOM_STAGE_ID,
+                "name": payload.location_group_name,
+                "storage_locations": payload.storage_locations,
+            }
+        ]
+    )
 
     merged["household"] = {
         "name": payload.household_name.strip(),
-        "location_group_name": (_normalize_optional_text(payload.location_group_name) or DEFAULT_LOCATION_GROUP_NAME),
-        "storage_locations": dedupe_preserving_order([item.strip() for item in payload.storage_locations if item.strip()]),
+        "rooms": _normalize_setup_rooms(raw_rooms),
         "assignments": [
             {"stage_user_id": assignment.stage_user_id, "role": assignment.role}
             for assignment in payload.household_assignments
@@ -857,24 +946,29 @@ def finalize_setup(db: Session) -> User:
         db.add(household)
         db.flush()
 
-        location_group = LocationGroup(
-            household_id=household.id,
-            name=require_text(str(household_data.get("location_group_name") or DEFAULT_LOCATION_GROUP_NAME), field_name="Storage area label"),
-            normalized_name=normalize_lookup_name(str(household_data.get("location_group_name") or DEFAULT_LOCATION_GROUP_NAME)),
-        )
-        db.add(location_group)
-        db.flush()
-
-        for location_name in household_data.get("storage_locations") or []:
-            display_name = require_text(str(location_name), field_name="Storage location")
-            db.add(
-                Location(
-                    household_id=household.id,
-                    location_group_id=location_group.id,
-                    name=display_name,
-                    normalized_name=normalize_lookup_name(display_name),
-                )
+        rooms = _normalize_setup_rooms(household_data.get("rooms") if isinstance(household_data.get("rooms"), list) else None)
+        total_storage_location_count = 0
+        for room in rooms:
+            room_name = require_text(str(room.get("name") or ""), field_name="Room name")
+            location_group = LocationGroup(
+                household_id=household.id,
+                name=room_name,
+                normalized_name=normalize_lookup_name(room_name),
             )
+            db.add(location_group)
+            db.flush()
+
+            for location_name in room.get("storage_locations") or []:
+                display_name = require_text(str(location_name), field_name="Storage location")
+                db.add(
+                    Location(
+                        household_id=household.id,
+                        location_group_id=location_group.id,
+                        name=display_name,
+                        normalized_name=normalize_lookup_name(display_name),
+                    )
+                )
+                total_storage_location_count += 1
 
         assignments = {item["stage_user_id"]: item["role"] for item in household_data.get("assignments") or []}
         assignments[DEFAULT_ADMIN_STAGE_ID] = HOUSEHOLD_ADMIN_ROLE
@@ -940,7 +1034,8 @@ def finalize_setup(db: Session) -> User:
             target_external_id=state.external_id,
             event_metadata={
                 "household_external_id": household.external_id,
-                "storage_location_count": len(household_data.get("storage_locations") or []),
+                "room_count": len(rooms),
+                "storage_location_count": total_storage_location_count,
                 "initial_user_count": len(payload["initial_users"]),
                 "public_base_url": settings.public_base_url,
                 "ai_enabled": bool(ai_payload.get("is_enabled")),

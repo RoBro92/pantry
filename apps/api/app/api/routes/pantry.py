@@ -27,7 +27,7 @@ from app.schemas.pantry import (
     RemoveStockRequest,
     StockMutationResponse,
 )
-from app.services.pantry_catalog import create_location, create_location_group, create_product
+from app.services.pantry_catalog import create_location, create_location_group, create_product, get_product_by_external_id
 from app.services.location_links import serialize_location_link
 from app.services.pantry_queries import (
     PantryFilterOptions,
@@ -61,6 +61,7 @@ def get_pantry_overview(
     q: str | None = None,
     location_group_external_id: str | None = None,
     location_external_id: str | None = None,
+    near_expiry_only: bool = False,
     db: Session = Depends(get_db_session),
     access: HouseholdAccess = Depends(require_household_access()),
 ):
@@ -71,6 +72,7 @@ def get_pantry_overview(
             q=q,
             location_group_external_id=location_group_external_id,
             location_external_id=location_external_id,
+            near_expiry_only=near_expiry_only,
         ),
     )
 
@@ -146,6 +148,7 @@ def post_product(
             default_unit=payload.default_unit,
             aliases=payload.aliases,
             barcodes=payload.barcodes,
+            manual_ingredient_tags=payload.manual_ingredient_tags,
         )
     except ValueError as exc:
         raise _bad_request(exc) from exc
@@ -160,7 +163,11 @@ def post_product(
                 confirmed_enrichment=payload.confirmed_enrichment,
             )
             db.commit()
-            db.refresh(product)
+            db.expire_all()
+            product = (
+                get_product_by_external_id(db, household=access.household, external_id=product.external_id)
+                or product
+            )
         except ProductEnrichmentError:
             pass
 
@@ -196,6 +203,7 @@ def post_pantry_entry(
             location_external_id=payload.location_external_id,
             barcode=payload.barcode,
             aliases=payload.aliases,
+            manual_ingredient_tags=payload.manual_ingredient_tags,
             note=payload.note,
             purchased_on=payload.purchased_on,
             expires_on=payload.expires_on,

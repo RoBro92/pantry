@@ -15,10 +15,14 @@ from app.models.user import User
 from app.services.audit import record_audit_event
 from app.services.pantry_catalog import (
     create_product,
+    ensure_product_alias,
+    ensure_product_barcode,
     find_alias_conflicts,
     get_location_by_external_id,
+    get_product_by_barcode,
     get_product_by_external_id,
     get_product_by_lookup_name,
+    merge_manual_ingredient_tags,
 )
 from app.services.product_enrichment import ProductEnrichmentError, apply_confirmed_product_enrichment
 from app.services.pantry_normalization import normalize_unit, require_text
@@ -132,6 +136,7 @@ def create_or_add_pantry_entry(
     location_external_id: str,
     barcode: str | None,
     aliases: list[str],
+    manual_ingredient_tags: list[str],
     note: str | None,
     purchased_on: date | None,
     expires_on: date | None,
@@ -140,17 +145,45 @@ def create_or_add_pantry_entry(
     allow_create_product: bool = True,
 ) -> dict[str, object]:
     display_name = require_text(name, field_name="Product name")
-    matched_product = get_product_by_lookup_name(db, household=household, lookup_name=display_name)
+    matched_product, match_message = _find_existing_product(
+        db,
+        household=household,
+        display_name=display_name,
+        barcode=barcode,
+    )
 
     if matched_product is not None:
         if existing_product_external_id != matched_product.external_id:
             return {
                 "status": "existing_product",
-                "message": f"{matched_product.name} already exists.",
+                "message": match_message,
                 "matched_product": matched_product,
                 "alias_conflicts": [],
             }
 
+        alias_conflicts = find_alias_conflicts(
+            db,
+            household=household,
+            aliases=aliases,
+            ignore_product_id=matched_product.id,
+        )
+        if alias_conflicts:
+            conflict_names = ", ".join(conflict["alias"] for conflict in alias_conflicts)
+            return {
+                "status": "alias_conflict",
+                "message": f"These aliases are already in use: {conflict_names}.",
+                "alias_conflicts": alias_conflicts,
+            }
+
+        metadata_message = _merge_existing_product_metadata(
+            db,
+            household=household,
+            actor=actor,
+            product=matched_product,
+            aliases=aliases,
+            barcode=barcode,
+            manual_ingredient_tags=manual_ingredient_tags,
+        )
         lot = add_stock_lot(
             db,
             household=household,
@@ -162,22 +195,35 @@ def create_or_add_pantry_entry(
             purchased_on=purchased_on,
             expires_on=expires_on,
             unit_override=None,
+            commit=False,
         )
+        enrichment_message = _try_apply_confirmed_enrichment(
+            db,
+            household=household,
+            actor=actor,
+            product=matched_product,
+            confirmed_enrichment=confirmed_enrichment,
+        )
+        db.commit()
+        db.expire_all()
+        refreshed_product = get_product_by_external_id(
+            db,
+            household=household,
+            external_id=matched_product.external_id,
+        ) or matched_product
+        refreshed_lot = get_stock_lot_by_external_id(db, household=household, external_id=lot.external_id) or lot
         return {
             "status": "added_to_existing",
             "message": _build_enrichment_message(
-                f"Added another stock lot to {matched_product.name}.",
-                _try_apply_confirmed_enrichment(
-                    db,
-                    household=household,
-                    actor=actor,
-                    product=matched_product,
-                    confirmed_enrichment=confirmed_enrichment,
+                _build_metadata_message(
+                    f"Added another stock lot to {matched_product.name}.",
+                    metadata_message,
                 ),
+                enrichment_message,
             ),
-            "product": matched_product,
-            "lot": lot,
-            "matched_product": matched_product,
+            "product": refreshed_product,
+            "lot": refreshed_lot,
+            "matched_product": refreshed_product,
             "alias_conflicts": [],
         }
 
@@ -205,6 +251,8 @@ def create_or_add_pantry_entry(
         default_unit=unit,
         aliases=aliases,
         barcodes=[barcode] if barcode and barcode.strip() else [],
+        manual_ingredient_tags=manual_ingredient_tags,
+        commit=False,
     )
     lot = add_stock_lot(
         db,
@@ -217,6 +265,7 @@ def create_or_add_pantry_entry(
         purchased_on=purchased_on,
         expires_on=expires_on,
         unit_override=None,
+        commit=False,
     )
     enrichment_message = _try_apply_confirmed_enrichment(
         db,
@@ -225,17 +274,106 @@ def create_or_add_pantry_entry(
         product=product,
         confirmed_enrichment=confirmed_enrichment,
     )
+    db.commit()
+    db.expire_all()
+    refreshed_product = get_product_by_external_id(db, household=household, external_id=product.external_id) or product
+    refreshed_lot = get_stock_lot_by_external_id(db, household=household, external_id=lot.external_id) or lot
     return {
         "status": "created",
         "message": _build_enrichment_message(
             f"Created {product.name} and added the first stock lot.",
             enrichment_message,
         ),
-        "product": product,
-        "lot": lot,
+        "product": refreshed_product,
+        "lot": refreshed_lot,
         "matched_product": None,
         "alias_conflicts": [],
     }
+
+
+def _find_existing_product(
+    db: Session,
+    *,
+    household: Household,
+    display_name: str,
+    barcode: str | None,
+) -> tuple[Product | None, str]:
+    barcode_product = None
+    if barcode and barcode.strip():
+        barcode_product = get_product_by_barcode(db, household=household, barcode=barcode)
+
+    name_product = get_product_by_lookup_name(db, household=household, lookup_name=display_name)
+    matched_product = barcode_product or name_product
+    if matched_product is None:
+        return None, ""
+
+    if barcode_product is not None and name_product is not None and barcode_product.id != name_product.id:
+        return barcode_product, (
+            f"The barcode entered here already belongs to {barcode_product.name}. "
+            "Add this as another stock lot to that product or clear the barcode."
+        )
+    if barcode_product is not None:
+        return barcode_product, f"{barcode_product.name} already exists for this barcode."
+    return name_product, f"{name_product.name} already exists."
+
+
+def _merge_existing_product_metadata(
+    db: Session,
+    *,
+    household: Household,
+    actor: User,
+    product: Product,
+    aliases: list[str],
+    barcode: str | None,
+    manual_ingredient_tags: list[str],
+) -> str | None:
+    added_aliases = [
+        alias_name
+        for alias_name in aliases
+        if ensure_product_alias(db, household=household, product=product, alias_name=alias_name)
+    ]
+
+    added_barcodes: list[str] = []
+    if barcode and barcode.strip():
+        barcode_product = get_product_by_barcode(db, household=household, barcode=barcode)
+        if barcode_product is not None and barcode_product.id != product.id:
+            raise ValueError(f"The barcode entered here already belongs to {barcode_product.name}.")
+        if ensure_product_barcode(db, household=household, product=product, barcode_value=barcode):
+            added_barcodes.append(barcode.strip())
+
+    manual_ingredients_updated = merge_manual_ingredient_tags(
+        product,
+        manual_ingredient_tags=manual_ingredient_tags,
+    )
+    if manual_ingredients_updated:
+        db.add(product)
+
+    if not added_aliases and not added_barcodes and not manual_ingredients_updated:
+        return None
+
+    record_audit_event(
+        db,
+        household=household,
+        actor=actor,
+        action="product.metadata_updated",
+        target_type="product",
+        target_external_id=product.external_id,
+        event_metadata={
+            "product_name": product.name,
+            "aliases_added": added_aliases,
+            "barcodes_added": added_barcodes,
+            "manual_ingredient_tags": list(product.manual_ingredient_tags or []),
+        },
+    )
+
+    parts: list[str] = []
+    if added_aliases:
+        parts.append(f"saved aliases: {', '.join(added_aliases)}")
+    if added_barcodes:
+        parts.append("saved barcode")
+    if manual_ingredients_updated:
+        parts.append("saved manual ingredients")
+    return "; ".join(parts)
 
 
 def _try_apply_confirmed_enrichment(
@@ -256,11 +394,15 @@ def _try_apply_confirmed_enrichment(
             product=product,
             confirmed_enrichment=confirmed_enrichment,
         )
-        db.commit()
-        db.refresh(product)
         return "Open Food Facts details linked."
     except ProductEnrichmentError as exc:
         return f"Open Food Facts details were not linked: {exc}"
+
+
+def _build_metadata_message(base_message: str, metadata_message: str | None) -> str:
+    if not metadata_message:
+        return base_message
+    return f"{base_message} Pantry also {metadata_message}."
 
 
 def _build_enrichment_message(base_message: str, enrichment_message: str | None) -> str:

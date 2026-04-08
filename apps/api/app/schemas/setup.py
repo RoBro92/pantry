@@ -48,6 +48,12 @@ class StagedSetupAssignmentSummary(BaseModel):
     role: Literal["household_admin", "household_user"]
 
 
+class StagedSetupRoomSummary(BaseModel):
+    stage_id: str
+    name: str | None = None
+    storage_locations: list[str] = Field(default_factory=list)
+
+
 class StagedSetupDietaryUserSummary(BaseModel):
     stage_user_id: str
     preferences: list[str] = Field(default_factory=list)
@@ -80,6 +86,7 @@ class SetupWizardStateResponse(BaseModel):
     admin_user: StagedSetupUserSummary
     initial_users: list[StagedSetupUserSummary] = Field(default_factory=list)
     household_name: str | None = None
+    rooms: list[StagedSetupRoomSummary] = Field(default_factory=list)
     location_group_name: str | None = None
     storage_locations: list[str] = Field(default_factory=list)
     household_assignments: list[StagedSetupAssignmentSummary] = Field(default_factory=list)
@@ -120,10 +127,17 @@ class SetupHouseholdAssignmentInput(BaseModel):
     role: Literal["household_admin", "household_user"] = "household_user"
 
 
+class SetupHouseholdRoomInput(BaseModel):
+    stage_id: str
+    name: str | None = None
+    storage_locations: list[str] = Field(default_factory=list)
+
+
 class SetupHouseholdUpdateRequest(BaseModel):
     household_name: str
     location_group_name: str | None = None
     storage_locations: list[str] = Field(default_factory=list)
+    rooms: list[SetupHouseholdRoomInput] = Field(default_factory=list)
     household_assignments: list[SetupHouseholdAssignmentInput] = Field(default_factory=list)
 
 

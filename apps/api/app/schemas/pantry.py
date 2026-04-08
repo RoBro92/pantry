@@ -20,6 +20,7 @@ class CreateProductRequest(BaseModel):
     default_unit: str
     aliases: list[str] = Field(default_factory=list)
     barcodes: list[str] = Field(default_factory=list)
+    manual_ingredient_tags: list[str] = Field(default_factory=list)
     confirmed_enrichment: "ConfirmedProductEnrichmentRequest | None" = None
 
 
@@ -30,6 +31,7 @@ class CreatePantryEntryRequest(BaseModel):
     location_external_id: str
     barcode: str | None = None
     aliases: list[str] = Field(default_factory=list)
+    manual_ingredient_tags: list[str] = Field(default_factory=list)
     purchased_on: date | None = None
     expires_on: date | None = None
     note: str | None = None
@@ -61,12 +63,18 @@ class ProductEnrichmentSummary(BaseModel):
     source_product_name: str | None
     source_product_url: str | None
     product_image_url: str | None
+    enrichment_status: str | None = None
     ingredients_text: str | None
+    ingredient_tags: list[str] = Field(default_factory=list)
+    ingredient_tokens: list[str] = Field(default_factory=list)
     allergens_text: str | None
     traces_text: str | None
     allergen_tags: list[str] = Field(default_factory=list)
     trace_tags: list[str] = Field(default_factory=list)
+    dietary_tags: list[str] = Field(default_factory=list)
+    nutriments_payload: dict[str, object] = Field(default_factory=dict)
     nutrition_summary: list[ProductNutritionSummaryItem] = Field(default_factory=list)
+    nutrition_summary_text: str | None = None
     labels: list[str] = Field(default_factory=list)
     categories: list[str] = Field(default_factory=list)
     match_status: str | None = None
@@ -88,12 +96,18 @@ class ProductEnrichmentCandidate(BaseModel):
     source_product_name: str | None
     source_product_url: str | None
     product_image_url: str | None
+    enrichment_status: str | None = None
     ingredients_text: str | None
+    ingredient_tags: list[str] = Field(default_factory=list)
+    ingredient_tokens: list[str] = Field(default_factory=list)
     allergens_text: str | None
     traces_text: str | None
     allergen_tags: list[str] = Field(default_factory=list)
     trace_tags: list[str] = Field(default_factory=list)
+    dietary_tags: list[str] = Field(default_factory=list)
+    nutriments_payload: dict[str, object] = Field(default_factory=dict)
     nutrition_summary: list[ProductNutritionSummaryItem] = Field(default_factory=list)
+    nutrition_summary_text: str | None = None
     labels: list[str] = Field(default_factory=list)
     categories: list[str] = Field(default_factory=list)
     match_status: str
@@ -159,6 +173,7 @@ class ProductSummary(BaseModel):
     default_unit: str
     aliases: list[str]
     barcodes: list[str]
+    manual_ingredient_tags: list[str] = Field(default_factory=list)
     enrichment: ProductEnrichmentSummary | None = None
 
 
@@ -176,8 +191,15 @@ class PantryProductSummary(BaseModel):
     unit: str
     total_quantity: Decimal
     lot_count: int
+    stock_status: str
+    room_summary: str
+    storage_summary: str
+    nearest_expiry_on: date | None = None
+    near_expiry_lot_count: int = 0
+    manual_ingredient_tags: list[str] = Field(default_factory=list)
     aliases: list[str]
     barcodes: list[str]
+    is_in_shopping_list: bool = False
     enrichment: ProductEnrichmentSummary | None = None
     locations: list[ProductLocationSummary]
     stock_lots: list["StockLotSummary"]
@@ -208,6 +230,8 @@ class StockLotSummary(BaseModel):
     note: str | None
     purchased_on: date | None
     expires_on: date | None
+    depleted_at: datetime | None = None
+    is_depleted: bool = False
     is_near_expiry: bool
 
 
@@ -225,6 +249,7 @@ class PantryFilters(BaseModel):
     q: str | None
     location_group_external_id: str | None
     location_external_id: str | None
+    near_expiry_only: bool = False
 
 
 class PantryCounts(BaseModel):
@@ -233,6 +258,7 @@ class PantryCounts(BaseModel):
     product_count: int
     active_lot_count: int
     near_expiry_lot_count: int
+    out_of_stock_product_count: int = 0
 
 
 class PantryOverviewResponse(BaseModel):

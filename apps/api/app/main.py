@@ -21,6 +21,7 @@ from app.api.routes.pantry import router as pantry_router
 from app.api.routes.release_admin import router as release_admin_router
 from app.api.routes.recipes import router as recipes_router
 from app.api.routes.settings_admin import router as settings_admin_router
+from app.api.routes.shopping_lists import router as shopping_lists_router
 from app.api.routes.setup import router as setup_router
 from app.api.routes.smtp_admin import router as smtp_admin_router
 from app.core.config import get_settings
@@ -156,6 +157,7 @@ app.include_router(smtp_admin_router, prefix="/api")
 app.include_router(households_router, prefix="/api")
 app.include_router(ai_households_router, prefix="/api")
 app.include_router(pantry_router, prefix="/api")
+app.include_router(shopping_lists_router, prefix="/api")
 app.include_router(recipes_router, prefix="/api")
 app.include_router(imports_router, prefix="/api")
 app.include_router(location_links_router, prefix="/api")

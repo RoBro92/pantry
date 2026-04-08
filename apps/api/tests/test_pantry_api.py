@@ -99,15 +99,21 @@ def build_enrichment_candidate(
         source_product_name=source_product_name,
         source_product_url=f"https://world.openfoodfacts.org/product/{source_product_id}",
         product_image_url="https://images.example.test/product.jpg",
+        enrichment_status="candidate",
         ingredients_text="Tomatoes, vinegar, barley malt",
+        ingredient_tags=["tomatoes", "vinegar", "barley-malt"],
+        ingredient_tokens=["tomatoes", "vinegar", "barley", "malt"],
         allergens_text="Gluten",
         traces_text="Mustard",
         allergen_tags=["Gluten"],
         trace_tags=["Mustard"],
+        dietary_tags=["vegetarian"],
+        nutriments_payload={"energy-kcal_100g": 100, "salt_100g": 1.2},
         nutrition_summary=[
             ProductNutritionSummaryItem(key="energy-kcal", label="Energy", value=100, unit="kcal"),
             ProductNutritionSummaryItem(key="salt", label="Salt", value=1.2, unit="g"),
         ],
+        nutrition_summary_text="Energy 100 kcal per 100 g · Salt 1.2 g per 100 g",
         labels=["Vegetarian"],
         categories=["Brown Sauces"],
         match_status=match_status,
@@ -381,6 +387,80 @@ def test_pantry_entry_detects_existing_product_then_adds_new_stock_lot(client, d
     assert {lot["location_name"] for lot in product_payload["stock_lots"]} == {"Shelf", "Freezer"}
 
 
+def test_pantry_entry_persists_manual_ingredient_tags_and_matches_existing_barcode(client, db_session):
+    _, household = create_household_with_role(
+        db_session,
+        email="entry-barcode@example.com",
+        household_name="Entry Barcode Household",
+        role_code=HOUSEHOLD_ADMIN_ROLE,
+    )
+    login(client, email="entry-barcode@example.com")
+
+    room = create_location_group(client, household.external_id, "Kitchen")
+    shelf = create_location(client, household.external_id, room["external_id"], "Shelf")
+    fridge = create_location(client, household.external_id, room["external_id"], "Fridge")
+
+    first_entry = create_pantry_entry(
+        client,
+        household.external_id,
+        name="Brown sauce",
+        quantity="1.000",
+        unit="bottle",
+        location_external_id=shelf["external_id"],
+        barcode="5000111046244",
+        aliases=["HP sauce"],
+        manual_ingredient_tags=["Tomatoes", "Vinegar"],
+    )
+    assert first_entry["status"] == "created"
+    assert first_entry["product"]["manual_ingredient_tags"] == ["Tomatoes", "Vinegar"]
+
+    duplicate_attempt = create_pantry_entry(
+        client,
+        household.external_id,
+        name="HP brown sauce",
+        quantity="1.000",
+        unit="bottle",
+        location_external_id=fridge["external_id"],
+        barcode="5000111046244",
+        aliases=["Breakfast sauce"],
+        manual_ingredient_tags=["Barley malt"],
+    )
+    assert duplicate_attempt["status"] == "existing_product"
+    assert duplicate_attempt["matched_product"]["name"] == "Brown sauce"
+
+    confirmed_duplicate = create_pantry_entry(
+        client,
+        household.external_id,
+        name="HP brown sauce",
+        quantity="1.000",
+        unit="bottle",
+        location_external_id=fridge["external_id"],
+        barcode="5000111046244",
+        aliases=["Breakfast sauce"],
+        manual_ingredient_tags=["Barley malt"],
+        existing_product_external_id=duplicate_attempt["matched_product"]["external_id"],
+    )
+    assert confirmed_duplicate["status"] == "added_to_existing"
+    assert "saved aliases: Breakfast sauce" in confirmed_duplicate["message"]
+    assert "saved manual ingredients" in confirmed_duplicate["message"]
+
+    overview = client.get(
+        f"/api/households/{household.external_id}/pantry/overview",
+        params={"q": "5000111046244"},
+    )
+    assert overview.status_code == 200
+    product_payload = overview.json()["products"][0]
+    assert product_payload["product_name"] == "Brown sauce"
+    assert sorted(product_payload["manual_ingredient_tags"]) == [
+        "Barley malt",
+        "Tomatoes",
+        "Vinegar",
+    ]
+    assert "Breakfast sauce" in product_payload["aliases"]
+    assert product_payload["barcodes"] == ["5000111046244"]
+    assert len(product_payload["stock_lots"]) == 2
+
+
 def test_pantry_entry_reports_alias_conflicts(client, db_session):
     _, household = create_household_with_role(
         db_session,
@@ -515,12 +595,26 @@ def test_product_enrichment_preview_and_confirmed_persistence(client, db_session
     stored_enrichment = db_session.scalar(select(ProductEnrichment))
     assert stored_enrichment is not None
     assert stored_enrichment.source_product_id == "5000111046244"
+    assert stored_enrichment.enrichment_status == "linked"
     assert stored_enrichment.ingredients_text == "Tomatoes, vinegar, barley malt"
+    assert stored_enrichment.ingredient_tags == ["tomatoes", "vinegar", "barley-malt"]
+    assert stored_enrichment.ingredient_tokens == ["tomatoes", "vinegar", "barley", "malt"]
+    assert stored_enrichment.dietary_tags == ["vegetarian"]
+    assert stored_enrichment.nutriments_payload["salt_100g"] == 1.2
+    assert stored_enrichment.nutrition_summary_text == "Energy 100 kcal per 100 g · Salt 1.2 g per 100 g"
 
     overview = client.get(f"/api/households/{household.external_id}/pantry/overview")
     assert overview.status_code == 200
     overview_payload = overview.json()
     assert overview_payload["products"][0]["enrichment"]["labels"] == ["Vegetarian"]
+    assert overview_payload["products"][0]["enrichment"]["ingredient_tags"] == [
+        "tomatoes",
+        "vinegar",
+        "barley-malt",
+    ]
+    assert overview_payload["products"][0]["enrichment"]["nutrition_summary_text"] == (
+        "Energy 100 kcal per 100 g · Salt 1.2 g per 100 g"
+    )
 
 
 def test_move_stock_preserves_identity_on_full_move_and_splits_on_partial_move(client, db_session):
@@ -618,10 +712,65 @@ def test_remove_stock_depletes_lot_and_excludes_it_from_active_views(client, db_
     assert overview.status_code == 200
     assert overview.json()["counts"]["active_lot_count"] == 0
     assert overview.json()["stock_lots"] == []
+    assert overview.json()["counts"]["out_of_stock_product_count"] == 1
+    assert overview.json()["products"][0]["stock_status"] == "out_of_stock"
+    assert overview.json()["products"][0]["stock_lots"] == []
 
     stored_lot = db_session.scalar(select(StockLot).where(StockLot.external_id == lot["external_id"]))
     assert stored_lot is not None
     assert stored_lot.depleted_at is not None
+
+
+def test_household_shopping_list_accepts_product_entries_and_status_changes(client, db_session):
+    _, household = create_household_with_role(
+        db_session,
+        email="shopping@example.com",
+        household_name="Shopping Household",
+        role_code=HOUSEHOLD_ADMIN_ROLE,
+    )
+    login(client, email="shopping@example.com")
+
+    room = create_location_group(client, household.external_id, "Kitchen")
+    shelf = create_location(client, household.external_id, room["external_id"], "Shelf")
+    product = create_product(
+        client,
+        household.external_id,
+        name="Pasta",
+        default_unit="count",
+        aliases=[],
+        barcodes=[],
+    )
+    add_stock_lot(
+        client,
+        household.external_id,
+        product_external_id=product["external_id"],
+        location_external_id=shelf["external_id"],
+        quantity="2.000",
+    )
+
+    added = client.post(
+        f"/api/households/{household.external_id}/shopping-list/items",
+        json={
+            "product_external_id": product["external_id"],
+            "source_type": "pantry_product",
+        },
+    )
+    assert added.status_code == 201
+    added_payload = added.json()
+    assert added_payload["open_item_count"] == 1
+    assert added_payload["items"][0]["product_name"] == "Pasta"
+    assert added_payload["items"][0]["status"] == "open"
+
+    item_external_id = added_payload["items"][0]["external_id"]
+    completed = client.post(
+        f"/api/households/{household.external_id}/shopping-list/items/{item_external_id}/complete",
+        json={"status": "completed"},
+    )
+    assert completed.status_code == 200
+    completed_payload = completed.json()
+    assert completed_payload["open_item_count"] == 0
+    assert completed_payload["completed_item_count"] == 1
+    assert completed_payload["items"][0]["status"] == "completed"
 
 
 def test_pantry_endpoints_enforce_household_scoping(client, db_session):

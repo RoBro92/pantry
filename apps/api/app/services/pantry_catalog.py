@@ -15,6 +15,7 @@ from app.services.pantry_normalization import (
     dedupe_preserving_order,
     normalize_barcode,
     normalize_lookup_name,
+    normalize_text_tags,
     normalize_unit,
     require_text,
 )
@@ -87,6 +88,26 @@ def get_product_by_lookup_name(
     if alias is None:
         return None
     return get_product_by_external_id(db, household=household, external_id=alias.product.external_id)
+
+
+def get_product_by_barcode(
+    db: Session,
+    *,
+    household: Household,
+    barcode: str,
+) -> Product | None:
+    normalized_barcode = normalize_barcode(barcode)
+    barcode_record = db.scalar(
+        select(Barcode)
+        .where(Barcode.household_id == household.id)
+        .where(Barcode.normalized_value == normalized_barcode)
+        .options(selectinload(Barcode.product).selectinload(Product.aliases))
+        .options(selectinload(Barcode.product).selectinload(Product.barcodes))
+        .options(selectinload(Barcode.product).selectinload(Product.enrichments))
+    )
+    if barcode_record is None:
+        return None
+    return get_product_by_external_id(db, household=household, external_id=barcode_record.product.external_id)
 
 
 def find_alias_conflicts(
@@ -254,6 +275,7 @@ def _validate_barcodes(
     *,
     household: Household,
     normalized_barcodes: list[str],
+    ignore_product_id=None,
 ) -> None:
     if not normalized_barcodes:
         return
@@ -263,7 +285,7 @@ def _validate_barcodes(
         .where(Barcode.household_id == household.id)
         .where(Barcode.normalized_value.in_(normalized_barcodes))
     )
-    if existing_barcode is not None:
+    if existing_barcode is not None and existing_barcode.product_id != ignore_product_id:
         raise ValueError("A product with one of those barcodes already exists.")
 
 
@@ -276,6 +298,8 @@ def create_product(
     default_unit: str,
     aliases: list[str],
     barcodes: list[str],
+    manual_ingredient_tags: list[str] | None = None,
+    commit: bool = True,
 ) -> Product:
     display_name = require_text(name, field_name="Product name")
     normalized_name = normalize_lookup_name(display_name)
@@ -292,6 +316,7 @@ def create_product(
         ]
     )
     barcode_display_values = dedupe_preserving_order([normalize_barcode(value) for value in barcodes if value.strip()])
+    ingredient_tags = normalize_text_tags(manual_ingredient_tags or [], field_name="Ingredient")
 
     _validate_product_names(
         db,
@@ -305,6 +330,7 @@ def create_product(
         name=display_name,
         normalized_name=normalized_name,
         default_unit=normalized_unit,
+        manual_ingredient_tags=ingredient_tags or None,
     )
     db.add(product)
     db.flush()
@@ -347,11 +373,15 @@ def create_product(
             "default_unit": normalized_unit,
             "aliases": [alias.name for alias in alias_models],
             "barcodes": [barcode.value for barcode in barcode_models],
+            "manual_ingredient_tags": ingredient_tags,
         },
     )
-    db.commit()
-    db.refresh(product)
-    return get_product_by_external_id(db, household=household, external_id=product.external_id) or product
+    if commit:
+        db.commit()
+        db.refresh(product)
+        return get_product_by_external_id(db, household=household, external_id=product.external_id) or product
+
+    return product
 
 
 def ensure_product_alias(
@@ -392,4 +422,50 @@ def ensure_product_alias(
         )
     )
     db.flush()
+    return True
+
+
+def ensure_product_barcode(
+    db: Session,
+    *,
+    household: Household,
+    product: Product,
+    barcode_value: str,
+) -> bool:
+    normalized_value = normalize_barcode(barcode_value)
+
+    existing_barcode = db.scalar(
+        select(Barcode)
+        .where(Barcode.household_id == household.id)
+        .where(Barcode.normalized_value == normalized_value)
+    )
+    if existing_barcode is not None:
+        return existing_barcode.product_id == product.id and False
+
+    db.add(
+        Barcode(
+            household_id=household.id,
+            product_id=product.id,
+            value=normalized_value,
+            normalized_value=normalized_value,
+        )
+    )
+    db.flush()
+    return True
+
+
+def merge_manual_ingredient_tags(
+    product: Product,
+    *,
+    manual_ingredient_tags: list[str],
+) -> bool:
+    next_tags = normalize_text_tags(manual_ingredient_tags, field_name="Ingredient")
+    existing_tags = normalize_text_tags(list(product.manual_ingredient_tags or []), field_name="Ingredient")
+    if not next_tags:
+        return False
+
+    merged_tags = normalize_text_tags([*existing_tags, *next_tags], field_name="Ingredient")
+    if merged_tags == existing_tags:
+        return False
+    product.manual_ingredient_tags = merged_tags
     return True

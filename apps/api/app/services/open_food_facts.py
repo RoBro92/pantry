@@ -4,6 +4,7 @@ from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass
 from difflib import SequenceMatcher
+import re
 from time import monotonic
 from typing import Any
 
@@ -31,6 +32,7 @@ OPEN_FOOD_FACTS_PRODUCT_FIELDS = ",".join(
         "image_url",
         "ingredients_text",
         "ingredients_text_en",
+        "ingredients_tags",
         "allergens",
         "allergens_from_ingredients",
         "allergens_tags",
@@ -53,6 +55,7 @@ _NUTRITION_FIELDS = (
     ("proteins", "Protein", "g"),
     ("salt", "Salt", "g"),
 )
+_INGREDIENT_SPLIT_RE = re.compile(r"[,;]")
 
 
 class OpenFoodFactsUnavailableError(RuntimeError):
@@ -123,6 +126,51 @@ def _friendly_tags(values: Any, *, limit: int = 8) -> list[str]:
     return cleaned
 
 
+def _normalized_token(value: str) -> str | None:
+    normalized = re.sub(r"[^a-z0-9]+", " ", value.casefold()).strip()
+    normalized = " ".join(normalized.split())
+    return normalized or None
+
+
+def _ingredient_tags(payload: dict[str, Any], *, limit: int = 24) -> list[str]:
+    tags = _friendly_tags(payload.get("ingredients_tags"), limit=limit)
+    if tags:
+        return tags
+
+    ingredients_text = _clean_text(payload.get("ingredients_text")) or _clean_text(payload.get("ingredients_text_en"))
+    if ingredients_text is None:
+        return []
+
+    cleaned: list[str] = []
+    seen: set[str] = set()
+    for fragment in _INGREDIENT_SPLIT_RE.split(ingredients_text):
+        candidate = fragment.strip(" .:-")
+        if not candidate:
+            continue
+        normalized = candidate.casefold()
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        cleaned.append(candidate)
+        if len(cleaned) >= limit:
+            break
+    return cleaned
+
+
+def _ingredient_tokens(tags: list[str], *, limit: int = 32) -> list[str]:
+    tokens: list[str] = []
+    seen: set[str] = set()
+    for tag in tags:
+        normalized = _normalized_token(tag)
+        if normalized is None or normalized in seen:
+            continue
+        seen.add(normalized)
+        tokens.append(normalized)
+        if len(tokens) >= limit:
+            break
+    return tokens
+
+
 def _nutrition_summary(nutriments: Any) -> list[ProductNutritionSummaryItem]:
     if not isinstance(nutriments, dict):
         return []
@@ -146,6 +194,27 @@ def _nutrition_summary(nutriments: Any) -> list[ProductNutritionSummaryItem]:
             )
         )
     return summary
+
+
+def _nutrition_summary_text(summary: list[ProductNutritionSummaryItem]) -> str | None:
+    if not summary:
+        return None
+    return " · ".join(
+        f"{item.label} {item.value}{f' {item.unit}' if item.unit else ''}"
+        for item in summary[:6]
+    )
+
+
+def _dietary_tags(*, labels: list[str], allergen_tags: list[str], trace_tags: list[str]) -> list[str]:
+    tags: list[str] = []
+    seen: set[str] = set()
+    for value in [*labels, *allergen_tags, *trace_tags]:
+        normalized = value.casefold()
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        tags.append(value)
+    return tags[:12]
 
 
 def _name_confidence(query_name: str, candidate_name: str | None) -> float | None:
@@ -192,11 +261,16 @@ def _candidate_from_product(
     ingredients_text = _clean_text(payload.get("ingredients_text")) or _clean_text(payload.get("ingredients_text_en"))
     allergens_text = _clean_text(payload.get("allergens_from_ingredients")) or _clean_text(payload.get("allergens"))
     traces_text = _clean_text(payload.get("traces"))
+    ingredient_tags = _ingredient_tags(payload)
+    ingredient_tokens = _ingredient_tokens(ingredient_tags)
     allergen_tags = _friendly_tags(payload.get("allergens_tags"))
     trace_tags = _friendly_tags(payload.get("traces_tags"))
     labels = _friendly_tags(payload.get("labels_tags"))
     categories = _friendly_tags(payload.get("categories_tags"))
-    nutrition_summary = _nutrition_summary(payload.get("nutriments"))
+    dietary_tags = _dietary_tags(labels=labels, allergen_tags=allergen_tags, trace_tags=trace_tags)
+    nutriments_payload = payload.get("nutriments") if isinstance(payload.get("nutriments"), dict) else {}
+    nutrition_summary = _nutrition_summary(nutriments_payload)
+    nutrition_summary_text = _nutrition_summary_text(nutrition_summary)
 
     incomplete_fields: list[str] = []
     if image_url is None:
@@ -221,12 +295,18 @@ def _candidate_from_product(
         source_product_name=product_name,
         source_product_url=product_url,
         product_image_url=image_url,
+        enrichment_status="candidate",
         ingredients_text=ingredients_text,
+        ingredient_tags=ingredient_tags,
+        ingredient_tokens=ingredient_tokens,
         allergens_text=allergens_text,
         traces_text=traces_text,
         allergen_tags=allergen_tags,
         trace_tags=trace_tags,
+        dietary_tags=dietary_tags,
+        nutriments_payload=nutriments_payload,
         nutrition_summary=nutrition_summary,
+        nutrition_summary_text=nutrition_summary_text,
         labels=labels,
         categories=categories,
         match_status=match_status,

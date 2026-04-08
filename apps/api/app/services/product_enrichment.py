@@ -51,12 +51,18 @@ def serialize_product_enrichment(enrichment: ProductEnrichment | None) -> Produc
         source_product_name=enrichment.source_product_name,
         source_product_url=enrichment.source_product_url,
         product_image_url=enrichment.product_image_url,
+        enrichment_status=enrichment.enrichment_status,
         ingredients_text=enrichment.ingredients_text,
+        ingredient_tags=list(enrichment.ingredient_tags or []),
+        ingredient_tokens=list(enrichment.ingredient_tokens or []),
         allergens_text=enrichment.allergens_text,
         traces_text=enrichment.traces_text,
         allergen_tags=list(enrichment.allergen_tags or []),
         trace_tags=list(enrichment.trace_tags or []),
+        dietary_tags=list(enrichment.dietary_tags or []),
+        nutriments_payload=cast(dict, enrichment.nutriments_payload or {}),
         nutrition_summary=cast(list, enrichment.nutrition_summary or []),
+        nutrition_summary_text=enrichment.nutrition_summary_text,
         labels=list(enrichment.labels or []),
         categories=list(enrichment.categories or []),
         match_status=enrichment.match_status,
@@ -73,6 +79,7 @@ def serialize_product_summary(product: Product) -> ProductSummary:
         default_unit=product.default_unit,
         aliases=[alias.name for alias in product.aliases],
         barcodes=[barcode.value for barcode in product.barcodes],
+        manual_ingredient_tags=list(product.manual_ingredient_tags or []),
         enrichment=serialize_product_enrichment(get_primary_enrichment(product)),
     )
 
@@ -210,12 +217,18 @@ def apply_confirmed_product_enrichment(
     enrichment.source_product_name = candidate.source_product_name
     enrichment.source_product_url = candidate.source_product_url
     enrichment.product_image_url = candidate.product_image_url
+    enrichment.enrichment_status = "linked"
     enrichment.ingredients_text = candidate.ingredients_text
+    enrichment.ingredient_tags = list(candidate.ingredient_tags)
+    enrichment.ingredient_tokens = list(candidate.ingredient_tokens)
     enrichment.allergens_text = candidate.allergens_text
     enrichment.traces_text = candidate.traces_text
     enrichment.allergen_tags = list(candidate.allergen_tags)
     enrichment.trace_tags = list(candidate.trace_tags)
+    enrichment.dietary_tags = list(candidate.dietary_tags)
+    enrichment.nutriments_payload = dict(candidate.nutriments_payload)
     enrichment.nutrition_summary = [item.model_dump() for item in candidate.nutrition_summary]
+    enrichment.nutrition_summary_text = candidate.nutrition_summary_text
     enrichment.labels = list(candidate.labels)
     enrichment.categories = list(candidate.categories)
     enrichment.match_status = confirmed_enrichment.match_status or candidate.match_status

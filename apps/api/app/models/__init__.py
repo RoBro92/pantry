@@ -20,6 +20,8 @@ from app.models.recipe_url_import import RecipeURLImport
 from app.models.role import Role
 from app.models.stock_lot import StockLot
 from app.models.setup_state import SetupState
+from app.models.shopping_list import ShoppingList
+from app.models.shopping_list_item import ShoppingListItem
 from app.models.user import User
 from app.models.usage_counter import UsageCounter
 
@@ -46,6 +48,8 @@ __all__ = [
     "Role",
     "StockLot",
     "SetupState",
+    "ShoppingList",
+    "ShoppingListItem",
     "User",
     "UsageCounter",
 ]

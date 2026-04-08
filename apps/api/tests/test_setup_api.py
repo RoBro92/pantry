@@ -9,6 +9,7 @@ from app.models.ai_provider_config import AIProviderConfig
 from app.models.household import Household
 from app.models.instance_setting import InstanceSetting
 from app.models.location import Location
+from app.models.location_group import LocationGroup
 from app.models.membership import Membership
 from app.models.setup_state import SetupState
 from app.models.user import User
@@ -68,6 +69,13 @@ def test_setup_wizard_persists_staged_progress(client):
     assert payload["admin_user"]["password_saved"] is True
     assert payload["initial_users"][0]["login"] == "alex"
     assert payload["household_name"] == "Brown Household"
+    assert payload["rooms"] == [
+        {
+            "stage_id": "room-1",
+            "name": "Kitchen",
+            "storage_locations": ["Fridge", "Freezer", "Pantry shelf"],
+        }
+    ]
     assert payload["storage_locations"] == ["Fridge", "Freezer", "Pantry shelf"]
     assert payload["public_base_url"] is None
     assert payload["can_complete"] is True
@@ -90,6 +98,47 @@ def test_setup_wizard_persists_staged_progress(client):
     assert step_states["public_url"] is False
     assert step_states["ai"] is False
     assert step_states["smtp"] is False
+
+
+def test_setup_household_step_supports_multiple_rooms_and_persists_them(client):
+    response = client.put(
+        "/api/setup/wizard/household",
+        json={
+            "household_name": "Brown Household",
+            "rooms": [
+                {
+                    "stage_id": "room-kitchen",
+                    "name": "Kitchen",
+                    "storage_locations": ["Fridge", "Pantry shelf"],
+                },
+                {
+                    "stage_id": "room-garage",
+                    "name": "Garage",
+                    "storage_locations": ["Freezer", "Bulk rack"],
+                },
+            ],
+            "household_assignments": [],
+        },
+    )
+    assert response.status_code == 200
+
+    payload = response.json()
+    assert payload["rooms"] == [
+        {
+            "stage_id": "room-kitchen",
+            "name": "Kitchen",
+            "storage_locations": ["Fridge", "Pantry shelf"],
+        },
+        {
+            "stage_id": "room-garage",
+            "name": "Garage",
+            "storage_locations": ["Freezer", "Bulk rack"],
+        },
+    ]
+    assert payload["location_group_name"] == "Kitchen"
+    assert payload["storage_locations"] == ["Fridge", "Pantry shelf"]
+    step_states = {step["key"]: step["is_complete"] for step in payload["status"]["steps"]}
+    assert step_states["household"] is True
 
 
 def test_setup_users_endpoint_persists_incomplete_additional_users(client):
@@ -320,6 +369,55 @@ def test_setup_finalize_commits_all_staged_data_and_authenticates(client, db_ses
     assert setup_state.payload == {}
     assert setup_state.encrypted_ai_api_key is None
     assert setup_state.encrypted_smtp_password is None
+
+
+def test_setup_finalize_creates_multiple_room_groups_when_rooms_are_staged(client, db_session):
+    response = client.put(
+        "/api/setup/wizard/welcome",
+        json={"acknowledged": True},
+    )
+    assert response.status_code == 200
+
+    response = client.put(
+        "/api/setup/wizard/users",
+        json={
+            "admin_login": "owner",
+            "admin_display_name": "Owner",
+            "admin_password": "correct horse battery",
+            "initial_users": [],
+        },
+    )
+    assert response.status_code == 200
+
+    response = client.put(
+        "/api/setup/wizard/household",
+        json={
+            "household_name": "Brown Household",
+            "rooms": [
+                {
+                    "stage_id": "room-kitchen",
+                    "name": "Kitchen",
+                    "storage_locations": ["Fridge", "Pantry shelf"],
+                },
+                {
+                    "stage_id": "room-garage",
+                    "name": "Garage",
+                    "storage_locations": ["Freezer"],
+                },
+            ],
+            "household_assignments": [],
+        },
+    )
+    assert response.status_code == 200
+
+    finalize_response = client.post("/api/setup/wizard/finalize")
+    assert finalize_response.status_code == 200
+
+    room_groups = db_session.scalars(select(LocationGroup).order_by(LocationGroup.name)).all()
+    assert [room.name for room in room_groups] == ["Garage", "Kitchen"]
+
+    locations = db_session.scalars(select(Location).order_by(Location.name)).all()
+    assert [location.name for location in locations] == ["Freezer", "Fridge", "Pantry shelf"]
 
 
 def test_setup_finalize_allows_optional_steps_to_be_skipped(client, db_session):

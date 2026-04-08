@@ -28,6 +28,7 @@ from app.schemas.pantry import (
 from app.services.location_links import serialize_location_link
 from app.services.pantry_normalization import normalize_barcode, normalize_lookup_name
 from app.services.pantry_serialization import serialize_product_enrichment_summary
+from app.services.shopping_lists import list_open_shopping_product_ids
 from app.services.tenancy import HouseholdAccess
 
 
@@ -36,6 +37,7 @@ class PantryFilterOptions:
     q: str | None = None
     location_group_external_id: str | None = None
     location_external_id: str | None = None
+    near_expiry_only: bool = False
 
 
 def _today() -> date:
@@ -61,6 +63,8 @@ def _stock_lot_summary(lot: StockLot, *, near_expiry_days: int) -> StockLotSumma
         note=lot.note,
         purchased_on=lot.purchased_on,
         expires_on=lot.expires_on,
+        depleted_at=lot.depleted_at,
+        is_depleted=lot.depleted_at is not None or lot.quantity <= Decimal("0"),
         is_near_expiry=_is_near_expiry(lot, days=near_expiry_days),
     )
 
@@ -75,33 +79,43 @@ def _event_summary(event: AuditEvent) -> AuditEventSummary:
 
     if action == "stock.added":
         summary = (
-            f"Added {metadata['quantity']} {metadata['unit']} of {metadata['product_name']} "
-            f"to {metadata['location_group_name']} / {metadata['location_name']}."
+            f"Added {metadata['quantity']} {metadata['unit']} {metadata['product_name']} "
+            f"to {metadata['location_group_name']} / {metadata['location_name']}"
         )
     elif action == "stock.removed":
-        summary = (
-            f"Removed {metadata['quantity']} {metadata['unit']} of {metadata['product_name']} "
-            f"from {metadata['location_group_name']} / {metadata['location_name']}."
-        )
+        if metadata.get("remaining_quantity") == "0.000":
+            summary = (
+                f"Depleted {metadata['product_name']} from "
+                f"{metadata['location_group_name']} / {metadata['location_name']}"
+            )
+        else:
+            summary = (
+                f"Removed {metadata['quantity']} {metadata['unit']} {metadata['product_name']} "
+                f"from {metadata['location_group_name']} / {metadata['location_name']}"
+            )
     elif action == "stock.moved":
         summary = (
-            f"Moved {metadata['quantity']} {metadata['unit']} of {metadata['product_name']} "
-            f"from {metadata['from_location_group_name']} / {metadata['from_location_name']} "
-            f"to {metadata['to_location_group_name']} / {metadata['to_location_name']}."
+            f"Moved {metadata['quantity']} {metadata['unit']} {metadata['product_name']} "
+            f"to {metadata['to_location_group_name']} / {metadata['to_location_name']}"
         )
     elif action == "product.created":
-        summary = f"Created product {metadata['name']}."
+        summary = f"Created product {metadata['name']}"
+    elif action == "product.metadata_updated":
+        summary = f"Updated product details for {metadata['product_name']}"
     elif action == "product.enrichment_synced":
-        summary = (
-            f"Linked Open Food Facts details to {metadata['product_name']} "
-            f"using {metadata['match_status'] or 'confirmed'} matching."
-        )
+        summary = f"Linked Open Food Facts details to {metadata['product_name']}"
     elif action == "location.created":
-        summary = f"Created location {metadata['location_group_name']} / {metadata['name']}."
+        summary = f"Created location {metadata['location_group_name']} / {metadata['name']}"
     elif action == "location_group.created":
-        summary = f"Created location group {metadata['name']}."
+        summary = f"Created room {metadata['name']}"
+    elif action == "shopping_list.item_added":
+        summary = f"Added {metadata.get('product_name') or metadata['label']} to the shopping list"
+    elif action == "shopping_list.item_completed":
+        summary = f"Completed {metadata.get('product_name') or metadata['label']} on the shopping list"
+    elif action == "setup.completed":
+        summary = "Completed first-run setup"
     else:
-        summary = action
+        summary = action.replace("_", " ")
 
     actor_display = None
     if event.actor_user is not None:
@@ -157,7 +171,7 @@ def _load_active_lots(db: Session, *, household_id) -> list[StockLot]:
     ).all()
 
 
-def _matches_query(lot: StockLot, *, query: str | None) -> bool:
+def _matches_product_query(product: Product, *, query: str | None) -> bool:
     if not query:
         return True
 
@@ -167,21 +181,99 @@ def _matches_query(lot: StockLot, *, query: str | None) -> bool:
     except ValueError:
         barcode_query = None
 
-    haystacks = [lot.product.normalized_name, *[alias.normalized_name for alias in lot.product.aliases]]
+    haystacks = [product.normalized_name, *[alias.normalized_name for alias in product.aliases]]
     if any(normalized_query in value for value in haystacks):
         return True
     return bool(
         barcode_query
-        and any(barcode_query in barcode.normalized_value for barcode in lot.product.barcodes)
+        and any(barcode_query in barcode.normalized_value for barcode in product.barcodes)
     )
 
 
-def _matches_filters(lot: StockLot, *, filters: PantryFilterOptions) -> bool:
+def _matches_lot_scope(lot: StockLot, *, filters: PantryFilterOptions, near_expiry_days: int) -> bool:
     if filters.location_group_external_id and lot.location.location_group.external_id != filters.location_group_external_id:
         return False
     if filters.location_external_id and lot.location.external_id != filters.location_external_id:
         return False
-    return _matches_query(lot, query=filters.q)
+    if filters.near_expiry_only and not _is_near_expiry(lot, days=near_expiry_days):
+        return False
+    return True
+
+
+def _summarize_names(values: list[str], *, empty_label: str) -> str:
+    unique_values = sorted(dict.fromkeys(values), key=str.casefold)
+    if not unique_values:
+        return empty_label
+    if len(unique_values) <= 2:
+        return ", ".join(unique_values)
+    return f"{', '.join(unique_values[:2])} +{len(unique_values) - 2}"
+
+
+def _product_location_summaries(lots: list[StockLot]) -> list[ProductLocationSummary]:
+    location_totals: dict[str, dict[str, object]] = defaultdict(
+        lambda: {"total_quantity": Decimal("0.000"), "lot_count": 0, "location": None}
+    )
+    for lot in lots:
+        bucket = location_totals[lot.location.external_id]
+        bucket["total_quantity"] = bucket["total_quantity"] + lot.quantity
+        bucket["lot_count"] = bucket["lot_count"] + 1
+        bucket["location"] = lot.location
+
+    return sorted(
+        [
+            ProductLocationSummary(
+                location_external_id=location_external_id,
+                location_name=location_data["location"].name,
+                location_group_name=location_data["location"].location_group.name,
+                total_quantity=location_data["total_quantity"],
+                lot_count=location_data["lot_count"],
+            )
+            for location_external_id, location_data in location_totals.items()
+        ],
+        key=lambda location: (location.location_group_name.lower(), location.location_name.lower()),
+    )
+
+
+def _build_product_summary(
+    *,
+    product: Product,
+    visible_lots: list[StockLot],
+    all_active_lots: list[StockLot],
+    open_shopping_product_ids: set,
+    near_expiry_days: int,
+) -> PantryProductSummary:
+    sorted_lots = sorted(
+        visible_lots,
+        key=lambda lot: (
+            lot.expires_on is None,
+            lot.expires_on or date.max,
+            lot.location.location_group.name.lower(),
+            lot.location.name.lower(),
+        ),
+    )
+    nearest_expiry_values = [lot.expires_on for lot in sorted_lots if lot.expires_on is not None]
+    room_names = [lot.location.location_group.name for lot in sorted_lots]
+    storage_names = [f"{lot.location.location_group.name} / {lot.location.name}" for lot in sorted_lots]
+
+    return PantryProductSummary(
+        product_external_id=product.external_id,
+        product_name=product.name,
+        unit=sorted_lots[0].unit if sorted_lots else product.default_unit,
+        total_quantity=sum((lot.quantity for lot in sorted_lots), Decimal("0.000")),
+        lot_count=len(sorted_lots),
+        stock_status="in_stock" if all_active_lots else "out_of_stock",
+        room_summary=_summarize_names(room_names, empty_label="Out of stock"),
+        storage_summary=_summarize_names(storage_names, empty_label="No active stock"),
+        nearest_expiry_on=min(nearest_expiry_values) if nearest_expiry_values else None,
+        near_expiry_lot_count=sum(1 for lot in sorted_lots if _is_near_expiry(lot, days=near_expiry_days)),
+        manual_ingredient_tags=list(product.manual_ingredient_tags or []),
+        aliases=[alias.name for alias in product.aliases],
+        barcodes=[barcode.value for barcode in product.barcodes],
+        is_in_shopping_list=product.id in open_shopping_product_ids,
+        enrichment=serialize_product_enrichment_summary(product),
+        locations=_product_location_summaries(sorted_lots),
+        stock_lots=[_stock_lot_summary(lot, near_expiry_days=near_expiry_days) for lot in sorted_lots],
+    )
 
 
 def build_pantry_overview(
@@ -193,71 +285,47 @@ def build_pantry_overview(
 ) -> PantryOverviewResponse:
     location_groups, locations, products = _load_reference_lists(db, household_id=access.household.id)
     active_lots = _load_active_lots(db, household_id=access.household.id)
-    filtered_lots = [lot for lot in active_lots if _matches_filters(lot, filters=filters)]
+    lots_by_product_id: dict = defaultdict(list)
+    for lot in active_lots:
+        lots_by_product_id[lot.product_id].append(lot)
 
-    grouped_products: dict[str, dict[str, object]] = {}
-    for lot in filtered_lots:
-        product_bucket = grouped_products.setdefault(
-            lot.product.external_id,
-            {
-                "product_external_id": lot.product.external_id,
-                "product_name": lot.product.name,
-                "unit": lot.unit,
-                "total_quantity": Decimal("0.000"),
-                "lot_count": 0,
-                "aliases": [alias.name for alias in lot.product.aliases],
-                "barcodes": [barcode.value for barcode in lot.product.barcodes],
-                "enrichment": serialize_product_enrichment_summary(lot.product),
-                "stock_lots": [],
-                "locations": defaultdict(lambda: {"total_quantity": Decimal("0.000"), "lot_count": 0, "location": None}),
-            },
-        )
-        product_bucket["total_quantity"] = product_bucket["total_quantity"] + lot.quantity
-        product_bucket["lot_count"] = product_bucket["lot_count"] + 1
-        product_bucket["stock_lots"].append(_stock_lot_summary(lot, near_expiry_days=near_expiry_days))
+    has_lot_scope_filters = bool(
+        filters.location_group_external_id or filters.location_external_id or filters.near_expiry_only
+    )
+    open_shopping_product_ids = list_open_shopping_product_ids(db, household=access.household)
 
-        location_bucket = product_bucket["locations"][lot.location.external_id]
-        location_bucket["total_quantity"] = location_bucket["total_quantity"] + lot.quantity
-        location_bucket["lot_count"] = location_bucket["lot_count"] + 1
-        location_bucket["location"] = lot.location
+    product_summaries: list[PantryProductSummary] = []
+    filtered_lots: list[StockLot] = []
+    for product in products:
+        if not _matches_product_query(product, query=filters.q):
+            continue
 
-    product_summaries = sorted(
-        [
-            PantryProductSummary(
-                product_external_id=bucket["product_external_id"],
-                product_name=bucket["product_name"],
-                unit=bucket["unit"],
-                total_quantity=bucket["total_quantity"],
-                lot_count=bucket["lot_count"],
-                aliases=bucket["aliases"],
-                barcodes=bucket["barcodes"],
-                enrichment=bucket["enrichment"],
-                stock_lots=sorted(
-                    bucket["stock_lots"],
-                    key=lambda stock_lot: (
-                        stock_lot.expires_on is None,
-                        stock_lot.expires_on or date.max,
-                        stock_lot.location_group_name.lower(),
-                        stock_lot.location_name.lower(),
-                    ),
-                ),
-                locations=sorted(
-                    [
-                        ProductLocationSummary(
-                            location_external_id=location_external_id,
-                            location_name=location_data["location"].name,
-                            location_group_name=location_data["location"].location_group.name,
-                            total_quantity=location_data["total_quantity"],
-                            lot_count=location_data["lot_count"],
-                        )
-                        for location_external_id, location_data in bucket["locations"].items()
-                    ],
-                    key=lambda location: (location.location_group_name.lower(), location.location_name.lower()),
-                ),
+        product_active_lots = lots_by_product_id.get(product.id, [])
+        product_visible_lots = [
+            lot
+            for lot in product_active_lots
+            if _matches_lot_scope(lot, filters=filters, near_expiry_days=near_expiry_days)
+        ]
+        if has_lot_scope_filters and not product_visible_lots:
+            continue
+
+        visible_lots = product_visible_lots if has_lot_scope_filters else list(product_active_lots)
+        filtered_lots.extend(visible_lots)
+        product_summaries.append(
+            _build_product_summary(
+                product=product,
+                visible_lots=visible_lots,
+                all_active_lots=list(product_active_lots),
+                open_shopping_product_ids=open_shopping_product_ids,
+                near_expiry_days=near_expiry_days,
             )
-            for bucket in grouped_products.values()
-        ],
-        key=lambda item: item.product_name.lower(),
+        )
+
+    product_summaries.sort(
+        key=lambda item: (
+            item.stock_status != "in_stock",
+            item.product_name.lower(),
+        )
     )
 
     recent_events = db.scalars(
@@ -265,7 +333,7 @@ def build_pantry_overview(
         .where(AuditEvent.household_id == access.household.id)
         .options(selectinload(AuditEvent.actor_user))
         .order_by(AuditEvent.occurred_at.desc())
-        .limit(10)
+        .limit(12)
     ).all()
 
     return PantryOverviewResponse(
@@ -277,6 +345,7 @@ def build_pantry_overview(
             q=filters.q,
             location_group_external_id=filters.location_group_external_id,
             location_external_id=filters.location_external_id,
+            near_expiry_only=filters.near_expiry_only,
         ),
         counts=PantryCounts(
             location_group_count=len(location_groups),
@@ -284,6 +353,7 @@ def build_pantry_overview(
             product_count=len(products),
             active_lot_count=len(active_lots),
             near_expiry_lot_count=sum(1 for lot in active_lots if _is_near_expiry(lot, days=near_expiry_days)),
+            out_of_stock_product_count=sum(1 for product in products if not lots_by_product_id.get(product.id)),
         ),
         location_groups=[
             LocationGroupSummary(
@@ -310,6 +380,7 @@ def build_pantry_overview(
                 "default_unit": product.default_unit,
                 "aliases": [alias.name for alias in product.aliases],
                 "barcodes": [barcode.value for barcode in product.barcodes],
+                "manual_ingredient_tags": list(product.manual_ingredient_tags or []),
                 "enrichment": serialize_product_enrichment_summary(product),
             }
             for product in products
