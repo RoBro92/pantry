@@ -1,6 +1,6 @@
 # Pantry
 
-Pantry is a self hosted household inventory and meal management application for tracking food, reducing waste, and keeping day to day kitchen workflows clear. It was built as a means to an end as i found the existing offerings such as Grocy were too bloated with features I didn't need. It was also missing some key features i wanted to make the day to day use of the program not be a chore. Think "Remove 20g of cheese for a sandwich" So Pantry was created to provide a simple interface with support for multiple households. 
+Pantry is a self-hosted household inventory and meal management application for tracking food, reducing waste, and keeping day-to-day kitchen workflows clear. It was built to stay practical and lightweight, with support for multiple households and everyday actions that should feel quick rather than cumbersome.
 
 ## Features
 
@@ -112,8 +112,27 @@ See:
 - [docs/CONTRIBUTING.md](/Users/robinbrown/Documents/GitHub/pantry/docs/CONTRIBUTING.md)
 - [docs/DEPLOYMENT.md](/Users/robinbrown/Documents/GitHub/pantry/docs/DEPLOYMENT.md)
 - [docs/ARCHITECTURE.md](/Users/robinbrown/Documents/GitHub/pantry/docs/ARCHITECTURE.md)
-- [docs/MILESTONES.md](/Users/robinbrown/Documents/GitHub/pantry/docs/MILESTONES.md)
 - [docs/TEST_STRATEGY.md](/Users/robinbrown/Documents/GitHub/pantry/docs/TEST_STRATEGY.md)
+- [docs/REPOSITORY_MAINTENANCE.md](/Users/robinbrown/Documents/GitHub/pantry/docs/REPOSITORY_MAINTENANCE.md)
+
+## Development Workflow
+
+Pantry uses a branch and pull request workflow for ongoing development.
+
+1. Branch from `main`.
+2. Make one focused, reviewable change.
+3. Run the relevant local validation.
+4. Open a pull request and review the diff and checks.
+5. Merge back to `main` after the change is ready.
+
+Recommended branch prefixes:
+
+- `feature/...`
+- `fix/...`
+- `docs/...`
+- `release/...`
+
+Public contributor and Codex guidance lives in [AGENTS.md](/Users/robinbrown/Documents/GitHub/pantry/AGENTS.md). Internal planning material belongs in `private-docs/`, not the public repo.
 
 ## Troubleshooting
 
