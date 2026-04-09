@@ -164,7 +164,6 @@ configure_env_file() {
   env_set "${env_file}" "DATABASE_URL" "postgresql+psycopg://pantry:${postgres_password}@postgres:5432/pantry"
   env_set "${env_file}" "WEB_APP_URL" "${browser_url}"
   env_set "${env_file}" "API_BASE_URL" "${api_url}"
-  env_set "${env_file}" "NEXT_PUBLIC_API_BASE_URL" "${api_url}"
   env_set "${env_file}" "PUBLIC_BROWSER_BASE_URL" "${browser_url}"
   env_set "${env_file}" "PANTRY_POSTGRES_DATA_DIR" "${DATA_ROOT}/postgres"
   env_set "${env_file}" "PANTRY_REDIS_DATA_DIR" "${DATA_ROOT}/redis"

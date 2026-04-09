@@ -15,6 +15,39 @@ test.beforeEach(() => {
   manifest = reseedE2E();
 });
 
+test("web-origin API proxy forwards health, setup, login, and session requests", async ({
+  page
+}) => {
+  resetToUninitialized();
+
+  const healthResponse = await page.request.get("/api/health");
+  expect(healthResponse.ok()).toBeTruthy();
+  expect(await healthResponse.json()).toMatchObject({ status: "ok" });
+
+  const setupStatusResponse = await page.request.get("/api/setup/status");
+  expect(setupStatusResponse.ok()).toBeTruthy();
+  expect(await setupStatusResponse.json()).toMatchObject({ is_initialized: false });
+
+  manifest = reseedE2E();
+  await page.context().clearCookies();
+
+  const loginResponse = await page.request.post("/api/auth/login", {
+    data: {
+      identifier: manifest.admin_email,
+      password: manifest.password
+    }
+  });
+  expect(loginResponse.ok()).toBeTruthy();
+
+  const sessionResponse = await page.request.get("/api/auth/session");
+  expect(sessionResponse.ok()).toBeTruthy();
+  expect(await sessionResponse.json()).toMatchObject({
+    user: {
+      email: manifest.admin_email
+    }
+  });
+});
+
 async function dismissAdminWhatsNewIfVisible(page: Page) {
   const response = await page.request.post(
     "http://localhost:8000/api/platform-admin/release-status/mark-seen",
