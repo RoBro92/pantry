@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
 
@@ -11,6 +11,7 @@ from app.models.user import User
 from app.schemas.shopping import (
     AddShoppingListItemRequest,
     AttachShoppingListProductRequest,
+    BulkPendingShoppingListRequest,
     CompleteShoppingListItemRequest,
     FinalizePendingShoppingListRequest,
     MergePendingShoppingListsRequest,
@@ -20,6 +21,7 @@ from app.schemas.shopping import (
 from app.services.shopping_lists import (
     add_item_to_default_shopping_list,
     attach_product_to_shopping_list_item,
+    bulk_operate_pending_shopping_list_items,
     build_household_shopping_list,
     complete_shopping_list_item,
     delete_shopping_list_item,
@@ -40,10 +42,11 @@ def _bad_request(exc: ValueError) -> HTTPException:
 
 @router.get("/shopping-list", response_model=ShoppingListSummary)
 def get_shopping_list(
+    history_limit: int = Query(default=6, ge=1, le=200),
     db: Session = Depends(get_db_session),
     access: HouseholdAccess = Depends(require_household_access()),
 ):
-    return build_household_shopping_list(db, household=access.household)
+    return build_household_shopping_list(db, household=access.household, history_limit=history_limit)
 
 
 @router.post("/shopping-list/items", response_model=ShoppingListSummary, status_code=status.HTTP_201_CREATED)
@@ -90,6 +93,37 @@ def put_shopping_list_item(
             unit=payload.unit,
             note=payload.note,
             pantry_location_external_id=payload.pantry_location_external_id,
+        )
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
+    return build_household_shopping_list(db, household=access.household)
+
+
+@router.post("/shopping-list/pending/{list_external_id}/bulk", response_model=ShoppingListSummary)
+def post_bulk_pending_list_action(
+    list_external_id: str,
+    payload: BulkPendingShoppingListRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
+    access: HouseholdAccess = Depends(require_household_access()),
+):
+    try:
+        bulk_operate_pending_shopping_list_items(
+            db,
+            household=access.household,
+            actor=current_user,
+            list_external_id=list_external_id,
+            action=payload.action,
+            items=[
+                {
+                    "item_external_id": item.item_external_id,
+                    "quantity": item.quantity,
+                    "unit": item.unit,
+                    "note": item.note,
+                    "pantry_location_external_id": item.pantry_location_external_id,
+                }
+                for item in payload.items
+            ],
         )
     except ValueError as exc:
         raise _bad_request(exc) from exc

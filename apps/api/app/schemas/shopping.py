@@ -42,6 +42,19 @@ class FinalizePendingShoppingListRequest(BaseModel):
     return_shortfalls_to_active: bool = False
 
 
+class BulkPendingShoppingListItemRequest(BaseModel):
+    item_external_id: str
+    quantity: Decimal | None = None
+    unit: str | None = None
+    note: str | None = None
+    pantry_location_external_id: str | None = None
+
+
+class BulkPendingShoppingListRequest(BaseModel):
+    action: str
+    items: list[BulkPendingShoppingListItemRequest] = Field(default_factory=list)
+
+
 class AttachShoppingListProductRequest(BaseModel):
     product_external_id: str
 

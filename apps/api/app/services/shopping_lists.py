@@ -42,6 +42,10 @@ SHOPPING_ITEM_STATUS_AWAITING_PURCHASE = "awaiting_purchase"
 SHOPPING_ITEM_STATUS_PURCHASED = "purchased"
 SHOPPING_ITEM_STATUS_NOT_PURCHASED = "not_purchased"
 
+BULK_PENDING_ACTION_RECONCILE = "reconcile_selected"
+BULK_PENDING_ACTION_RETURN = "return_selected"
+BULK_PENDING_ACTION_DELETE = "delete_selected"
+
 ACTIVE_LIST_STATES = {SHOPPING_LIST_STATE_ACTIVE}
 PENDING_LIST_STATES = {SHOPPING_LIST_STATE_AWAITING_PURCHASE}
 HISTORY_LIST_STATES = {
@@ -422,6 +426,7 @@ def build_household_shopping_list(
     db: Session,
     *,
     household: Household,
+    history_limit: int = 6,
 ) -> ShoppingListSummary:
     active_list = get_or_create_active_shopping_list(db, household=household, commit=True)
     lists = _load_all_lists(db, household=household)
@@ -459,7 +464,7 @@ def build_household_shopping_list(
         household_name=household.name,
         active_list=_serialize_list(active),
         pending_lists=[_serialize_list(shopping_list) for shopping_list in pending_lists],
-        history_lists=[_serialize_list(shopping_list) for shopping_list in history_lists[:6]],
+        history_lists=[_serialize_list(shopping_list) for shopping_list in history_lists[:history_limit]],
     )
 
 
@@ -595,10 +600,12 @@ def update_shopping_list_item(
         item.completed_at = utc_now() if status == SHOPPING_ITEM_STATUS_PURCHASED else None
         item.purchased_at = utc_now() if status == SHOPPING_ITEM_STATUS_PURCHASED else None
         item.not_purchased_at = utc_now() if status == SHOPPING_ITEM_STATUS_NOT_PURCHASED else None
+        item.reconciled_at = None
         if status in {SHOPPING_ITEM_STATUS_OPEN, SHOPPING_ITEM_STATUS_AWAITING_PURCHASE}:
             item.completed_at = None
             item.purchased_at = None
             item.not_purchased_at = None
+            item.reconciled_at = None
     elif (
         item.shopping_list.lifecycle_state == SHOPPING_LIST_STATE_AWAITING_PURCHASE
         and normalized_quantity is not None
@@ -610,6 +617,7 @@ def update_shopping_list_item(
         item.completed_at = utc_now()
         item.purchased_at = item.completed_at
         item.not_purchased_at = None
+        item.reconciled_at = None
 
     db.add(item)
     record_audit_event(
@@ -873,6 +881,7 @@ def merge_pending_shopping_lists(
             merged_item_count += 1
         source_list.lifecycle_state = SHOPPING_LIST_STATE_MERGED
         source_list.reconciled_at = utc_now()
+        source_list.archived_at = source_list.reconciled_at
         source_list.merged_into_list_id = target_list.id
         db.add(source_list)
 
@@ -928,11 +937,13 @@ def return_pending_list_to_active(
         )
         item.status = SHOPPING_ITEM_STATUS_NOT_PURCHASED
         item.not_purchased_at = utc_now()
+        item.reconciled_at = item.not_purchased_at
         db.add(item)
         returned_item_count += 1
 
     pending_list.lifecycle_state = SHOPPING_LIST_STATE_RETURNED
     pending_list.reconciled_at = utc_now()
+    pending_list.archived_at = pending_list.reconciled_at
     db.add(pending_list)
     record_audit_event(
         db,
@@ -1026,6 +1037,218 @@ def _write_purchased_item_to_pantry(
     )
 
 
+def _normalize_selected_pending_items(
+    pending_list: ShoppingList,
+    *,
+    items: list[dict[str, object]],
+) -> list[tuple[ShoppingListItem, dict[str, object]]]:
+    if not items:
+        raise ValueError("Select at least one shopping item first.")
+
+    items_by_external_id = {item.external_id: item for item in pending_list.items}
+    selected_items: list[tuple[ShoppingListItem, dict[str, object]]] = []
+    seen_item_ids: set[str] = set()
+    for payload in items:
+        item_external_id = str(payload.get("item_external_id") or "").strip()
+        if not item_external_id or item_external_id in seen_item_ids:
+            continue
+        item = items_by_external_id.get(item_external_id)
+        if item is None:
+            raise ValueError("One or more selected shopping items could not be found.")
+        if item.status != SHOPPING_ITEM_STATUS_AWAITING_PURCHASE:
+            raise ValueError("Only unresolved shopping items can be selected.")
+        selected_items.append((item, payload))
+        seen_item_ids.add(item_external_id)
+
+    if not selected_items:
+        raise ValueError("Select at least one unresolved shopping item first.")
+    return selected_items
+
+
+def _normalize_reconciliation_quantity(item: ShoppingListItem, *, payload: dict[str, object]) -> Decimal:
+    raw_quantity = payload.get("quantity")
+    if raw_quantity is None:
+        raw_quantity = item.requested_quantity or item.quantity or Decimal("1.000")
+    return _normalize_quantity(raw_quantity)
+
+
+def _normalize_reconciliation_unit(item: ShoppingListItem, *, payload: dict[str, object]) -> str:
+    raw_unit = payload.get("unit")
+    if isinstance(raw_unit, str) and raw_unit.strip():
+        normalized_unit = normalize_unit(raw_unit)
+    else:
+        normalized_unit = normalize_unit(
+            item.requested_unit
+            or item.unit
+            or (item.product.default_unit if item.product is not None else None)
+            or "count"
+        )
+    if not normalized_unit:
+        raise ValueError(f"Choose a purchased unit for {item.product.name if item.product is not None else item.label}.")
+    return normalized_unit
+
+
+def _normalize_reconciliation_note(item: ShoppingListItem, *, payload: dict[str, object]) -> str | None:
+    if "note" not in payload:
+        return item.note
+    raw_note = payload.get("note")
+    if isinstance(raw_note, str):
+        return require_text(raw_note, field_name="Note") if raw_note else None
+    if raw_note is None:
+        return item.note
+    return require_text(str(raw_note), field_name="Note")
+
+
+def _resolve_reconciliation_location(
+    db: Session,
+    *,
+    household: Household,
+    item: ShoppingListItem,
+    payload: dict[str, object],
+) -> Location | None:
+    explicit_location_external_id = payload.get("pantry_location_external_id")
+    if isinstance(explicit_location_external_id, str) and not explicit_location_external_id.strip():
+        explicit_location_external_id = None
+    if explicit_location_external_id is None and item.pantry_location is not None:
+        explicit_location_external_id = item.pantry_location.external_id
+    return _resolve_default_pantry_location(
+        db,
+        household=household,
+        product=item.product,
+        explicit_location_external_id=explicit_location_external_id if isinstance(explicit_location_external_id, str) else None,
+    )
+
+
+def bulk_operate_pending_shopping_list_items(
+    db: Session,
+    *,
+    household: Household,
+    actor: User,
+    list_external_id: str,
+    action: str,
+    items: list[dict[str, object]],
+) -> ShoppingList:
+    pending_list = _load_shopping_list(db, household=household, external_id=list_external_id)
+    if pending_list is None or pending_list.lifecycle_state != SHOPPING_LIST_STATE_AWAITING_PURCHASE:
+        raise ValueError("Awaiting-purchase list not found.")
+
+    if action not in {
+        BULK_PENDING_ACTION_RECONCILE,
+        BULK_PENDING_ACTION_RETURN,
+        BULK_PENDING_ACTION_DELETE,
+    }:
+        raise ValueError("Unsupported bulk shopping action.")
+
+    selected_items = _normalize_selected_pending_items(pending_list, items=items)
+    now = utc_now()
+    active_list = get_or_create_active_shopping_list(db, household=household)
+    active_items = list(active_list.items)
+    purchased_on = now.date()
+
+    reconciled_count = 0
+    returned_count = 0
+    deleted_count = 0
+    shortfall_return_count = 0
+
+    for item, payload in selected_items:
+        if action == BULK_PENDING_ACTION_RECONCILE:
+            quantity = _normalize_reconciliation_quantity(item, payload=payload)
+            unit = _normalize_reconciliation_unit(item, payload=payload)
+            note = _normalize_reconciliation_note(item, payload=payload)
+            pantry_location = _resolve_reconciliation_location(
+                db,
+                household=household,
+                item=item,
+                payload=payload,
+            )
+
+            item.quantity = quantity
+            item.unit = unit
+            item.note = note
+            item.pantry_location_id = pantry_location.id if pantry_location is not None else None
+            item.pantry_location = pantry_location
+            item.status = SHOPPING_ITEM_STATUS_PURCHASED
+            item.completed_at = now
+            item.purchased_at = now
+            item.not_purchased_at = None
+
+            _write_purchased_item_to_pantry(
+                db,
+                household=household,
+                actor=actor,
+                item=item,
+                purchased_on=purchased_on,
+            )
+
+            if _return_shortfall_to_active_list(
+                db,
+                household=household,
+                active_list=active_list,
+                active_items=active_items,
+                item=item,
+            ):
+                shortfall_return_count += 1
+
+            item.reconciled_at = now
+            db.add(item)
+            reconciled_count += 1
+            continue
+
+        if action == BULK_PENDING_ACTION_RETURN:
+            note = _normalize_reconciliation_note(item, payload=payload)
+            _merge_item_into_list(
+                db,
+                shopping_list=active_list,
+                household=household,
+                existing_items=active_items,
+                product=item.product,
+                label=item.label,
+                quantity=_requested_quantity(item),
+                unit=_requested_unit(item),
+                note=note,
+                pantry_location=item.pantry_location,
+                source_type=item.source_type,
+                status=SHOPPING_ITEM_STATUS_OPEN,
+            )
+            item.note = note
+            item.status = SHOPPING_ITEM_STATUS_NOT_PURCHASED
+            item.completed_at = now
+            item.purchased_at = None
+            item.not_purchased_at = now
+            item.reconciled_at = now
+            db.add(item)
+            returned_count += 1
+            continue
+
+        if item.shopping_list is not None and item in item.shopping_list.items:
+            item.shopping_list.items.remove(item)
+        db.delete(item)
+        deleted_count += 1
+
+    action_name = {
+        BULK_PENDING_ACTION_RECONCILE: "shopping_list.items_reconciled",
+        BULK_PENDING_ACTION_RETURN: "shopping_list.items_returned",
+        BULK_PENDING_ACTION_DELETE: "shopping_list.items_deleted",
+    }[action]
+    record_audit_event(
+        db,
+        household=household,
+        actor=actor,
+        action=action_name,
+        target_type="shopping_list",
+        target_external_id=pending_list.external_id,
+        event_metadata={
+            "name": pending_list.name,
+            "reconciled_item_count": reconciled_count,
+            "returned_item_count": returned_count,
+            "deleted_item_count": deleted_count,
+            "shortfall_return_count": shortfall_return_count,
+        },
+    )
+    db.commit()
+    return _load_shopping_list(db, household=household, external_id=pending_list.external_id) or pending_list
+
+
 def finalize_pending_shopping_list(
     db: Session,
     *,
@@ -1048,10 +1271,10 @@ def finalize_pending_shopping_list(
     active_items = list(active_list.items)
     returned_item_count = 0
     shortfall_return_count = 0
-    purchased_item_count = 0
     purchased_on = utc_now().date()
+    reconciled_at = utc_now()
     for item in pending_list.items:
-        if item.status == SHOPPING_ITEM_STATUS_NOT_PURCHASED:
+        if item.status == SHOPPING_ITEM_STATUS_NOT_PURCHASED and item.reconciled_at is None:
             _merge_item_into_list(
                 db,
                 shopping_list=active_list,
@@ -1066,10 +1289,14 @@ def finalize_pending_shopping_list(
                 source_type=item.source_type,
                 status=SHOPPING_ITEM_STATUS_OPEN,
             )
+            item.reconciled_at = reconciled_at
+            item.completed_at = item.completed_at or reconciled_at
+            item.not_purchased_at = item.not_purchased_at or reconciled_at
+            db.add(item)
             returned_item_count += 1
             continue
 
-        if item.status != SHOPPING_ITEM_STATUS_PURCHASED:
+        if item.status != SHOPPING_ITEM_STATUS_PURCHASED or item.reconciled_at is not None:
             continue
 
         _write_purchased_item_to_pantry(
@@ -1079,7 +1306,6 @@ def finalize_pending_shopping_list(
             item=item,
             purchased_on=purchased_on,
         )
-        purchased_item_count += 1
         if return_shortfalls_to_active and _return_shortfall_to_active_list(
             db,
             household=household,
@@ -1088,9 +1314,14 @@ def finalize_pending_shopping_list(
             item=item,
         ):
             shortfall_return_count += 1
+        item.reconciled_at = reconciled_at
+        item.completed_at = item.completed_at or reconciled_at
+        item.purchased_at = item.purchased_at or reconciled_at
+        db.add(item)
 
     pending_list.lifecycle_state = SHOPPING_LIST_STATE_RECONCILED
-    pending_list.reconciled_at = utc_now()
+    pending_list.reconciled_at = reconciled_at
+    pending_list.archived_at = reconciled_at
     db.add(pending_list)
     record_audit_event(
         db,
@@ -1101,9 +1332,13 @@ def finalize_pending_shopping_list(
         target_external_id=pending_list.external_id,
         event_metadata={
             "name": pending_list.name,
-            "returned_item_count": returned_item_count,
+            "returned_item_count": sum(
+                1 for item in pending_list.items if item.status == SHOPPING_ITEM_STATUS_NOT_PURCHASED
+            ),
             "shortfall_return_count": shortfall_return_count,
-            "purchased_item_count": purchased_item_count,
+            "purchased_item_count": sum(
+                1 for item in pending_list.items if item.status == SHOPPING_ITEM_STATUS_PURCHASED
+            ),
         },
     )
     db.commit()

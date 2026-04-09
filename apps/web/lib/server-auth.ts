@@ -134,9 +134,14 @@ export async function getPantryOverview(
 }
 
 export async function getShoppingList(
-  householdExternalId: string
+  householdExternalId: string,
+  params: {
+    history_limit?: number | null;
+  } = {}
 ): Promise<ShoppingListSummary> {
-  return apiGet<ShoppingListSummary>(`/api/households/${householdExternalId}/shopping-list`);
+  return apiGet<ShoppingListSummary>(
+    withQuery(`/api/households/${householdExternalId}/shopping-list`, params)
+  );
 }
 
 export async function getNearExpiry(

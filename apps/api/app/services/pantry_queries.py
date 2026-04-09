@@ -137,6 +137,12 @@ def _event_summary(event: AuditEvent) -> AuditEventSummary:
         summary = f"Moved {metadata['name']} back into the active shopping list"
     elif action == "shopping_list.reconciled":
         summary = f"Finished reconciling {metadata['name']}"
+    elif action == "shopping_list.items_reconciled":
+        summary = f"Reconciled selected items from {metadata['name']}"
+    elif action == "shopping_list.items_returned":
+        summary = f"Returned selected items from {metadata['name']} to the active shopping list"
+    elif action == "shopping_list.items_deleted":
+        summary = f"Deleted selected items from {metadata['name']}"
     elif action == "setup.completed":
         summary = "Completed first-run setup"
     else:

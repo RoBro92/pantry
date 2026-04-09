@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type {
@@ -29,6 +30,18 @@ type ActiveItemEditorState = {
   note: string;
 } | null;
 
+type PendingItemDraft = {
+  quantity: string;
+  unit: string;
+  note: string;
+  pantryLocationExternalId: string;
+};
+
+type QueuedBulkAction = {
+  action: "reconcile_selected";
+  itemIds: string[];
+} | null;
+
 function formatDateTime(value: string | null) {
   if (!value) {
     return "Not set";
@@ -39,69 +52,33 @@ function formatDateTime(value: string | null) {
   });
 }
 
-function compareQuantities(left: string | null, right: string | null) {
-  if (!left || !right) {
-    return null;
-  }
-  const normalizedLeft = Number(formatQuantityValue(left));
-  const normalizedRight = Number(formatQuantityValue(right));
-  if (Number.isNaN(normalizedLeft) || Number.isNaN(normalizedRight)) {
-    return null;
-  }
-  if (normalizedLeft === normalizedRight) {
-    return 0;
-  }
-  return normalizedLeft < normalizedRight ? -1 : 1;
-}
-
-function isShortfall(item: ShoppingListItemSummary) {
-  return (
-    item.status === "purchased" &&
-    item.quantity &&
-    item.requested_quantity &&
-    item.unit &&
-    item.requested_unit &&
-    item.unit === item.requested_unit &&
-    compareQuantities(item.quantity, item.requested_quantity) === -1
-  );
-}
-
-function isOverfill(item: ShoppingListItemSummary) {
-  return (
-    item.status === "purchased" &&
-    item.quantity &&
-    item.requested_quantity &&
-    item.unit &&
-    item.requested_unit &&
-    item.unit === item.requested_unit &&
-    compareQuantities(item.quantity, item.requested_quantity) === 1
-  );
-}
-
-function isPurchasedNewProduct(item: ShoppingListItemSummary) {
-  return item.status === "purchased" && item.product_external_id === null;
-}
-
 function buildRequestedSummary(item: ShoppingListItemSummary) {
   return formatQuantityWithUnit(item.requested_quantity, item.requested_unit, "No requested quantity");
 }
 
-function buildPurchasedSummary(item: ShoppingListItemSummary) {
-  return formatQuantityWithUnit(item.quantity, item.unit, "No purchased quantity");
+function buildPurchasedSummary(item: ShoppingListItemSummary, draft?: PendingItemDraft) {
+  return formatQuantityWithUnit(
+    draft?.quantity ?? item.quantity,
+    draft?.unit ?? item.unit,
+    "No purchased quantity",
+  );
 }
 
-function buildNextStatus(item: ShoppingListItemSummary, nextQuantity: string, nextUnit: string, fallbackStatus: string) {
-  if (
-    item.requested_quantity &&
-    item.requested_unit &&
-    nextQuantity &&
-    nextUnit &&
-    item.requested_unit === nextUnit &&
-    compareQuantities(nextQuantity, item.requested_quantity) === 0
-  ) {
-    return "purchased";
-  }
-  return fallbackStatus;
+function createPendingItemDraft(item: ShoppingListItemSummary): PendingItemDraft {
+  return {
+    quantity: item.quantity ?? item.requested_quantity ?? "",
+    unit: item.unit ?? item.requested_unit ?? "",
+    note: item.note ?? "",
+    pantryLocationExternalId: item.pantry_location_external_id ?? "",
+  };
+}
+
+function sortPendingItems(items: ShoppingListItemSummary[]) {
+  return [...items].sort((left, right) => {
+    const leftGroup = `${left.pantry_location_group_name ?? ""}|${left.pantry_location_name ?? ""}`;
+    const rightGroup = `${right.pantry_location_group_name ?? ""}|${right.pantry_location_name ?? ""}`;
+    return leftGroup.localeCompare(rightGroup) || (left.product_name ?? left.label).localeCompare(right.product_name ?? right.label);
+  });
 }
 
 export function ShoppingListPanel({
@@ -117,9 +94,10 @@ export function ShoppingListPanel({
     shoppingList.pending_lists[0]?.external_id ?? null,
   );
   const [activeItemEditor, setActiveItemEditor] = useState<ActiveItemEditorState>(null);
-  const [finalizeListExternalId, setFinalizeListExternalId] = useState<string | null>(null);
-  const [shortfallPromptOpen, setShortfallPromptOpen] = useState(false);
+  const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
+  const [pendingItemDrafts, setPendingItemDrafts] = useState<Record<string, PendingItemDraft>>({});
   const [productCreationQueue, setProductCreationQueue] = useState<ShoppingListItemSummary[]>([]);
+  const [queuedBulkAction, setQueuedBulkAction] = useState<QueuedBulkAction>(null);
 
   useEffect(() => {
     if (
@@ -136,15 +114,68 @@ export function ShoppingListPanel({
     shoppingList.pending_lists.find((list) => list.external_id === selectedPendingListId) ??
     shoppingList.pending_lists[0] ??
     null;
-  const shortfallItems = useMemo(
-    () => selectedPendingList?.items.filter((item) => isShortfall(item)) ?? [],
+  const unresolvedPendingItems = useMemo(
+    () =>
+      sortPendingItems(
+        selectedPendingList?.items.filter((item) => item.status === "awaiting_purchase") ?? [],
+      ),
     [selectedPendingList],
   );
-  const newPurchasedItems = useMemo(
-    () => selectedPendingList?.items.filter((item) => isPurchasedNewProduct(item)) ?? [],
-    [selectedPendingList],
-  );
+  const handledPendingItemCount = (selectedPendingList?.items.length ?? 0) - unresolvedPendingItems.length;
+  const selectedCount = selectedItemIds.length;
+  const allSelected = unresolvedPendingItems.length > 0 && selectedCount === unresolvedPendingItems.length;
   const productCreationItem = productCreationQueue[0] ?? null;
+
+  useEffect(() => {
+    setPendingItemDrafts((current) => {
+      const nextDrafts = { ...current };
+      const unresolvedIds = new Set(unresolvedPendingItems.map((item) => item.external_id));
+      unresolvedPendingItems.forEach((item) => {
+        if (!nextDrafts[item.external_id]) {
+          nextDrafts[item.external_id] = createPendingItemDraft(item);
+        }
+      });
+      Object.keys(nextDrafts).forEach((itemId) => {
+        if (!unresolvedIds.has(itemId)) {
+          delete nextDrafts[itemId];
+        }
+      });
+      return nextDrafts;
+    });
+  }, [unresolvedPendingItems]);
+
+  useEffect(() => {
+    const unresolvedIds = new Set(unresolvedPendingItems.map((item) => item.external_id));
+    setSelectedItemIds((current) => current.filter((itemId) => unresolvedIds.has(itemId)));
+  }, [unresolvedPendingItems]);
+
+  function updatePendingDraft(itemExternalId: string, patch: Partial<PendingItemDraft>) {
+    setPendingItemDrafts((current) => ({
+      ...current,
+      [itemExternalId]: {
+        ...(current[itemExternalId] ?? createPendingItemDraft(
+          unresolvedPendingItems.find((item) => item.external_id === itemExternalId)!,
+        )),
+        ...patch,
+      },
+    }));
+  }
+
+  function toggleItemSelection(itemExternalId: string) {
+    setSelectedItemIds((current) =>
+      current.includes(itemExternalId)
+        ? current.filter((candidate) => candidate !== itemExternalId)
+        : [...current, itemExternalId],
+    );
+  }
+
+  function setAllSelected(nextSelected: boolean) {
+    setSelectedItemIds(nextSelected ? unresolvedPendingItems.map((item) => item.external_id) : []);
+  }
+
+  function getDraftForItem(item: ShoppingListItemSummary) {
+    return pendingItemDrafts[item.external_id] ?? createPendingItemDraft(item);
+  }
 
   async function handleAddItem(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -214,38 +245,6 @@ export function ShoppingListPanel({
     }
   }
 
-  async function savePendingItem(event: FormEvent<HTMLFormElement>, item: ShoppingListItemSummary) {
-    event.preventDefault();
-    const formData = new FormData(event.currentTarget);
-    const nextQuantity = String(formData.get("quantity") ?? "").trim();
-    const nextUnit = String(formData.get("unit") ?? "").trim();
-    const nextStatus = buildNextStatus(
-      item,
-      nextQuantity,
-      nextUnit,
-      String(formData.get("status") ?? item.status),
-    );
-    setPending(true);
-    setError(null);
-
-    try {
-      await putToApi(`/api/households/${householdExternalId}/shopping-list/items/${item.external_id}`, {
-        status: nextStatus,
-        quantity: nextQuantity || null,
-        unit: nextUnit || null,
-        note: String(formData.get("note") ?? "").trim() || null,
-        pantry_location_external_id: String(formData.get("pantry_location_external_id") ?? "").trim() || null,
-      });
-      router.refresh();
-    } catch (requestError) {
-      setError(
-        requestError instanceof Error ? requestError.message : "Could not update this shopping item.",
-      );
-    } finally {
-      setPending(false);
-    }
-  }
-
   async function handleExport() {
     setPending(true);
     setError(null);
@@ -297,7 +296,7 @@ export function ShoppingListPanel({
     }
   }
 
-  async function returnPendingListToActive(listExternalId: string) {
+  async function movePendingListBackToActive(listExternalId: string) {
     setPending(true);
     setError(null);
     try {
@@ -305,6 +304,7 @@ export function ShoppingListPanel({
         `/api/households/${householdExternalId}/shopping-list/pending/${listExternalId}/return-to-active`,
         {},
       );
+      setSelectedItemIds([]);
       router.refresh();
     } catch (requestError) {
       setError(
@@ -315,80 +315,137 @@ export function ShoppingListPanel({
     }
   }
 
-  async function finalizePendingList(listExternalId: string, returnShortfallsToActive: boolean) {
+  function validateReconcileSelection(selectedItems: ShoppingListItemSummary[]) {
+    for (const item of selectedItems) {
+      const draft = getDraftForItem(item);
+      const normalizedQuantity = Number(formatQuantityValue(draft.quantity));
+      if (!draft.quantity.trim() || Number.isNaN(normalizedQuantity) || normalizedQuantity <= 0) {
+        throw new Error("Purchased quantity must be greater than zero. Return or delete items that were not bought.");
+      }
+      if (!draft.unit.trim()) {
+        throw new Error(`Choose a purchased unit for ${item.product_name ?? item.label}.`);
+      }
+    }
+  }
+
+  function buildBulkPayloadItems(itemIds: string[]) {
+    return itemIds.map((itemId) => {
+      const item = unresolvedPendingItems.find((candidate) => candidate.external_id === itemId);
+      if (!item) {
+        throw new Error("One or more selected shopping items are no longer available.");
+      }
+      const draft = getDraftForItem(item);
+      return {
+        item_external_id: item.external_id,
+        quantity: draft.quantity.trim() || null,
+        unit: draft.unit.trim() || null,
+        note: draft.note,
+        pantry_location_external_id: draft.pantryLocationExternalId || null,
+      };
+    });
+  }
+
+  async function postBulkAction(action: "reconcile_selected" | "return_selected" | "delete_selected", itemIds: string[]) {
+    if (!selectedPendingList) {
+      return;
+    }
     setPending(true);
     setError(null);
     try {
       await postToApi(
-        `/api/households/${householdExternalId}/shopping-list/pending/${listExternalId}/finalize`,
-        { return_shortfalls_to_active: returnShortfallsToActive },
+        `/api/households/${householdExternalId}/shopping-list/pending/${selectedPendingList.external_id}/bulk`,
+        {
+          action,
+          items: buildBulkPayloadItems(itemIds),
+        },
       );
-      setFinalizeListExternalId(null);
-      setShortfallPromptOpen(false);
+      setSelectedItemIds((current) => current.filter((itemId) => !itemIds.includes(itemId)));
       router.refresh();
     } catch (requestError) {
       setError(
-        requestError instanceof Error ? requestError.message : "Could not finish reconciling this list.",
+        requestError instanceof Error ? requestError.message : "Could not update the selected shopping items.",
       );
     } finally {
       setPending(false);
     }
   }
 
-  function queueFinalize(list: ShoppingListDetailSummary) {
-    setFinalizeListExternalId(list.external_id);
-    setError(null);
+  async function runBulkAction(action: "reconcile_selected" | "return_selected" | "delete_selected", itemIds?: string[]) {
+    const targetItemIds = itemIds ?? selectedItemIds;
+    if (!selectedPendingList || targetItemIds.length === 0) {
+      setError("Select at least one unresolved shopping item first.");
+      return;
+    }
 
-    if (newPurchasedItems.length > 0) {
-      if (!canAdminister) {
-        setError("A household admin needs to create Pantry products for new purchased items before finishing.");
-        setFinalizeListExternalId(null);
-        return;
+    const selectedItems = targetItemIds
+      .map((itemId) => unresolvedPendingItems.find((item) => item.external_id === itemId))
+      .filter((item): item is ShoppingListItemSummary => Boolean(item));
+
+    try {
+      if (action === "reconcile_selected") {
+        validateReconcileSelection(selectedItems);
+        const newProducts = selectedItems.filter((item) => item.product_external_id === null);
+        if (newProducts.length > 0) {
+          if (!canAdminister) {
+            throw new Error("A household admin must create Pantry products for new purchased items before they can be reconciled.");
+          }
+          setQueuedBulkAction({ action, itemIds: targetItemIds });
+          setProductCreationQueue(newProducts);
+          return;
+        }
       }
-      setProductCreationQueue(newPurchasedItems);
-      return;
-    }
 
-    if (shortfallItems.length > 0) {
-      setShortfallPromptOpen(true);
-      return;
+      await postBulkAction(action, targetItemIds);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Could not process the selected shopping items.");
     }
-
-    void finalizePendingList(list.external_id, false);
   }
 
-  async function attachCreatedProduct(productExternalId: string, item: ShoppingListItemSummary) {
+  async function finishSelectedPendingList() {
+    if (!selectedPendingList) {
+      return;
+    }
+    if (unresolvedPendingItems.length > 0) {
+      setError("Reconcile, return, or delete the remaining unresolved items before finishing this trip.");
+      return;
+    }
+
+    setPending(true);
+    setError(null);
+    try {
+      await postToApi(
+        `/api/households/${householdExternalId}/shopping-list/pending/${selectedPendingList.external_id}/finalize`,
+        { return_shortfalls_to_active: false },
+      );
+      setSelectedItemIds([]);
+      router.refresh();
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error ? requestError.message : "Could not finish this shopping trip.",
+      );
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function attachCreatedProduct(productExternalId: string, itemExternalId: string) {
     await postToApi(
-      `/api/households/${householdExternalId}/shopping-list/items/${item.external_id}/attach-product`,
+      `/api/households/${householdExternalId}/shopping-list/items/${itemExternalId}/attach-product`,
       {
         product_external_id: productExternalId,
       },
     );
-    await putToApi(`/api/households/${householdExternalId}/shopping-list/items/${item.external_id}`, {
-      status: "purchased",
-      quantity: item.quantity ?? item.requested_quantity ?? "1",
-      unit: item.unit ?? item.requested_unit ?? "count",
-      note: item.note,
-      pantry_location_external_id: item.pantry_location_external_id,
-    });
   }
 
   async function handleProductCreationCompleted(productExternalId: string, item: ShoppingListItemSummary) {
-    await attachCreatedProduct(productExternalId, item);
+    await attachCreatedProduct(productExternalId, item.external_id);
     const remainingItems = productCreationQueue.filter((candidate) => candidate.external_id !== item.external_id);
     setProductCreationQueue(remainingItems);
 
-    if (remainingItems.length > 0) {
-      return;
-    }
-
-    if (finalizeListExternalId && shortfallItems.length > 0) {
-      setShortfallPromptOpen(true);
-      return;
-    }
-
-    if (finalizeListExternalId) {
-      await finalizePendingList(finalizeListExternalId, false);
+    if (remainingItems.length === 0 && queuedBulkAction) {
+      const queuedItemIds = queuedBulkAction.itemIds;
+      setQueuedBulkAction(null);
+      await postBulkAction(queuedBulkAction.action, queuedItemIds);
     }
   }
 
@@ -401,13 +458,18 @@ export function ShoppingListPanel({
               <p className="eyebrow">Shopping List</p>
               <h1>Household shopping</h1>
               <p className="section-copy">
-                Keep the active list dense and editable, then reconcile each trip back into Pantry stock.
+                Keep the active list compact, then reconcile each trip in bulk with exceptions handled separately.
               </p>
             </div>
             <div className="tag-row">
               <span className="pill">{shoppingList.active_list.unresolved_item_count} active</span>
               <span className="pill">{shoppingList.pending_lists.length} awaiting purchase</span>
-              <span className="pill">{shoppingList.history_lists.length} recent trips</span>
+              <Link
+                href={`/app/households/${householdExternalId}/shopping-list/history`}
+                className="secondary-link compact-link"
+              >
+                Shopping history
+              </Link>
             </div>
           </div>
 
@@ -517,13 +579,13 @@ export function ShoppingListPanel({
               <p className="eyebrow">Awaiting Purchase</p>
               <h2 className="section-heading">Pending trips</h2>
               <p className="helper-text">
-                Exported lists stay here until you cancel, merge, or reconcile them.
+                Review one trip at a time, then bulk reconcile what was bought as planned.
               </p>
             </div>
 
             {shoppingList.pending_lists.length === 0 ? (
               <div className="empty-state">
-                <p>Export a checklist to start an awaiting-purchase list.</p>
+                <p>Export a checklist to start an awaiting-purchase trip.</p>
               </div>
             ) : (
               <div className="shopping-item-list shopping-item-list-dense">
@@ -536,7 +598,7 @@ export function ShoppingListPanel({
                       <div className="stack compact-stack">
                         <strong>{list.name}</strong>
                         <p className="helper-text">
-                          {list.unresolved_item_count} unresolved · {list.purchased_item_count} purchased
+                          {list.unresolved_item_count} unresolved · {list.purchased_item_count} purchased · {list.not_purchased_item_count} returned
                         </p>
                         <p className="helper-text">Exported {formatDateTime(list.generated_at)}</p>
                       </div>
@@ -545,7 +607,7 @@ export function ShoppingListPanel({
                         className="ghost-button compact-button"
                         onClick={() => setSelectedPendingListId(list.external_id)}
                       >
-                        {selectedPendingList?.external_id === list.external_id ? "Open" : "Review"}
+                        {selectedPendingList?.external_id === list.external_id ? "Selected" : "Review"}
                       </button>
                     </div>
                   </article>
@@ -562,7 +624,7 @@ export function ShoppingListPanel({
                 <p className="eyebrow">Reconcile</p>
                 <h2>{selectedPendingList.name}</h2>
                 <p className="helper-text">
-                  Save purchased quantities, reuse the last known pantry location where possible, and return any shortfall if needed when you finish.
+                  Tick rows bought as planned, edit exceptions inline, and reconcile the selection in one pass.
                 </p>
               </div>
               <div className="page-actions">
@@ -570,128 +632,213 @@ export function ShoppingListPanel({
                   type="button"
                   className="ghost-button"
                   disabled={pending}
-                  onClick={() => void returnPendingListToActive(selectedPendingList.external_id)}
+                  onClick={() => void movePendingListBackToActive(selectedPendingList.external_id)}
                 >
-                  Move back to active list
+                  Move whole trip back to active list
                 </button>
                 <button
                   type="button"
                   className="primary-button"
-                  disabled={pending}
-                  onClick={() => queueFinalize(selectedPendingList)}
+                  disabled={pending || unresolvedPendingItems.length > 0}
+                  onClick={() => void finishSelectedPendingList()}
                 >
-                  Finish reconciliation
+                  Finish trip
                 </button>
               </div>
             </div>
 
-            <div className="shopping-reconcile-list shopping-reconcile-list-compact">
-              {selectedPendingList.items.map((item) => (
-                <form
-                  key={item.external_id}
-                  className="shopping-reconcile-row shopping-reconcile-row-compact"
-                  onSubmit={(event) => void savePendingItem(event, item)}
+            <div className="shopping-bulk-toolbar">
+              <label className="checkbox-row">
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  onChange={(event) => setAllSelected(event.target.checked)}
+                />
+                <span>
+                  {selectedCount > 0 ? `${selectedCount} selected` : "Select all visible rows"}
+                </span>
+              </label>
+              <div className="page-actions">
+                <button
+                  type="button"
+                  className="primary-button compact-button"
+                  disabled={pending || selectedCount === 0}
+                  onClick={() => void runBulkAction("reconcile_selected")}
                 >
-                  <div className="stack compact-stack">
-                    <div className="shopping-row-heading">
-                      <strong>{item.product_name ?? item.label}</strong>
-                      <div className="tag-row">
-                        <span className="pill">{item.status.replaceAll("_", " ")}</span>
-                        {item.product_external_id === null ? <span className="pill is-warning">New product</span> : null}
-                        {isShortfall(item) ? <span className="pill is-warning">Shortfall</span> : null}
-                        {isOverfill(item) ? <span className="pill is-success">Extra bought</span> : null}
-                      </div>
-                    </div>
-                    <p className="helper-text">
-                      Requested: {buildRequestedSummary(item)} · Purchased: {buildPurchasedSummary(item)}
-                    </p>
-                    <p className="helper-text">
-                      Added {formatDateTime(item.created_at)}
-                      {item.purchased_at ? ` · Purchased ${formatDateTime(item.purchased_at)}` : ""}
-                      {item.not_purchased_at ? ` · Not purchased ${formatDateTime(item.not_purchased_at)}` : ""}
-                    </p>
-                  </div>
-
-                  <label className="field compact">
-                    <span>Status</span>
-                    <select name="status" defaultValue={item.status}>
-                      <option value="awaiting_purchase">Awaiting purchase</option>
-                      <option value="purchased">Purchased</option>
-                      <option value="not_purchased">Not purchased</option>
-                    </select>
-                  </label>
-                  <label className="field compact">
-                    <span>Purchased qty</span>
-                    <input
-                      name="quantity"
-                      type="number"
-                      min="0.001"
-                      step="0.001"
-                      defaultValue={item.quantity ?? item.requested_quantity ?? ""}
-                    />
-                  </label>
-                  <label className="field compact">
-                    <span>Unit</span>
-                    <input name="unit" defaultValue={item.unit ?? item.requested_unit ?? ""} />
-                  </label>
-                  <label className="field compact">
-                    <span>Pantry location</span>
-                    <select name="pantry_location_external_id" defaultValue={item.pantry_location_external_id ?? ""}>
-                      <option value="">Choose later</option>
-                      {locations.map((location) => (
-                        <option key={location.external_id} value={location.external_id}>
-                          {location.location_group_name} / {location.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="field compact shopping-reconcile-note">
-                    <span>Note</span>
-                    <input name="note" defaultValue={item.note ?? ""} />
-                  </label>
-                  <div className="shopping-reconcile-actions">
-                    <button type="submit" className="ghost-button compact-button" disabled={pending}>
-                      Save
-                    </button>
-                  </div>
-                </form>
-              ))}
+                  Reconcile selected
+                </button>
+                <button
+                  type="button"
+                  className="ghost-button compact-button"
+                  disabled={pending || selectedCount === 0}
+                  onClick={() => void runBulkAction("return_selected")}
+                >
+                  Return selected to shopping list
+                </button>
+                <button
+                  type="button"
+                  className="ghost-button compact-button"
+                  disabled={pending || selectedCount === 0}
+                  onClick={() => void runBulkAction("delete_selected")}
+                >
+                  Delete selected
+                </button>
+              </div>
             </div>
+
+            {handledPendingItemCount > 0 ? (
+              <p className="helper-text">
+                {handledPendingItemCount} handled item{handledPendingItemCount === 1 ? "" : "s"} are already tucked away from this view. Finish the trip to move it into history.
+              </p>
+            ) : null}
+
+            {unresolvedPendingItems.length === 0 ? (
+              <div className="empty-state">
+                <p>This trip has no unresolved items left. Finish it to move it into shopping history.</p>
+              </div>
+            ) : (
+              <div className="shopping-reconcile-list shopping-reconcile-list-dense">
+                {unresolvedPendingItems.map((item) => {
+                  const draft = getDraftForItem(item);
+                  const isSelected = selectedItemIds.includes(item.external_id);
+                  return (
+                    <article
+                      key={item.external_id}
+                      className={`shopping-reconcile-row shopping-reconcile-row-dense${isSelected ? " is-selected" : ""}`}
+                    >
+                      <div className="shopping-reconcile-row-heading">
+                        <label className="checkbox-row shopping-reconcile-checkbox">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleItemSelection(item.external_id)}
+                          />
+                          <span className="sr-only">Select {item.product_name ?? item.label}</span>
+                        </label>
+                        <div className="stack compact-stack shopping-reconcile-title">
+                          <div className="shopping-row-heading">
+                            <strong>{item.product_name ?? item.label}</strong>
+                            <div className="tag-row">
+                              <span className="pill">{item.source_type.replaceAll("_", " ")}</span>
+                              {item.product_external_id === null ? <span className="pill is-warning">New product</span> : null}
+                            </div>
+                          </div>
+                          <p className="helper-text">
+                            Requested {buildRequestedSummary(item)} · Planned reconcile {buildPurchasedSummary(item, draft)}
+                          </p>
+                          <p className="helper-text">
+                            {item.pantry_location_name
+                              ? `Default location ${item.pantry_location_group_name} / ${item.pantry_location_name}`
+                              : "Choose a pantry location while reconciling"}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="shopping-reconcile-row-fields">
+                        <label className="field compact">
+                          <span>Purchased qty</span>
+                          <input
+                            type="number"
+                            min="0.001"
+                            step="0.001"
+                            value={draft.quantity}
+                            onChange={(event) =>
+                              updatePendingDraft(item.external_id, { quantity: event.target.value })
+                            }
+                          />
+                        </label>
+                        <label className="field compact">
+                          <span>Unit</span>
+                          <input
+                            value={draft.unit}
+                            onChange={(event) =>
+                              updatePendingDraft(item.external_id, { unit: event.target.value })
+                            }
+                          />
+                        </label>
+                        <label className="field compact">
+                          <span>Pantry location</span>
+                          <select
+                            value={draft.pantryLocationExternalId}
+                            onChange={(event) =>
+                              updatePendingDraft(item.external_id, {
+                                pantryLocationExternalId: event.target.value,
+                              })
+                            }
+                          >
+                            <option value="">Choose later</option>
+                            {locations.map((location) => (
+                              <option key={location.external_id} value={location.external_id}>
+                                {location.location_group_name} / {location.name}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="field compact shopping-reconcile-note">
+                          <span>Note</span>
+                          <input
+                            value={draft.note}
+                            onChange={(event) =>
+                              updatePendingDraft(item.external_id, { note: event.target.value })
+                            }
+                          />
+                        </label>
+                      </div>
+
+                      <div className="shopping-reconcile-actions">
+                        <button
+                          type="button"
+                          className="ghost-button compact-button"
+                          onClick={() =>
+                            updatePendingDraft(item.external_id, {
+                              quantity: item.requested_quantity ?? item.quantity ?? "",
+                              unit: item.requested_unit ?? item.unit ?? draft.unit,
+                            })
+                          }
+                        >
+                          Use requested
+                        </button>
+                        <button
+                          type="button"
+                          className="ghost-button compact-button"
+                          disabled={pending}
+                          onClick={() => void runBulkAction("return_selected", [item.external_id])}
+                        >
+                          Return
+                        </button>
+                        <button
+                          type="button"
+                          className="ghost-button compact-button"
+                          disabled={pending}
+                          onClick={() => void runBulkAction("delete_selected", [item.external_id])}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
           </section>
         ) : null}
 
         <section className="panel">
-          <div className="stack compact-stack">
-            <p className="eyebrow">Recent trips</p>
-            <h2 className="section-heading">History</h2>
+          <div className="inventory-header">
+            <div className="stack compact-stack">
+              <p className="eyebrow">History</p>
+              <h2 className="section-heading">Shopping history</h2>
+              <p className="helper-text">
+                Historic trips now live in a dedicated view so active reconciliation stays compact.
+              </p>
+            </div>
+            <Link
+              href={`/app/households/${householdExternalId}/shopping-list/history`}
+              className="secondary-link compact-link"
+            >
+              Open history
+            </Link>
           </div>
-          {shoppingList.history_lists.length === 0 ? (
-            <div className="empty-state">
-              <p>Reconciled, returned, and merged lists will appear here.</p>
-            </div>
-          ) : (
-            <div className="shopping-item-list shopping-item-list-dense">
-              {shoppingList.history_lists.map((list) => (
-                <article key={list.external_id} className="shopping-item-card is-muted">
-                  <div className="shopping-item-row-main">
-                    <div className="stack compact-stack">
-                      <strong>{list.name}</strong>
-                      <p className="helper-text">
-                        {list.lifecycle_state.replaceAll("_", " ")} · {list.item_count} items
-                      </p>
-                      <p className="helper-text">
-                        {list.reconciled_at ? `Finished ${formatDateTime(list.reconciled_at)}` : "Recently updated"}
-                      </p>
-                    </div>
-                    <div className="tag-row">
-                      {list.purchased_item_count > 0 ? <span className="pill">{list.purchased_item_count} purchased</span> : null}
-                      {list.not_purchased_item_count > 0 ? <span className="pill">{list.not_purchased_item_count} returned</span> : null}
-                    </div>
-                  </div>
-                </article>
-              ))}
-            </div>
-          )}
         </section>
       </div>
 
@@ -739,51 +886,19 @@ export function ShoppingListPanel({
         </ModalShell>
       ) : null}
 
-      {shortfallPromptOpen && finalizeListExternalId ? (
-        <ModalShell
-          title="Return shortfall to active list?"
-          description={`${shortfallItems.length} purchased item${shortfallItems.length === 1 ? "" : "s"} came back short. Decide whether the missing amount should go back onto the active shopping list.`}
-          onClose={() => {
-            setShortfallPromptOpen(false);
-            setFinalizeListExternalId(null);
-          }}
-        >
-          <div className="stack">
-            <div className="page-actions">
-              <button
-                type="button"
-                className="primary-button"
-                disabled={pending}
-                onClick={() => void finalizePendingList(finalizeListExternalId, true)}
-              >
-                Return shortfall
-              </button>
-              <button
-                type="button"
-                className="ghost-button"
-                disabled={pending}
-                onClick={() => void finalizePendingList(finalizeListExternalId, false)}
-              >
-                Keep closed
-              </button>
-            </div>
-          </div>
-        </ModalShell>
-      ) : null}
-
       {productCreationItem ? (
         <PantryProductCreateDialog
           householdExternalId={householdExternalId}
           initialName={productCreationItem.label}
-          initialUnit={productCreationItem.unit ?? productCreationItem.requested_unit ?? "count"}
-          quantitySummary={buildPurchasedSummary(productCreationItem)}
-          note={productCreationItem.note}
+          initialUnit={getDraftForItem(productCreationItem).unit || productCreationItem.unit || productCreationItem.requested_unit || "count"}
+          quantitySummary={buildPurchasedSummary(productCreationItem, getDraftForItem(productCreationItem))}
+          note={getDraftForItem(productCreationItem).note || productCreationItem.note}
           onCompleted={async (product) => {
             await handleProductCreationCompleted(product.external_id, productCreationItem);
           }}
           onClose={() => {
             setProductCreationQueue([]);
-            setFinalizeListExternalId(null);
+            setQueuedBulkAction(null);
           }}
         />
       ) : null}
