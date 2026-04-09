@@ -64,6 +64,18 @@ code {
   font-size: 0.9em;
 }
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .page-shell {
   width: min(1180px, calc(100% - 2rem));
   margin: 0 auto;
@@ -859,6 +871,11 @@ code {
   color: #7b241d;
 }
 
+button.smtp-template-pill {
+  cursor: pointer;
+  appearance: none;
+}
+
 .token-input-row {
   display: grid;
   gap: 0.75rem;
@@ -1333,6 +1350,11 @@ code {
   gap: 1rem;
 }
 
+.pantry-lot-list-compact {
+  gap: 0.6rem;
+  align-content: start;
+}
+
 .pantry-support-grid {
   grid-template-columns: minmax(360px, 0.95fr) minmax(0, 1.25fr);
   align-items: start;
@@ -1460,16 +1482,23 @@ code {
   font-size: 1.4rem;
 }
 
-.view-toggle {
-  display: inline-flex;
-  gap: 0.6rem;
-  flex-wrap: wrap;
-}
-
 .pantry-table-wrap {
   border: 1px solid var(--border);
   border-radius: 22px;
   background: rgba(255, 255, 255, 0.44);
+}
+
+.pantry-status-column-heading {
+  text-align: center;
+}
+
+.pantry-status-pill-pair {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+  min-width: 12rem;
 }
 
 .pantry-inventory-table th:first-child,
@@ -1556,11 +1585,20 @@ code {
   padding: 0.95rem 1rem;
 }
 
+.pantry-lot-row-compact {
+  gap: 0.45rem;
+  padding: 0.7rem 0.85rem;
+}
+
 .pantry-lot-row-main {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 1rem;
+}
+
+.pantry-lot-row-main-compact {
+  gap: 0.75rem;
 }
 
 .pantry-lot-row-summary {
@@ -1574,6 +1612,10 @@ code {
   flex-wrap: wrap;
   gap: 0.6rem;
   align-items: baseline;
+}
+
+.pantry-lot-row-heading-compact {
+  gap: 0.35rem 0.8rem;
 }
 
 .pantry-lot-inline-grid {
@@ -1609,13 +1651,14 @@ code {
 
 .lot-actions {
   display: grid;
-  gap: 0.75rem;
+  gap: 0.45rem;
+  justify-items: start;
 }
 
 .lot-actions-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem;
+  gap: 0.45rem;
   align-items: center;
 }
 
@@ -1775,6 +1818,10 @@ code {
   gap: 0.7rem;
 }
 
+.shopping-reconcile-list-dense {
+  gap: 0.65rem;
+}
+
 .shopping-reconcile-row {
   display: grid;
   gap: 0.85rem;
@@ -1794,6 +1841,63 @@ code {
     minmax(180px, 1fr)
     auto;
   padding: 0.9rem 1rem;
+}
+
+.shopping-reconcile-row-dense {
+  gap: 0.65rem;
+  padding: 0.8rem 0.95rem;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.shopping-reconcile-row-dense.is-selected {
+  border-color: rgba(173, 91, 31, 0.22);
+  background: rgba(173, 91, 31, 0.08);
+}
+
+.shopping-bulk-toolbar,
+.shopping-reconcile-row-heading,
+.shopping-reconcile-row-fields {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.shopping-bulk-toolbar {
+  grid-template-columns: minmax(180px, auto) minmax(0, 1fr);
+  align-items: center;
+}
+
+.shopping-reconcile-row-heading {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+}
+
+.shopping-reconcile-checkbox {
+  margin-top: 0.15rem;
+}
+
+.shopping-reconcile-title {
+  min-width: 0;
+}
+
+.shopping-reconcile-row-fields {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.shopping-history-card,
+.shopping-history-item-list {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.shopping-history-item-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.85rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
 }
 
 .shopping-reconcile-note {
@@ -1838,7 +1942,9 @@ code {
   .pantry-support-grid,
   .inventory-detail-grid,
   .setup-review-layout,
-  .shopping-reconcile-row {
+  .shopping-reconcile-row,
+  .shopping-bulk-toolbar,
+  .shopping-reconcile-row-heading {
     grid-template-columns: minmax(0, 1fr);
   }
 }
@@ -1948,6 +2054,7 @@ code {
   .pantry-lot-row-main,
   .shopping-item-row-main,
   .shopping-row-heading,
+  .shopping-history-item-row,
   .activity-feed-item,
   .lot-actions-row,
   .inline-form,

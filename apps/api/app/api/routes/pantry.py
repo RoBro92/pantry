@@ -11,6 +11,7 @@ from app.domain.roles import HOUSEHOLD_ADMIN_ROLE
 from app.models.user import User
 from app.schemas.pantry import (
     AddStockLotRequest,
+    ConfirmedProductEnrichmentRequest,
     CreatePantryEntryRequest,
     CreateLocationGroupRequest,
     CreateLocationRequest,
@@ -193,6 +194,35 @@ def post_product_enrichment_preview(
         return preview_product_enrichment(product_name=payload.product_name, barcode=payload.barcode)
     except ValueError as exc:
         raise _bad_request(exc) from exc
+
+
+@router.post("/products/{product_external_id}/enrichment", response_model=ProductSummary)
+def post_product_enrichment(
+    product_external_id: str,
+    payload: ConfirmedProductEnrichmentRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
+    access: HouseholdAccess = Depends(require_household_access(allowed_roles={HOUSEHOLD_ADMIN_ROLE})),
+):
+    product = get_product_by_external_id(db, household=access.household, external_id=product_external_id)
+    if product is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found.")
+
+    try:
+        apply_confirmed_product_enrichment(
+            db,
+            household=access.household,
+            actor=current_user,
+            product=product,
+            confirmed_enrichment=payload,
+        )
+        db.commit()
+        db.expire_all()
+        product = get_product_by_external_id(db, household=access.household, external_id=product_external_id) or product
+    except ProductEnrichmentError as exc:
+        raise _bad_request(exc) from exc
+
+    return serialize_product_summary(product)
 
 
 @router.post("/pantry/entries", response_model=PantryEntryMutationResponse)
