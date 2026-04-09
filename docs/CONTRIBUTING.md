@@ -19,17 +19,27 @@ Recommended branch prefixes:
 
 ## Local Development Stack
 
-Pantry provides a source-based helper for local branch work:
+Pantry provides a repo-root wrapper for local branch work:
 
 ```bash
-./infra/scripts/dev-stack.sh start fresh
-./infra/scripts/dev-stack.sh start demo
+./pantry start --fresh
+./pantry start --demo
 ```
 
 - `fresh` resets the local environment to the first run setup flow
 - `demo` resets the local environment and seeds stable demo data
-- stop the stack with `./infra/scripts/dev-stack.sh down`
-- follow logs with `./infra/scripts/dev-stack.sh logs`
+- switch modes without a rebuild with `./pantry reset --fresh` or `./pantry reset --demo`
+- stop the stack with `./pantry stop`
+- follow logs with `./pantry logs`
+- check the current stack with `./pantry status`
+- rebuild images only when Dockerfiles or dependencies changed with `./pantry rebuild`
+- the helper prefers `.env.local`, falls back to `.env`, and bootstraps `.env.local` from `.env.example` if needed
+- web edits in `apps/web` and `packages/shared-types` hot reload in browser
+- API edits in `apps/api/app` and Alembic files auto-reload the FastAPI process
+- worker edits in `apps/worker/worker` and shared API-side worker dependencies restart the worker process automatically
+
+Cross-platform note:
+Docker Desktop file polling is enabled automatically by the helper on macOS and Windows-like shells. Linux keeps native file watching by default. If your host still misses changes, set `PANTRY_WEB_WATCHPACK_POLLING=true`, `PANTRY_API_WATCHFILES_FORCE_POLLING=true`, and `PANTRY_WORKER_WATCHFILES_FORCE_POLLING=true` before starting the stack. On Windows, run `./pantry` from Git Bash or WSL.
 
 Demo credentials:
 
@@ -50,6 +60,9 @@ Start with [docs/TEST_STRATEGY.md](TEST_STRATEGY.md).
 Common commands:
 
 ```bash
+./pantry start --fresh
+./pantry start --demo
+./pantry stop
 npm run typecheck:web
 npm run build:web
 cd apps/api && pytest -q

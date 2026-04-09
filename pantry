@@ -1,0 +1,142 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DEV_STACK_SCRIPT="${ROOT_DIR}/infra/scripts/dev-stack.sh"
+
+usage() {
+  cat <<'EOF'
+Pantry local development wrapper.
+
+Usage:
+  ./pantry start --fresh
+  ./pantry start --demo
+  ./pantry reset --fresh
+  ./pantry reset --demo
+  ./pantry stop
+  ./pantry rebuild
+  ./pantry status
+  ./pantry logs
+  ./pantry help
+
+Commands:
+  start     Start the local dev stack and prepare fresh or demo mode.
+  reset     Re-seed the running stack into fresh or demo mode.
+  stop      Stop the local dev stack.
+  rebuild   Rebuild local dev images and restart the stack.
+  status    Show current local dev container status.
+  logs      Follow web, api, and worker logs.
+  help      Show this help text.
+
+Modes:
+  --fresh   Land on the setup flow.
+  --demo    Land on login with seeded demo data.
+
+Notes:
+  - Run this wrapper from the repository root.
+  - On Windows, run the underlying shell scripts from Git Bash or WSL.
+EOF
+}
+
+require_repo_root() {
+  if [[ ! -x "${DEV_STACK_SCRIPT}" ]]; then
+    echo "Could not find ${DEV_STACK_SCRIPT}. Run this command from the Pantry repository root." >&2
+    exit 1
+  fi
+}
+
+parse_mode_flag() {
+  local flag="${1:-}"
+  case "${flag}" in
+    --fresh)
+      printf 'fresh\n'
+      ;;
+    --demo)
+      printf 'demo\n'
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+run_mode_command() {
+  local action="$1"
+  local flag="${2:-}"
+  local mode
+
+  if ! mode="$(parse_mode_flag "${flag}")"; then
+    echo "Expected ${action} to include exactly one of --fresh or --demo." >&2
+    echo >&2
+    usage >&2
+    exit 1
+  fi
+
+  if [[ $# -ne 2 ]]; then
+    echo "Too many arguments for ${action}." >&2
+    echo >&2
+    usage >&2
+    exit 1
+  fi
+
+  exec "${DEV_STACK_SCRIPT}" "${action}" "${mode}"
+}
+
+main() {
+  require_repo_root
+
+  local command="${1:-help}"
+
+  case "${command}" in
+    start|reset)
+      run_mode_command "${command}" "${2:-}" "${@:3}"
+      ;;
+    stop)
+      if [[ $# -ne 1 ]]; then
+        echo "stop does not accept additional arguments." >&2
+        echo >&2
+        usage >&2
+        exit 1
+      fi
+      exec "${DEV_STACK_SCRIPT}" down
+      ;;
+    rebuild)
+      if [[ $# -ne 1 ]]; then
+        echo "rebuild does not accept additional arguments." >&2
+        echo >&2
+        usage >&2
+        exit 1
+      fi
+      exec "${DEV_STACK_SCRIPT}" rebuild
+      ;;
+    status)
+      if [[ $# -ne 1 ]]; then
+        echo "status does not accept additional arguments." >&2
+        echo >&2
+        usage >&2
+        exit 1
+      fi
+      exec "${DEV_STACK_SCRIPT}" status
+      ;;
+    logs)
+      if [[ $# -ne 1 ]]; then
+        echo "logs does not accept additional arguments." >&2
+        echo >&2
+        usage >&2
+        exit 1
+      fi
+      exec "${DEV_STACK_SCRIPT}" logs
+      ;;
+    help|-h|--help)
+      usage
+      ;;
+    *)
+      echo "Unknown command: ${command}" >&2
+      echo >&2
+      usage >&2
+      exit 1
+      ;;
+  esac
+}
+
+main "$@"

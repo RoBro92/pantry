@@ -55,16 +55,23 @@ Restore accepts Pantry backup bundle JSON files only. Uploaded bundles are valid
 
 ## Local Development
 
-Local branch work uses the source-based development stack:
+Local branch work uses the Docker-based source stack that stays separate from the released self-hosted compose file in `infra/compose/pantry.yml`:
 
 ```bash
-./infra/scripts/dev-stack.sh start fresh
-./infra/scripts/dev-stack.sh start demo
+./pantry start --fresh
+./pantry start --demo
 ```
 
 - `fresh` resets the local stack to the setup flow
 - `demo` resets and seeds a repeatable local demo account set
-- Demo credentials stay in the public repo for contributor use: `demoadmin` / `demopass` and `demouser` / `demopass`
+- `./pantry reset --fresh` or `./pantry reset --demo` switches modes without forcing image rebuilds
+- `./pantry stop` stops the stack cleanly
+- `./pantry rebuild` is only needed after Dockerfile or dependency changes
+- `./pantry status` shows the current local stack state
+- `./pantry logs` follows the local service logs
+- the helper uses `.env.local` first, falls back to `.env`, and creates `.env.local` from `.env.example` on first run
+- web changes hot reload in the browser, API changes auto-reload, and worker source changes restart the worker process in the dev stack
+- demo credentials stay in the public repo for contributor use: `demoadmin` / `demopass` and `demouser` / `demopass`
 
 Contributor workflow details live in [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md).
 

@@ -1,52 +1,77 @@
+name: pantry-dev
+
 services:
   web:
     build:
       context: .
       dockerfile: infra/docker/web.Dockerfile
-    env_file:
-      - .env
     environment:
       ENVIRONMENT: development
       NODE_ENV: development
       INTERNAL_API_BASE_URL: ${INTERNAL_API_BASE_URL:-http://api:8000}
       NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}
       NODE_OPTIONS: ${NODE_OPTIONS:---max_old_space_size=2048}
-      WATCHPACK_POLLING: "true"
-      CHOKIDAR_USEPOLLING: "true"
-      CHOKIDAR_INTERVAL: "500"
     working_dir: /workspace
     command: >
       /bin/sh -lc
       'export NEXT_PUBLIC_APP_VERSION=$$(cat /workspace/VERSION) &&
       npm run dev --workspace @pantry/web -- --hostname 0.0.0.0 --port 3000'
-    volumes:
-      - .:/workspace
-      - web_node_modules:/workspace/node_modules
-      - web_next_cache:/workspace/apps/web/.next
     ports:
       - "${WEB_PORT:-3000}:3000"
     depends_on:
       api:
-        condition: service_started
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:3000/ >/dev/null"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
 
   api:
     build:
       context: .
       dockerfile: infra/docker/api.Dockerfile
-    env_file:
-      - .env
     environment:
+      API_SERVICE_NAME: ${API_SERVICE_NAME:-pantry-api}
       ENVIRONMENT: development
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
       DEPLOYMENT_MODE: self_hosted
+      DEMO_MODE_ENABLED: ${DEMO_MODE_ENABLED:-false}
       AI_FEATURE_ENABLED: ${AI_FEATURE_ENABLED:-true}
       APP_VERSION: ${APP_VERSION:-dev}
+      WEB_APP_URL: ${WEB_APP_URL:-http://localhost:3000}
+      API_BASE_URL: ${API_BASE_URL:-http://localhost:8000}
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://pantry:change-me@postgres:5432/pantry}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       IMPORT_STORAGE_ROOT: ${IMPORT_STORAGE_ROOT:-/workspace/.local/imports}
+      IMPORT_MAX_UPLOAD_BYTES: ${IMPORT_MAX_UPLOAD_BYTES:-10485760}
       BACKUP_STORAGE_ROOT: ${BACKUP_STORAGE_ROOT:-/workspace/.local/backups}
       PUBLIC_BROWSER_BASE_URL: ${PUBLIC_BROWSER_BASE_URL:-http://localhost:3000}
+      SETTINGS_ENCRYPTION_KEY: ${SETTINGS_ENCRYPTION_KEY:-}
       SESSION_SECRET_KEY: ${SESSION_SECRET_KEY:-change-me-for-development}
+      SESSION_COOKIE_NAME: ${SESSION_COOKIE_NAME:-pantry_session}
+      SESSION_MAX_AGE_SECONDS: ${SESSION_MAX_AGE_SECONDS:-604800}
+      SESSION_HTTPS_ONLY: ${SESSION_HTTPS_ONLY:-false}
+      SESSION_SAME_SITE: ${SESSION_SAME_SITE:-lax}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      OPENAI_COMPAT_BASE_URL: ${OPENAI_COMPAT_BASE_URL:-}
+      OPENAI_COMPAT_API_KEY: ${OPENAI_COMPAT_API_KEY:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-}
+      SMTP_FROM_NAME: ${SMTP_FROM_NAME:-}
+      SMTP_SECURITY: ${SMTP_SECURITY:-}
+      SMTP_ENABLED: ${SMTP_ENABLED:-}
+      SMTP_TIMEOUT_SECONDS: ${SMTP_TIMEOUT_SECONDS:-5}
+      RELEASE_CHECK_REPOSITORY: ${RELEASE_CHECK_REPOSITORY:-}
+      RELEASE_CHECK_METADATA_URL: ${RELEASE_CHECK_METADATA_URL:-}
+      RELEASE_CHECK_TIMEOUT_SECONDS: ${RELEASE_CHECK_TIMEOUT_SECONDS:-5}
       PYTHONPATH: /workspace/apps/api
-      WATCHFILES_FORCE_POLLING: "true"
     working_dir: /workspace/apps/api
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     command: >
       /bin/sh -lc
       'export APP_VERSION=$$(cat /workspace/VERSION) &&
@@ -54,8 +79,6 @@ services:
       uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
       --reload-dir /workspace/apps/api/app
       --reload-dir /workspace/apps/api/alembic'
-    volumes:
-      - .:/workspace
     ports:
       - "${API_PORT:-8000}:8000"
     depends_on:
@@ -63,30 +86,41 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
 
   worker:
     build:
       context: .
       dockerfile: infra/docker/worker.Dockerfile
-    env_file:
-      - .env
     environment:
+      WORKER_SERVICE_NAME: ${WORKER_SERVICE_NAME:-pantry-worker}
       ENVIRONMENT: development
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
       APP_VERSION: ${APP_VERSION:-dev}
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://pantry:change-me@postgres:5432/pantry}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       IMPORT_STORAGE_ROOT: ${IMPORT_STORAGE_ROOT:-/workspace/.local/imports}
       PYTHONPATH: /workspace/apps/api:/workspace/apps/worker
+      WORKER_POLL_INTERVAL_SECONDS: ${WORKER_POLL_INTERVAL_SECONDS:-30}
     working_dir: /workspace/apps/worker
     command: >
       /bin/sh -lc
       'export APP_VERSION=$$(cat /workspace/VERSION) &&
-      python -m worker.main'
-    volumes:
-      - ./.local/imports:/workspace/.local/imports
+      python /workspace/infra/scripts/run-worker-dev.py'
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -m worker.main --status >/dev/null"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
 
   postgres:
     image: postgres:16-alpine

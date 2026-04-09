@@ -15,8 +15,7 @@ For docs only work, validation can stop at:
 Use the local stack when runtime wiring or user-visible flows changed:
 
 ```bash
-docker compose up -d --build
-docker compose run --rm api alembic upgrade head
+./pantry start --fresh
 ```
 
 Common checks:
@@ -36,5 +35,5 @@ Use the smallest relevant subset. End-to-end coverage is most useful when a cove
 Shut the stack down when you are done:
 
 ```bash
-docker compose down
+./pantry stop
 ```
