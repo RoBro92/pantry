@@ -143,7 +143,7 @@ Recommended branch prefixes:
 - `docs/...`
 - `release/...`
 
-Public contributor and Codex guidance lives in [AGENTS.md](/Users/robinbrown/Documents/GitHub/pantry/AGENTS.md). Internal planning material belongs in `private-docs/`, not the public repo.
+Public contributor and Codex guidance lives in [AGENTS.md](/Users/robinbrown/Documents/GitHub/pantry/AGENTS.md), with a docs-set copy in [docs/AGENTS.md](/Users/robinbrown/Documents/GitHub/pantry/docs/AGENTS.md). Internal planning material belongs in `private-docs/`, not the public repo.
 
 ## Troubleshooting
 

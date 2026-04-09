@@ -20,6 +20,7 @@ Quick reference for the public repository layout.
 ## Documentation
 
 - `AGENTS.md`: public repo-operational guidance for Codex-assisted and contributor work
+- `docs/AGENTS.md`: docs-set copy of the public repo-operational guidance
 - `README.md`: overview and first-run guidance
 - `docs/ARCHITECTURE.md`: runtime and setup architecture
 - `docs/CONTRIBUTING.md`: local setup and contribution flow
