@@ -4,8 +4,8 @@ Pantry treats uploads, restore bundles, and external data as hostile input until
 
 ## Data And Access Boundaries
 
-- Household-scoped access is enforced server-side
-- Pantry records remain Pantry-owned even when external enrichment is attached
+- Household scoped access is enforced server side
+- Pantry records remain Pantry owned even when external enrichment is attached
 - Sensitive configuration persisted by the application is intended to be encrypted at rest
 - Secrets, tokens, and passwords should never be committed to the repository
 
@@ -15,12 +15,13 @@ Pantry treats uploads, restore bundles, and external data as hostile input until
 - Uploads are validated before restore is allowed
 - Uploaded restore files are staged under `BACKUP_STORAGE_ROOT`
 - Restore remains an explicit operator action because it can replace live data
+- Household restore creates a new household only and does not merge into an existing one
 
 ## External Data Handling
 
 - Open Food Facts lookup is optional
 - External enrichment is advisory metadata, not Pantry’s canonical product record
-- Pantry stores selected product-facing enrichment fields instead of treating upstream payloads as trusted source data
+- Pantry stores selected product facing enrichment fields instead of treating upstream payloads as trusted source data
 
 ## Operational Safety
 
@@ -32,4 +33,4 @@ Pantry treats uploads, restore bundles, and external data as hostile input until
 
 ## Scope
 
-This repository documents Pantry’s application-level safety model. Host hardening, TLS, backup retention, secret management, and patching remain operator responsibilities.
+This repository documents Pantry’s application level safety model. Host hardening, TLS, backup retention, secret management, and patching remain operator responsibilities.

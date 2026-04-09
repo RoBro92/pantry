@@ -1,10 +1,10 @@
 # Contributing
 
-Keep changes focused, reviewable, and aligned with the shipped self-hosted product.
+Keep changes focused, reviewable, and aligned with the shipped self hosted product.
 
 ## Workflow
 
-1. Start from an up-to-date branch.
+1. Start from an up to date branch.
 2. Keep the change narrow and reviewable.
 3. Run the smallest validation set that covers the files you changed.
 4. Update public docs when install, runtime, safety, or contributor behavior changes.
@@ -26,7 +26,7 @@ Pantry provides a source-based helper for local branch work:
 ./infra/scripts/dev-stack.sh start demo
 ```
 
-- `fresh` resets the local environment to the first-run setup flow
+- `fresh` resets the local environment to the first run setup flow
 - `demo` resets the local environment and seeds stable demo data
 - stop the stack with `./infra/scripts/dev-stack.sh down`
 - follow logs with `./infra/scripts/dev-stack.sh logs`
@@ -39,10 +39,9 @@ Demo credentials:
 ## Expectations
 
 - Keep `apps/web`, `apps/api`, and `apps/worker` responsibilities clear
-- Add or update tests when user-visible behavior changes
-- Keep internal planning notes and local-only material out of `docs/`
-- Keep `private-docs/` local-only and untracked
-- Review generated diffs before merging
+- Add or update tests when user visible behavior changes
+- Keep internal planning notes and local only material out of `docs/`
+- diffs will be code reviewed before being merged
 
 ## Validation
 

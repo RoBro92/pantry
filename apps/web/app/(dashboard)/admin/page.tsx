@@ -92,25 +92,6 @@ export default async function AdminOverviewPage() {
           </div>
         </article>
         <article className="panel">
-          <p className="eyebrow">Getting Started</p>
-          <h2>Make the install usable</h2>
-          <p>
-            Create at least one household, add users, and assign memberships before expecting
-            pantry routes to show day-to-day data.
-          </p>
-          <div className="page-actions">
-            <Link href="/admin/users" className="secondary-link">
-              Create users
-            </Link>
-            <Link href="/admin/households" className="primary-link">
-              Create households
-            </Link>
-            <Link href="/admin/settings" className="secondary-link">
-              Set browser URL
-            </Link>
-          </div>
-        </article>
-        <article className="panel">
           <p className="eyebrow">Release And Updates</p>
           <h2>Operator-controlled updates</h2>
           <ul className="detail-list">

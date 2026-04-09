@@ -28,6 +28,18 @@ class PasswordResetEmailSettings(BaseModel):
     template: PasswordResetEmailTemplate
 
 
+class SMTPTemplateSummary(BaseModel):
+    key: str
+    label: str
+    description: str
+    is_enabled: bool
+    is_available: bool
+    unavailable_reason: str | None = None
+    subject: str
+    body_template: str
+    required_placeholders: list[str]
+
+
 class SMTPConfigResponse(BaseModel):
     effective: SMTPConfigValue
     effective_source: str
@@ -37,7 +49,9 @@ class SMTPConfigResponse(BaseModel):
     last_test_status: str
     last_tested_at: datetime | None
     last_test_error: str | None
+    test_recipient_email: str | None = None
     password_reset: PasswordResetEmailSettings
+    templates: list[SMTPTemplateSummary]
 
 
 class SMTPConfigUpdateRequest(BaseModel):
@@ -47,15 +61,26 @@ class SMTPConfigUpdateRequest(BaseModel):
     password: str | None = None
     from_email: str | None = None
     from_name: str | None = None
+    test_recipient_email: str | None = None
     security: str | None = None
     is_enabled: bool = False
-    password_reset_enabled: bool = False
-    password_reset_subject_template: str | None = None
-    password_reset_body_template: str | None = None
+
+
+class SMTPTemplateUpdateRequest(BaseModel):
+    is_enabled: bool
+    subject: str | None = None
+    body_template: str | None = None
 
 
 class SMTPTestResponse(BaseModel):
     ok: bool
     status: str
     message: str | None
+    config: SMTPConfigResponse
+
+
+class SMTPTestEmailResponse(BaseModel):
+    ok: bool
+    message: str
+    delivered_to: str
     config: SMTPConfigResponse

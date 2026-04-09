@@ -1,6 +1,6 @@
 # Deployment
 
-Pantry’s supported public deployment path is a self-hosted Docker installation using released images and repository-hosted deployment assets.
+Pantry’s supported public deployment path is a self hosted Docker installation using released images and repository hosted deployment assets.
 
 ## Public Deployment Files
 
@@ -27,7 +27,7 @@ The installer:
 - writes `.env` and generates required secrets
 - pulls images, runs migrations, starts the stack, and runs a health check
 
-When the install completes, open `http://<your-server>:3000/`.
+When the install completes, open `http://<your-ip>:3000/`.
 
 ## Manual Install
 
@@ -118,4 +118,5 @@ docker compose --env-file .env -f pantry.yml run --rm api python -m app.cli rese
 - Restore currently accepts Pantry backup bundle JSON files only
 - Restore is validated before application and remains an explicit operator action
 - Uploaded restore bundles are staged under `BACKUP_STORAGE_ROOT`
-- Self-service password reset stays disabled until SMTP is configured and enabled
+- Admin household restore creates a new household only and does not merge into an existing household
+- Self-service password reset stays disabled until SMTP is configured, enabled, and tested successfully

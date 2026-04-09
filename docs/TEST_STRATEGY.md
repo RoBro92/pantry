@@ -4,7 +4,7 @@ Run the smallest validation set that still covers the files you changed.
 
 ## Documentation Changes
 
-For docs-only work, validation can stop at:
+For docs only work, validation can stop at:
 
 - checking links and paths
 - checking command names against the repository

@@ -1,6 +1,6 @@
 # Architecture
 
-Pantry is a small monorepo for a self-hosted product with three runtime services and a shared deployment layer.
+Pantry is a small repo for a self hosted product with three runtime services and a shared deployment layer.
 
 ## Runtime Services
 
@@ -12,20 +12,20 @@ Pantry is a small monorepo for a self-hosted product with three runtime services
 
 - PostgreSQL stores Pantry domain and configuration data
 - Redis supports worker coordination and runtime queues
-- Docker Compose is used for both the local source stack and the released self-hosted stack
+- Docker Compose is used for both the stack
 
 ## Product Boundaries
 
-- Pantry is self-hosted and operator-managed
-- Household access is enforced server-side
-- Product identity stays Pantry-owned even when external enrichment is linked
+- Pantry is self hosted and operator managed
+- Household access is enforced server side
+- Product identity stays Pantry owned even when external enrichment from Open Food Facts is linked
 - Open Food Facts is optional advisory enrichment, not the source of truth for Pantry records
 - Uploaded files and restore bundles are treated as hostile input
-- Updates are advisory and operator-triggered; Pantry does not auto-update
+- Updates are advisory and operator triggered; Pantry does not auto-update
 
 ## Setup And Recovery
 
-- New installs route through a first-run setup flow until initialization is complete
+- New installs route through a first run setup flow until initialization is complete
 - Setup supports both a fresh install path and restore from a Pantry backup bundle
 - Restore validation happens before any destructive action is applied
 - Backup export and restore tooling is surfaced through the admin experience and CLI/container fallbacks

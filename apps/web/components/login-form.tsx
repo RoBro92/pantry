@@ -9,9 +9,14 @@ import { readApiErrorMessage } from "../lib/client-api";
 type LoginFormProps = {
   nextPath?: string;
   canResetPassword?: boolean;
+  statusMessage?: string | null;
 };
 
-export function LoginForm({ nextPath = "/app", canResetPassword = false }: LoginFormProps) {
+export function LoginForm({
+  nextPath = "/app",
+  canResetPassword = false,
+  statusMessage = null,
+}: LoginFormProps) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -85,6 +90,7 @@ export function LoginForm({ nextPath = "/app", canResetPassword = false }: Login
           </Link>
         </p>
       ) : null}
+      {statusMessage ? <p className="status-note">{statusMessage}</p> : null}
       {error ? <p className="error-text">{error}</p> : null}
       <div className="wizard-actions login-actions">
         <button type="submit" className="primary-button" disabled={isSubmitting}>

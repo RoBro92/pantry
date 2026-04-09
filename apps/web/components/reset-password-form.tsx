@@ -53,7 +53,7 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
       setPassword("");
       setConfirmation("");
       window.setTimeout(() => {
-        router.push("/login");
+        router.push("/login?reset=success");
       }, 800);
     } catch (requestError) {
       setError(

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import smtplib
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from email.message import EmailMessage
 from email.utils import formataddr
 
@@ -116,3 +117,22 @@ def send_email(
                 smtp_client.quit()
             except OSError:
                 pass
+
+
+def send_smtp_test_email(db_session) -> str:
+    config = resolve_smtp_config(db_session)
+    if not config.test_recipient_email:
+        raise ValueError("Save an SMTP test recipient email before sending a test email.")
+
+    timestamp = datetime.now(timezone.utc).isoformat()
+    send_email(
+        db_session,
+        to_email=config.test_recipient_email,
+        subject="Pantry SMTP test email",
+        body=(
+            "This is a Pantry SMTP test email.\n\n"
+            f"Sender: {formataddr((config.from_name, config.from_email)) if config.from_name and config.from_email else config.from_email}\n"
+            f"Sent at: {timestamp}\n"
+        ),
+    )
+    return config.test_recipient_email

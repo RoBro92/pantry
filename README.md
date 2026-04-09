@@ -64,6 +64,7 @@ Local branch work uses the source-based development stack:
 
 - `fresh` resets the local stack to the setup flow
 - `demo` resets and seeds a repeatable local demo account set
+- Demo credentials stay in the public repo for contributor use: `demoadmin` / `demopass` and `demouser` / `demopass`
 
 Contributor workflow details live in [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md).
 

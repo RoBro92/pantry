@@ -36,6 +36,12 @@ export default async function ResetPasswordPage({ searchParams }: ResetPasswordP
             <p className="section-copy">
               {tokenStatus?.reason ?? "This password reset link is missing or invalid."}
             </p>
+            <p className="section-copy">
+              Request a fresh reset link if you still need to change your password.
+            </p>
+            <a href="/forgot-password" className="inline-link">
+              Request a new reset link
+            </a>
           </section>
         )}
       </section>

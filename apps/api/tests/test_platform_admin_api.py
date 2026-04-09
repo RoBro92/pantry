@@ -17,7 +17,10 @@ from app.models.user import User
 from app.models.usage_counter import UsageCounter
 from app.services.ai_config import upsert_instance_provider_config
 from app.services.auth import create_household, create_membership, create_platform_admin, create_user
-from app.services.instance_settings import upsert_public_base_url, upsert_smtp_settings
+from app.services.instance_settings import (
+    upsert_public_base_url,
+    upsert_smtp_settings,
+)
 from app.services.pantry_catalog import create_location, create_location_group, create_product
 from app.services.pantry_normalization import normalize_lookup_name
 from app.services.pantry_stock import add_stock_lot
@@ -256,7 +259,7 @@ def test_platform_admin_smtp_validation_requires_reset_link_placeholder(client, 
     )
     login(client, email="smtp-template@example.com")
 
-    response = client.put(
+    save_response = client.put(
         "/api/platform-admin/smtp",
         json={
             "host": "smtp.example.com",
@@ -264,9 +267,16 @@ def test_platform_admin_smtp_validation_requires_reset_link_placeholder(client, 
             "from_email": "pantry@example.com",
             "security": "starttls",
             "is_enabled": True,
-            "password_reset_enabled": True,
-            "password_reset_subject_template": "Reset your password",
-            "password_reset_body_template": "This template forgot the reset link.",
+        },
+    )
+    assert save_response.status_code == 200
+
+    response = client.put(
+        "/api/platform-admin/smtp/templates/password_reset",
+        json={
+            "is_enabled": True,
+            "subject": "Reset your password",
+            "body_template": "This template forgot the reset link.",
         },
     )
     assert response.status_code == 400
@@ -318,6 +328,30 @@ def test_platform_admin_can_create_users_households_and_memberships(client, db_s
     assert households_response.status_code == 200
     household_payload = households_response.json()[0]
     assert household_payload["memberships"][0]["email"] == "managed-user@example.com"
+
+
+def test_platform_admin_can_rename_households(client, db_session):
+    create_platform_admin(
+        db_session,
+        email="rename-admin@example.com",
+        password=PASSWORD,
+        display_name="Rename Admin",
+    )
+    household = create_household(db_session, name="Original Household")
+
+    login(client, email="rename-admin@example.com")
+
+    response = client.patch(
+        f"/api/platform-admin/households/{household.external_id}",
+        json={"name": "Renamed Household"},
+    )
+    assert response.status_code == 200
+    assert response.json()["name"] == "Renamed Household"
+
+    db_session.expire_all()
+    renamed_household = db_session.scalar(select(Household).where(Household.id == household.id))
+    assert renamed_household is not None
+    assert renamed_household.name == "Renamed Household"
 
 
 def test_platform_admin_blocks_removing_or_demoting_the_last_household_admin(client, db_session):
@@ -424,6 +458,192 @@ def test_platform_admin_can_export_and_restore_instance_backups(client, db_sessi
     assert db_session.scalar(select(func.count(Household.id))) == 1
     assert db_session.scalar(select(User).where(User.email == "extra-user@example.com")) is None
     assert db_session.scalar(select(Household).where(Household.name == "Extra Household")) is None
+
+
+def test_platform_admin_can_restore_household_backup_into_a_new_household(client, db_session):
+    admin = create_platform_admin(
+        db_session,
+        email="household-restore-admin@example.com",
+        password=PASSWORD,
+        display_name="Restore Admin",
+    )
+    member = create_user(
+        db_session,
+        email="household-member@example.com",
+        password=PASSWORD,
+        display_name="Restore Member",
+    )
+    source_household = create_household(db_session, name="Source Household")
+    create_membership(db_session, user=member, household=source_household, role_code="household_admin")
+    group = create_location_group(db_session, household=source_household, actor=member, name="Kitchen")
+    location = create_location(
+        db_session,
+        household=source_household,
+        actor=member,
+        location_group_external_id=group.external_id,
+        name="Fridge",
+    )
+    product = create_product(
+        db_session,
+        household=source_household,
+        actor=member,
+        name="Milk",
+        default_unit="bottle",
+        aliases=[],
+        barcodes=[],
+    )
+    add_stock_lot(
+        db_session,
+        household=source_household,
+        actor=member,
+        product_external_id=product.external_id,
+        location_external_id=location.external_id,
+        quantity=Decimal("1.000"),
+        note="Restored lot",
+        purchased_on=None,
+        expires_on=None,
+    )
+    db_session.commit()
+
+    login(client, email="household-restore-admin@example.com")
+
+    export_response = client.get(
+        f"/api/platform-admin/backups/export/households/{source_household.external_id}"
+    )
+    assert export_response.status_code == 200
+    backup_bundle = json.loads(export_response.text)
+    assert backup_bundle["scope"] == "household"
+
+    upload_response = client.post(
+        "/api/platform-admin/households/restore-upload",
+        files={"file": ("pantry-household-backup.json", json.dumps(backup_bundle), "application/json")},
+    )
+    assert upload_response.status_code == 200
+    staged_payload = upload_response.json()
+    assert staged_payload["supported_for_restore"] is True
+    assert staged_payload["bundle"]["scope"] == "household"
+
+    restore_response = client.post(
+        "/api/platform-admin/households/restore",
+        json={
+            "stage_id": staged_payload["stage_id"],
+            "target_household_name": "Restored Household",
+            "confirmation_phrase": "RESTORE PANTRY HOUSEHOLD",
+        },
+    )
+    assert restore_response.status_code == 200
+    restore_payload = restore_response.json()
+    assert restore_payload["restored"] is True
+    assert restore_payload["bundle"]["household_name"] == "Restored Household"
+
+    restored_household = db_session.scalar(
+        select(Household).where(Household.name == "Restored Household")
+    )
+    assert restored_household is not None
+    assert restored_household.external_id != source_household.external_id
+    assert db_session.scalar(select(func.count(Household.id))) == 2
+    assert (
+        db_session.scalar(select(func.count(Membership.id)).where(Membership.household_id == restored_household.id))
+        == 1
+    )
+    assert (
+        db_session.scalar(select(func.count(ImportJob.id)).where(ImportJob.household_id == restored_household.id))
+        == 0
+    )
+    assert db_session.scalar(select(func.count(Recipe.id)).where(Recipe.household_id == restored_household.id)) == 0
+
+
+def test_platform_admin_household_restore_blocks_existing_target_name_conflicts(client, db_session):
+    create_platform_admin(
+        db_session,
+        email="household-conflict-admin@example.com",
+        password=PASSWORD,
+        display_name="Conflict Admin",
+    )
+    member = create_user(
+        db_session,
+        email="conflict-member@example.com",
+        password=PASSWORD,
+        display_name="Conflict Member",
+    )
+    source_household = create_household(db_session, name="Conflict Source")
+    create_membership(db_session, user=member, household=source_household, role_code="household_admin")
+    create_household(db_session, name="Existing Household")
+    db_session.commit()
+
+    login(client, email="household-conflict-admin@example.com")
+
+    export_response = client.get(
+        f"/api/platform-admin/backups/export/households/{source_household.external_id}"
+    )
+    backup_bundle = json.loads(export_response.text)
+    upload_response = client.post(
+        "/api/platform-admin/households/restore-upload",
+        files={"file": ("pantry-household-backup.json", json.dumps(backup_bundle), "application/json")},
+    )
+    staged_payload = upload_response.json()
+
+    restore_response = client.post(
+        "/api/platform-admin/households/restore",
+        json={
+            "stage_id": staged_payload["stage_id"],
+            "target_household_name": "Existing Household",
+            "confirmation_phrase": "RESTORE PANTRY HOUSEHOLD",
+        },
+    )
+    assert restore_response.status_code == 400
+    assert "already exists" in restore_response.json()["detail"]
+
+
+def test_platform_admin_household_restore_accepts_supported_older_schema_bundle(client, db_session):
+    create_platform_admin(
+        db_session,
+        email="older-household-admin@example.com",
+        password=PASSWORD,
+        display_name="Older Schema Admin",
+    )
+    member = create_user(
+        db_session,
+        email="older-household-member@example.com",
+        password=PASSWORD,
+        display_name="Older Schema Member",
+    )
+    source_household = create_household(db_session, name="Older Source")
+    create_membership(db_session, user=member, household=source_household, role_code="household_admin")
+    db_session.commit()
+
+    login(client, email="older-household-admin@example.com")
+
+    export_response = client.get(
+        f"/api/platform-admin/backups/export/households/{source_household.external_id}"
+    )
+    backup_bundle = json.loads(export_response.text)
+    backup_bundle["schema_revision"] = "20260407_000009"
+    del backup_bundle["tables"]["product_enrichments"]
+    del backup_bundle["tables"]["shopping_lists"]
+    del backup_bundle["tables"]["shopping_list_items"]
+
+    upload_response = client.post(
+        "/api/platform-admin/households/restore-upload",
+        files={"file": ("pantry-household-backup.json", json.dumps(backup_bundle), "application/json")},
+    )
+    assert upload_response.status_code == 200
+    staged_payload = upload_response.json()
+    assert staged_payload["supported_for_restore"] is True
+    assert any("product enrichment support" in warning.lower() for warning in staged_payload["warnings"])
+
+    restore_response = client.post(
+        "/api/platform-admin/households/restore",
+        json={
+            "stage_id": staged_payload["stage_id"],
+            "target_household_name": "Older Restored Household",
+            "confirmation_phrase": "RESTORE PANTRY HOUSEHOLD",
+        },
+    )
+    assert restore_response.status_code == 200
+    restore_payload = restore_response.json()
+    assert restore_payload["restored"] is True
+    assert any("older Pantry schema" in warning for warning in restore_payload["warnings"])
 
 
 def test_platform_admin_restore_upload_rejects_non_json_files(client, db_session):
@@ -557,6 +777,45 @@ def test_platform_admin_management_endpoints_require_platform_admin(client, db_s
         },
     )
     assert membership_response.status_code == 403
+
+
+def test_platform_admin_can_send_smtp_test_email(client, db_session, monkeypatch):
+    admin = create_platform_admin(
+        db_session,
+        email="smtp-test-admin@example.com",
+        password=PASSWORD,
+        display_name="SMTP Test Admin",
+    )
+    login(client, email="smtp-test-admin@example.com")
+
+    save_response = client.put(
+        "/api/platform-admin/smtp",
+        json={
+            "host": "smtp.example.com",
+            "port": 587,
+            "username": "mailer",
+            "password": "replace-me",
+            "from_email": "pantry@example.com",
+            "from_name": "Pantry",
+            "test_recipient_email": "recipient@example.com",
+            "security": "starttls",
+            "is_enabled": True,
+        },
+    )
+    assert save_response.status_code == 200
+
+    delivered_to: list[str] = []
+    monkeypatch.setattr(
+        "app.api.routes.smtp_admin.send_smtp_test_email",
+        lambda db: delivered_to.append("recipient@example.com") or "recipient@example.com",
+    )
+
+    response = client.post("/api/platform-admin/smtp/test-email", json={})
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    assert payload["delivered_to"] == "recipient@example.com"
+    assert delivered_to == ["recipient@example.com"]
 
 
 def test_api_requests_record_usage_counters(client, db_session):

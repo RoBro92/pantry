@@ -80,6 +80,13 @@ export type BackupRestoreResponse = {
   bundle: BackupBundleSummary;
 };
 
+export type HouseholdBackupRestoreResponse = {
+  restored: boolean;
+  message: string;
+  warnings: string[];
+  bundle: BackupBundleSummary;
+};
+
 export type SetupStatusResponse = {
   is_initialized: boolean;
   platform_admin_count: number;
@@ -244,6 +251,18 @@ export type PasswordResetEmailSettings = {
   template: PasswordResetEmailTemplate;
 };
 
+export type SMTPTemplateSummary = {
+  key: string;
+  label: string;
+  description: string;
+  is_enabled: boolean;
+  is_available: boolean;
+  unavailable_reason: string | null;
+  subject: string;
+  body_template: string;
+  required_placeholders: string[];
+};
+
 export type SMTPConfigResponse = {
   effective: SMTPConfigValue;
   effective_source: string;
@@ -253,13 +272,22 @@ export type SMTPConfigResponse = {
   last_test_status: string;
   last_tested_at: string | null;
   last_test_error: string | null;
+  test_recipient_email: string | null;
   password_reset: PasswordResetEmailSettings;
+  templates: SMTPTemplateSummary[];
 };
 
 export type SMTPTestResponse = {
   ok: boolean;
   status: string;
   message: string | null;
+  config: SMTPConfigResponse;
+};
+
+export type SMTPTestEmailResponse = {
+  ok: boolean;
+  message: string;
+  delivered_to: string;
   config: SMTPConfigResponse;
 };
 

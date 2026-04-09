@@ -5,19 +5,19 @@ Pantry keeps release visibility explicit and operator-controlled.
 ## Running Version
 
 - The repository `VERSION` file is the source of truth for the application version
-- The running stack surfaces that version in diagnostics and update-related UI
+- The running stack surfaces that version in diagnostics and update related UI
 
 ## Release Source Of Truth
 
 - GitHub Releases provide the primary public release metadata
 - A release may also include a `release.json` asset for structured metadata
-- GHCR is used for image distribution, not as the release metadata authority
+- GHCR is used for image distribution
 
 ## Update Model
 
-- Pantry does not auto-update
+- Pantry does not auto update
 - Operators pull new images, run migrations, restart services, and verify health deliberately
-- The bundled update script automates that operator workflow without turning it into background self-update behavior
+- The bundled update script automates that operator workflow without turning it into background self update behavior
 
 ## Compatibility
 
