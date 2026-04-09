@@ -17,6 +17,14 @@ class AdminUserSummary(BaseModel):
     is_active: bool
     platform_role: str | None
     membership_count: int
+    memberships: list["AdminUserMembershipSummary"] = Field(default_factory=list)
+
+
+class AdminUserMembershipSummary(BaseModel):
+    household_external_id: str
+    household_name: str
+    role: str
+    is_active: bool
 
 
 class AdminHouseholdMemberSummary(BaseModel):
@@ -39,6 +47,18 @@ class CreateAdminUserRequest(BaseModel):
     email: str
     display_name: str | None = None
     password: str
+
+
+class UpdateAdminUserMembershipRequest(BaseModel):
+    household_external_id: str
+    role: str
+
+
+class UpdateAdminUserRequest(BaseModel):
+    email: str
+    display_name: str | None = None
+    platform_role: str | None = None
+    memberships: list[UpdateAdminUserMembershipRequest] = Field(default_factory=list)
 
 
 class CreateAdminHouseholdRequest(BaseModel):

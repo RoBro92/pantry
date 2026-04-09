@@ -3,13 +3,16 @@ from __future__ import annotations
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
+from app.core.security import normalize_email
+from app.domain.roles import PLATFORM_ADMIN_ROLE
 from app.models.base import Base
 from app.domain.roles import HOUSEHOLD_ROLE_CODES
 from app.models.household import Household
 from app.models.membership import Membership
 from app.models.user import User
 from app.services.audit import record_audit_event
-from app.services.auth import create_household, create_user, get_user_by_external_id
+from app.services.auth import create_household, create_user, get_user_by_email, get_user_by_external_id
+from app.services.password_resets import request_password_reset, user_has_self_service_reset_email
 from app.services.roles import get_role_by_code
 
 
@@ -130,6 +133,13 @@ def _count_household_admins(db: Session, *, household_id) -> int:
     ) or 0
 
 
+def _count_platform_admins(db: Session) -> int:
+    platform_role = get_role_by_code(db, PLATFORM_ADMIN_ROLE)
+    if platform_role is None:
+        raise ValueError("Required role platform_admin is missing.")
+    return db.scalar(select(func.count(User.id)).where(User.platform_role_id == platform_role.id)) or 0
+
+
 def upsert_household_membership(
     db: Session,
     *,
@@ -198,6 +208,156 @@ def upsert_household_membership(
     db.commit()
     db.refresh(membership)
     return membership
+
+
+def update_managed_user(
+    db: Session,
+    *,
+    actor: User,
+    user_external_id: str,
+    email: str,
+    display_name: str | None,
+    platform_role_code: str | None,
+    memberships: list[dict[str, str]],
+) -> User:
+    user = get_user_by_external_id(db, user_external_id)
+    if user is None:
+        raise ValueError("User not found.")
+
+    normalized_email = normalize_email(email)
+    existing_user = get_user_by_email(db, normalized_email)
+    if existing_user is not None and existing_user.id != user.id:
+        raise ValueError("A user with that username or email already exists.")
+
+    if platform_role_code not in {None, PLATFORM_ADMIN_ROLE}:
+        raise ValueError("Platform role must be platform_admin or empty.")
+
+    platform_role = get_role_by_code(db, platform_role_code) if platform_role_code else None
+    if platform_role_code and platform_role is None:
+        raise ValueError(f"Required role {platform_role_code} is missing.")
+    if (
+        user.platform_role is not None
+        and user.platform_role.code == PLATFORM_ADMIN_ROLE
+        and platform_role is None
+        and _count_platform_admins(db) <= 1
+    ):
+        raise ValueError("Pantry must keep at least one platform admin.")
+
+    desired_memberships: dict[str, str] = {}
+    for membership in memberships:
+        household_external_id = membership["household_external_id"]
+        role_code = membership["role"]
+        if role_code not in HOUSEHOLD_ROLE_CODES:
+            raise ValueError("Household role must be household_admin or household_user.")
+        desired_memberships[household_external_id] = role_code
+
+    households = {
+        household.external_id: household
+        for household in db.scalars(select(Household).where(Household.external_id.in_(desired_memberships.keys()))).all()
+    }
+    missing_households = set(desired_memberships.keys()) - set(households.keys())
+    if missing_households:
+        raise ValueError("One or more households could not be found.")
+
+    existing_memberships = {
+        membership.household.external_id: membership
+        for membership in user.memberships
+        if membership.household is not None and membership.role is not None
+    }
+
+    for household_external_id, membership in existing_memberships.items():
+        desired_role_code = desired_memberships.get(household_external_id)
+        if desired_role_code is None:
+            if membership.role.code == "household_admin" and _count_household_admins(db, household_id=membership.household_id) <= 1:
+                raise ValueError("Each household must keep at least one household admin.")
+            db.delete(membership)
+            continue
+
+        if membership.role.code == desired_role_code and membership.is_active:
+            continue
+
+        role = get_role_by_code(db, desired_role_code)
+        if role is None:
+            raise ValueError(f"Required role {desired_role_code} is missing.")
+        if (
+            membership.role.code == "household_admin"
+            and desired_role_code != "household_admin"
+            and _count_household_admins(db, household_id=membership.household_id) <= 1
+        ):
+            raise ValueError("Each household must keep at least one household admin.")
+        membership.role_id = role.id
+        membership.role = role
+        membership.is_active = True
+        db.add(membership)
+
+    for household_external_id, desired_role_code in desired_memberships.items():
+        if household_external_id in existing_memberships:
+            continue
+        role = get_role_by_code(db, desired_role_code)
+        household = households[household_external_id]
+        if role is None:
+            raise ValueError(f"Required role {desired_role_code} is missing.")
+        db.add(
+            Membership(
+                household_id=household.id,
+                user_id=user.id,
+                role_id=role.id,
+                is_active=True,
+            )
+        )
+
+    user.email = normalized_email
+    user.display_name = display_name.strip() if display_name and display_name.strip() else None
+    user.platform_role_id = platform_role.id if platform_role is not None else None
+    user.platform_role = platform_role
+    db.add(user)
+    db.flush()
+    record_audit_event(
+        db,
+        household=None,
+        actor=actor,
+        action="admin.user.updated",
+        target_type="user",
+        target_external_id=user.external_id,
+        event_metadata={
+            "email": user.email,
+            "display_name": user.display_name,
+            "platform_role": platform_role.code if platform_role is not None else None,
+            "membership_count": len(desired_memberships),
+        },
+    )
+    db.commit()
+    return get_user_by_external_id(db, user.external_id) or user
+
+
+def send_managed_user_password_reset(
+    db: Session,
+    *,
+    actor: User,
+    user_external_id: str,
+) -> User:
+    user = get_user_by_external_id(db, user_external_id)
+    if user is None:
+        raise ValueError("User not found.")
+    if not user.is_active:
+        raise ValueError("Only active users can receive password reset emails.")
+    if not user_has_self_service_reset_email(user):
+        raise ValueError("This user does not have an email address that can receive reset mail.")
+
+    if not request_password_reset(db, email=user.email):
+        raise ValueError("Could not send a password reset email for this user.")
+
+    record_audit_event(
+        db,
+        household=None,
+        actor=actor,
+        action="admin.user.password_reset_requested",
+        target_type="user",
+        target_external_id=user.external_id,
+        event_metadata={"email": user.email},
+    )
+    db.commit()
+    return get_user_by_external_id(db, user.external_id) or user
 
 
 def remove_household_membership(

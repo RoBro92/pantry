@@ -87,6 +87,26 @@ def create_user(
     return get_user_by_external_id(db, user.external_id)
 
 
+def update_user_profile(
+    db: Session,
+    *,
+    user: User,
+    email: str,
+    display_name: str | None = None,
+) -> User:
+    normalized_email = normalize_email(email)
+    existing = get_user_by_email(db, normalized_email)
+    if existing is not None and existing.id != user.id:
+        raise ValueError("A user with that username or email already exists.")
+
+    user.email = normalized_email
+    user.display_name = display_name.strip() if display_name and display_name.strip() else None
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return get_user_by_external_id(db, user.external_id) or user
+
+
 def create_household(db: Session, *, name: str) -> Household:
     normalized_name = name.strip()
     if not normalized_name:
