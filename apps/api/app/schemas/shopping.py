@@ -12,6 +12,7 @@ class AddShoppingListItemRequest(BaseModel):
     quantity: Decimal | None = None
     unit: str | None = None
     note: str | None = None
+    pantry_location_external_id: str | None = None
     source_type: str = "manual"
 
     @model_validator(mode="after")
@@ -30,10 +31,15 @@ class UpdateShoppingListItemRequest(BaseModel):
     quantity: Decimal | None = None
     unit: str | None = None
     note: str | None = None
+    pantry_location_external_id: str | None = None
 
 
 class MergePendingShoppingListsRequest(BaseModel):
     target_list_external_id: str | None = None
+
+
+class FinalizePendingShoppingListRequest(BaseModel):
+    return_shortfalls_to_active: bool = False
 
 
 class AttachShoppingListProductRequest(BaseModel):
@@ -46,8 +52,13 @@ class ShoppingListItemSummary(BaseModel):
     product_external_id: str | None = None
     product_name: str | None = None
     quantity: Decimal | None = None
+    requested_quantity: Decimal | None = None
     unit: str | None = None
+    requested_unit: str | None = None
     note: str | None = None
+    pantry_location_external_id: str | None = None
+    pantry_location_name: str | None = None
+    pantry_location_group_name: str | None = None
     source_type: str
     status: str
     created_at: datetime

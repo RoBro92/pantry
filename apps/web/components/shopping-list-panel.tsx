@@ -9,8 +9,10 @@ import type {
   ShoppingListSummary,
 } from "../lib/api-types";
 import { appConfig } from "../lib/app-config";
-import { postToApi, putToApi, readApiErrorMessage } from "../lib/client-api";
-import { PantryAddEntryDialog } from "./pantry-add-entry-dialog";
+import { deleteToApi, postToApi, putToApi, readApiErrorMessage } from "../lib/client-api";
+import { formatQuantityValue, formatQuantityWithUnit } from "../lib/quantity-format";
+import { ModalShell } from "./modal-shell";
+import { PantryProductCreateDialog } from "./pantry-product-create-dialog";
 
 type ShoppingListPanelProps = {
   householdExternalId: string;
@@ -18,6 +20,14 @@ type ShoppingListPanelProps = {
   locations: PantryLocationSummary[];
   canAdminister: boolean;
 };
+
+type ActiveItemEditorState = {
+  externalId: string;
+  label: string;
+  quantity: string;
+  unit: string;
+  note: string;
+} | null;
 
 function formatDateTime(value: string | null) {
   if (!value) {
@@ -29,15 +39,69 @@ function formatDateTime(value: string | null) {
   });
 }
 
-function formatQuantity(item: ShoppingListItemSummary) {
-  if (item.quantity && item.unit) {
-    return `${item.quantity} ${item.unit}`;
+function compareQuantities(left: string | null, right: string | null) {
+  if (!left || !right) {
+    return null;
   }
-  return item.quantity ?? "No quantity set";
+  const normalizedLeft = Number(formatQuantityValue(left));
+  const normalizedRight = Number(formatQuantityValue(right));
+  if (Number.isNaN(normalizedLeft) || Number.isNaN(normalizedRight)) {
+    return null;
+  }
+  if (normalizedLeft === normalizedRight) {
+    return 0;
+  }
+  return normalizedLeft < normalizedRight ? -1 : 1;
 }
 
-function isUnresolvedPendingItem(item: ShoppingListItemSummary) {
-  return item.status === "awaiting_purchase";
+function isShortfall(item: ShoppingListItemSummary) {
+  return (
+    item.status === "purchased" &&
+    item.quantity &&
+    item.requested_quantity &&
+    item.unit &&
+    item.requested_unit &&
+    item.unit === item.requested_unit &&
+    compareQuantities(item.quantity, item.requested_quantity) === -1
+  );
+}
+
+function isOverfill(item: ShoppingListItemSummary) {
+  return (
+    item.status === "purchased" &&
+    item.quantity &&
+    item.requested_quantity &&
+    item.unit &&
+    item.requested_unit &&
+    item.unit === item.requested_unit &&
+    compareQuantities(item.quantity, item.requested_quantity) === 1
+  );
+}
+
+function isPurchasedNewProduct(item: ShoppingListItemSummary) {
+  return item.status === "purchased" && item.product_external_id === null;
+}
+
+function buildRequestedSummary(item: ShoppingListItemSummary) {
+  return formatQuantityWithUnit(item.requested_quantity, item.requested_unit, "No requested quantity");
+}
+
+function buildPurchasedSummary(item: ShoppingListItemSummary) {
+  return formatQuantityWithUnit(item.quantity, item.unit, "No purchased quantity");
+}
+
+function buildNextStatus(item: ShoppingListItemSummary, nextQuantity: string, nextUnit: string, fallbackStatus: string) {
+  if (
+    item.requested_quantity &&
+    item.requested_unit &&
+    nextQuantity &&
+    nextUnit &&
+    item.requested_unit === nextUnit &&
+    compareQuantities(nextQuantity, item.requested_quantity) === 0
+  ) {
+    return "purchased";
+  }
+  return fallbackStatus;
 }
 
 export function ShoppingListPanel({
@@ -52,7 +116,10 @@ export function ShoppingListPanel({
   const [selectedPendingListId, setSelectedPendingListId] = useState<string | null>(
     shoppingList.pending_lists[0]?.external_id ?? null,
   );
-  const [productCreationItem, setProductCreationItem] = useState<ShoppingListItemSummary | null>(null);
+  const [activeItemEditor, setActiveItemEditor] = useState<ActiveItemEditorState>(null);
+  const [finalizeListExternalId, setFinalizeListExternalId] = useState<string | null>(null);
+  const [shortfallPromptOpen, setShortfallPromptOpen] = useState(false);
+  const [productCreationQueue, setProductCreationQueue] = useState<ShoppingListItemSummary[]>([]);
 
   useEffect(() => {
     if (
@@ -69,13 +136,15 @@ export function ShoppingListPanel({
     shoppingList.pending_lists.find((list) => list.external_id === selectedPendingListId) ??
     shoppingList.pending_lists[0] ??
     null;
-  const unresolvedManualItems = useMemo(
-    () =>
-      selectedPendingList?.items.filter(
-        (item) => isUnresolvedPendingItem(item) && item.product_external_id === null,
-      ) ?? [],
+  const shortfallItems = useMemo(
+    () => selectedPendingList?.items.filter((item) => isShortfall(item)) ?? [],
     [selectedPendingList],
   );
+  const newPurchasedItems = useMemo(
+    () => selectedPendingList?.items.filter((item) => isPurchasedNewProduct(item)) ?? [],
+    [selectedPendingList],
+  );
+  const productCreationItem = productCreationQueue[0] ?? null;
 
   async function handleAddItem(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -103,18 +172,69 @@ export function ShoppingListPanel({
     }
   }
 
-  async function savePendingItem(event: FormEvent<HTMLFormElement>, itemExternalId: string) {
+  async function saveActiveItem(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!activeItemEditor) {
+      return;
+    }
     const formData = new FormData(event.currentTarget);
     setPending(true);
     setError(null);
 
     try {
-      await putToApi(`/api/households/${householdExternalId}/shopping-list/items/${itemExternalId}`, {
-        status: String(formData.get("status") ?? "awaiting_purchase"),
+      await putToApi(`/api/households/${householdExternalId}/shopping-list/items/${activeItemEditor.externalId}`, {
         quantity: String(formData.get("quantity") ?? "").trim() || null,
         unit: String(formData.get("unit") ?? "").trim() || null,
         note: String(formData.get("note") ?? "").trim() || null,
+      });
+      setActiveItemEditor(null);
+      router.refresh();
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error ? requestError.message : "Could not update this shopping item.",
+      );
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function removeActiveItem(itemExternalId: string) {
+    setPending(true);
+    setError(null);
+    try {
+      await deleteToApi(`/api/households/${householdExternalId}/shopping-list/items/${itemExternalId}`);
+      setActiveItemEditor(null);
+      router.refresh();
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error ? requestError.message : "Could not remove this shopping item.",
+      );
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function savePendingItem(event: FormEvent<HTMLFormElement>, item: ShoppingListItemSummary) {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    const nextQuantity = String(formData.get("quantity") ?? "").trim();
+    const nextUnit = String(formData.get("unit") ?? "").trim();
+    const nextStatus = buildNextStatus(
+      item,
+      nextQuantity,
+      nextUnit,
+      String(formData.get("status") ?? item.status),
+    );
+    setPending(true);
+    setError(null);
+
+    try {
+      await putToApi(`/api/households/${householdExternalId}/shopping-list/items/${item.external_id}`, {
+        status: nextStatus,
+        quantity: nextQuantity || null,
+        unit: nextUnit || null,
+        note: String(formData.get("note") ?? "").trim() || null,
+        pantry_location_external_id: String(formData.get("pantry_location_external_id") ?? "").trim() || null,
       });
       router.refresh();
     } catch (requestError) {
@@ -143,8 +263,7 @@ export function ShoppingListPanel({
 
       const blob = await response.blob();
       const disposition = response.headers.get("content-disposition") ?? "";
-      const filename =
-        disposition.match(/filename="([^"]+)"/)?.[1] ?? "shopping-list.txt";
+      const filename = disposition.match(/filename="([^"]+)"/)?.[1] ?? "shopping-list.txt";
       const objectUrl = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = objectUrl;
@@ -196,14 +315,16 @@ export function ShoppingListPanel({
     }
   }
 
-  async function finalizePendingList(listExternalId: string) {
+  async function finalizePendingList(listExternalId: string, returnShortfallsToActive: boolean) {
     setPending(true);
     setError(null);
     try {
       await postToApi(
         `/api/households/${householdExternalId}/shopping-list/pending/${listExternalId}/finalize`,
-        {},
+        { return_shortfalls_to_active: returnShortfallsToActive },
       );
+      setFinalizeListExternalId(null);
+      setShortfallPromptOpen(false);
       router.refresh();
     } catch (requestError) {
       setError(
@@ -214,28 +335,60 @@ export function ShoppingListPanel({
     }
   }
 
-  async function handleProductCreationCompleted(
-    responseProductExternalId: string,
-    item: ShoppingListItemSummary,
-  ) {
+  function queueFinalize(list: ShoppingListDetailSummary) {
+    setFinalizeListExternalId(list.external_id);
+    setError(null);
+
+    if (newPurchasedItems.length > 0) {
+      if (!canAdminister) {
+        setError("A household admin needs to create Pantry products for new purchased items before finishing.");
+        setFinalizeListExternalId(null);
+        return;
+      }
+      setProductCreationQueue(newPurchasedItems);
+      return;
+    }
+
+    if (shortfallItems.length > 0) {
+      setShortfallPromptOpen(true);
+      return;
+    }
+
+    void finalizePendingList(list.external_id, false);
+  }
+
+  async function attachCreatedProduct(productExternalId: string, item: ShoppingListItemSummary) {
     await postToApi(
       `/api/households/${householdExternalId}/shopping-list/items/${item.external_id}/attach-product`,
       {
-        product_external_id: responseProductExternalId,
+        product_external_id: productExternalId,
       },
     );
     await putToApi(`/api/households/${householdExternalId}/shopping-list/items/${item.external_id}`, {
       status: "purchased",
-      quantity: item.quantity,
-      unit: item.unit,
+      quantity: item.quantity ?? item.requested_quantity ?? "1",
+      unit: item.unit ?? item.requested_unit ?? "count",
       note: item.note,
+      pantry_location_external_id: item.pantry_location_external_id,
     });
+  }
 
-    const nextItem = unresolvedManualItems.find((candidate) => candidate.external_id !== item.external_id);
-    if (nextItem) {
-      window.setTimeout(() => {
-        setProductCreationItem(nextItem);
-      }, 400);
+  async function handleProductCreationCompleted(productExternalId: string, item: ShoppingListItemSummary) {
+    await attachCreatedProduct(productExternalId, item);
+    const remainingItems = productCreationQueue.filter((candidate) => candidate.external_id !== item.external_id);
+    setProductCreationQueue(remainingItems);
+
+    if (remainingItems.length > 0) {
+      return;
+    }
+
+    if (finalizeListExternalId && shortfallItems.length > 0) {
+      setShortfallPromptOpen(true);
+      return;
+    }
+
+    if (finalizeListExternalId) {
+      await finalizePendingList(finalizeListExternalId, false);
     }
   }
 
@@ -248,7 +401,7 @@ export function ShoppingListPanel({
               <p className="eyebrow">Shopping List</p>
               <h1>Household shopping</h1>
               <p className="section-copy">
-                Build the active list, export a printable checklist when you are ready to shop, then reconcile the trip line by line.
+                Keep the active list dense and editable, then reconcile each trip back into Pantry stock.
               </p>
             </div>
             <div className="tag-row">
@@ -277,7 +430,7 @@ export function ShoppingListPanel({
             </button>
           </div>
 
-          <form className="shopping-add-form" onSubmit={handleAddItem}>
+          <form className="shopping-add-form shopping-add-form-compact" onSubmit={handleAddItem}>
             <label className="field shopping-item-name">
               <span>Add item</span>
               <input name="label" placeholder="Milk" required />
@@ -308,7 +461,7 @@ export function ShoppingListPanel({
               <p className="eyebrow">Active</p>
               <h2 className="section-heading">{shoppingList.active_list.name}</h2>
               <p className="helper-text">
-                Items stay here until you export the checklist for an actual shopping trip.
+                Edit quantities and notes here before you export the next trip.
               </p>
             </div>
             {activeItems.length === 0 ? (
@@ -316,19 +469,42 @@ export function ShoppingListPanel({
                 <p>No active shopping items right now.</p>
               </div>
             ) : (
-              <div className="shopping-item-list">
+              <div className="shopping-item-list shopping-item-list-dense">
                 {activeItems.map((item) => (
-                  <article key={item.external_id} className="shopping-item-card">
-                    <div className="setup-card-toolbar">
+                  <article key={item.external_id} className="shopping-item-card shopping-item-row">
+                    <div className="shopping-item-row-main">
                       <div className="stack compact-stack">
                         <strong>{item.product_name ?? item.label}</strong>
                         <p className="helper-text">
-                          {formatQuantity(item)}
+                          {formatQuantityWithUnit(item.quantity, item.unit)}
                           {item.note ? ` · ${item.note}` : ""}
                         </p>
-                        <p className="helper-text">Added {formatDateTime(item.created_at)}</p>
                       </div>
-                      <span className="pill">{item.source_type.replaceAll("_", " ")}</span>
+                      <div className="tag-row">
+                        <span className="pill">{item.source_type.replaceAll("_", " ")}</span>
+                        <button
+                          type="button"
+                          className="ghost-button compact-button"
+                          onClick={() =>
+                            setActiveItemEditor({
+                              externalId: item.external_id,
+                              label: item.product_name ?? item.label,
+                              quantity: item.quantity ?? "",
+                              unit: item.unit ?? "",
+                              note: item.note ?? "",
+                            })
+                          }
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          className="ghost-button compact-button"
+                          onClick={() => void removeActiveItem(item.external_id)}
+                        >
+                          Remove
+                        </button>
+                      </div>
                     </div>
                   </article>
                 ))}
@@ -350,13 +526,13 @@ export function ShoppingListPanel({
                 <p>Export a checklist to start an awaiting-purchase list.</p>
               </div>
             ) : (
-              <div className="shopping-item-list">
+              <div className="shopping-item-list shopping-item-list-dense">
                 {shoppingList.pending_lists.map((list) => (
                   <article
                     key={list.external_id}
                     className={`shopping-item-card${selectedPendingList?.external_id === list.external_id ? " is-selected" : ""}`}
                   >
-                    <div className="setup-card-toolbar">
+                    <div className="shopping-item-row-main">
                       <div className="stack compact-stack">
                         <strong>{list.name}</strong>
                         <p className="helper-text">
@@ -386,7 +562,7 @@ export function ShoppingListPanel({
                 <p className="eyebrow">Reconcile</p>
                 <h2>{selectedPendingList.name}</h2>
                 <p className="helper-text">
-                  Update quantities, mark each line as purchased or not purchased, and move cancelled trips back into the active list if needed.
+                  Save purchased quantities, reuse the last known pantry location where possible, and return any shortfall if needed when you finish.
                 </p>
               </div>
               <div className="page-actions">
@@ -402,28 +578,40 @@ export function ShoppingListPanel({
                   type="button"
                   className="primary-button"
                   disabled={pending}
-                  onClick={() => void finalizePendingList(selectedPendingList.external_id)}
+                  onClick={() => queueFinalize(selectedPendingList)}
                 >
                   Finish reconciliation
                 </button>
               </div>
             </div>
 
-            <div className="shopping-reconcile-list">
+            <div className="shopping-reconcile-list shopping-reconcile-list-compact">
               {selectedPendingList.items.map((item) => (
                 <form
                   key={item.external_id}
-                  className="shopping-reconcile-row"
-                  onSubmit={(event) => void savePendingItem(event, item.external_id)}
+                  className="shopping-reconcile-row shopping-reconcile-row-compact"
+                  onSubmit={(event) => void savePendingItem(event, item)}
                 >
                   <div className="stack compact-stack">
-                    <strong>{item.product_name ?? item.label}</strong>
+                    <div className="shopping-row-heading">
+                      <strong>{item.product_name ?? item.label}</strong>
+                      <div className="tag-row">
+                        <span className="pill">{item.status.replaceAll("_", " ")}</span>
+                        {item.product_external_id === null ? <span className="pill is-warning">New product</span> : null}
+                        {isShortfall(item) ? <span className="pill is-warning">Shortfall</span> : null}
+                        {isOverfill(item) ? <span className="pill is-success">Extra bought</span> : null}
+                      </div>
+                    </div>
+                    <p className="helper-text">
+                      Requested: {buildRequestedSummary(item)} · Purchased: {buildPurchasedSummary(item)}
+                    </p>
                     <p className="helper-text">
                       Added {formatDateTime(item.created_at)}
                       {item.purchased_at ? ` · Purchased ${formatDateTime(item.purchased_at)}` : ""}
                       {item.not_purchased_at ? ` · Not purchased ${formatDateTime(item.not_purchased_at)}` : ""}
                     </p>
                   </div>
+
                   <label className="field compact">
                     <span>Status</span>
                     <select name="status" defaultValue={item.status}>
@@ -433,18 +621,29 @@ export function ShoppingListPanel({
                     </select>
                   </label>
                   <label className="field compact">
-                    <span>Qty</span>
+                    <span>Purchased qty</span>
                     <input
                       name="quantity"
                       type="number"
                       min="0.001"
                       step="0.001"
-                      defaultValue={item.quantity ?? ""}
+                      defaultValue={item.quantity ?? item.requested_quantity ?? ""}
                     />
                   </label>
                   <label className="field compact">
                     <span>Unit</span>
-                    <input name="unit" defaultValue={item.unit ?? ""} />
+                    <input name="unit" defaultValue={item.unit ?? item.requested_unit ?? ""} />
+                  </label>
+                  <label className="field compact">
+                    <span>Pantry location</span>
+                    <select name="pantry_location_external_id" defaultValue={item.pantry_location_external_id ?? ""}>
+                      <option value="">Choose later</option>
+                      {locations.map((location) => (
+                        <option key={location.external_id} value={location.external_id}>
+                          {location.location_group_name} / {location.name}
+                        </option>
+                      ))}
+                    </select>
                   </label>
                   <label className="field compact shopping-reconcile-note">
                     <span>Note</span>
@@ -454,16 +653,6 @@ export function ShoppingListPanel({
                     <button type="submit" className="ghost-button compact-button" disabled={pending}>
                       Save
                     </button>
-                    {canAdminister && item.product_external_id === null ? (
-                      <button
-                        type="button"
-                        className="ghost-button compact-button"
-                        disabled={locations.length === 0}
-                        onClick={() => setProductCreationItem(item)}
-                      >
-                        Create Pantry product
-                      </button>
-                    ) : null}
                   </div>
                 </form>
               ))}
@@ -481,10 +670,10 @@ export function ShoppingListPanel({
               <p>Reconciled, returned, and merged lists will appear here.</p>
             </div>
           ) : (
-            <div className="shopping-item-list">
+            <div className="shopping-item-list shopping-item-list-dense">
               {shoppingList.history_lists.map((list) => (
                 <article key={list.external_id} className="shopping-item-card is-muted">
-                  <div className="setup-card-toolbar">
+                  <div className="shopping-item-row-main">
                     <div className="stack compact-stack">
                       <strong>{list.name}</strong>
                       <p className="helper-text">
@@ -506,28 +695,96 @@ export function ShoppingListPanel({
         </section>
       </div>
 
+      {activeItemEditor ? (
+        <ModalShell
+          title={`Edit ${activeItemEditor.label}`}
+          description="Adjust the quantity, unit, or note for this active shopping item."
+          onClose={() => setActiveItemEditor(null)}
+        >
+          <form className="stack" onSubmit={saveActiveItem}>
+            <div className="content-grid">
+              <label className="field">
+                <span>Quantity</span>
+                <input
+                  name="quantity"
+                  type="number"
+                  min="0.001"
+                  step="0.001"
+                  defaultValue={activeItemEditor.quantity}
+                />
+              </label>
+              <label className="field">
+                <span>Unit</span>
+                <input name="unit" defaultValue={activeItemEditor.unit} />
+              </label>
+            </div>
+            <label className="field">
+              <span>Note</span>
+              <input name="note" defaultValue={activeItemEditor.note} />
+            </label>
+            <div className="page-actions">
+              <button type="submit" className="primary-button" disabled={pending}>
+                {pending ? "Saving..." : "Save item"}
+              </button>
+              <button
+                type="button"
+                className="ghost-button"
+                disabled={pending}
+                onClick={() => void removeActiveItem(activeItemEditor.externalId)}
+              >
+                Remove
+              </button>
+            </div>
+          </form>
+        </ModalShell>
+      ) : null}
+
+      {shortfallPromptOpen && finalizeListExternalId ? (
+        <ModalShell
+          title="Return shortfall to active list?"
+          description={`${shortfallItems.length} purchased item${shortfallItems.length === 1 ? "" : "s"} came back short. Decide whether the missing amount should go back onto the active shopping list.`}
+          onClose={() => {
+            setShortfallPromptOpen(false);
+            setFinalizeListExternalId(null);
+          }}
+        >
+          <div className="stack">
+            <div className="page-actions">
+              <button
+                type="button"
+                className="primary-button"
+                disabled={pending}
+                onClick={() => void finalizePendingList(finalizeListExternalId, true)}
+              >
+                Return shortfall
+              </button>
+              <button
+                type="button"
+                className="ghost-button"
+                disabled={pending}
+                onClick={() => void finalizePendingList(finalizeListExternalId, false)}
+              >
+                Keep closed
+              </button>
+            </div>
+          </div>
+        </ModalShell>
+      ) : null}
+
       {productCreationItem ? (
-        <PantryAddEntryDialog
+        <PantryProductCreateDialog
           householdExternalId={householdExternalId}
-          canAdminister={canAdminister}
-          locations={locations}
-          title="Create Pantry product"
-          description="Create a Pantry product directly from this shopping item, then keep reconciling the trip."
-          submitLabel="Create Pantry product"
-          initialValues={{
-            name: productCreationItem.label,
-            quantity: productCreationItem.quantity ?? "1.000",
-            unit: productCreationItem.unit ?? "count",
-            note: productCreationItem.note ?? "",
-            locationExternalId: locations[0]?.external_id ?? "",
+          initialName={productCreationItem.label}
+          initialUnit={productCreationItem.unit ?? productCreationItem.requested_unit ?? "count"}
+          quantitySummary={buildPurchasedSummary(productCreationItem)}
+          note={productCreationItem.note}
+          onCompleted={async (product) => {
+            await handleProductCreationCompleted(product.external_id, productCreationItem);
           }}
-          onCompleted={async (response) => {
-            if (!response.product) {
-              return;
-            }
-            await handleProductCreationCompleted(response.product.external_id, productCreationItem);
+          onClose={() => {
+            setProductCreationQueue([]);
+            setFinalizeListExternalId(null);
           }}
-          onClose={() => setProductCreationItem(null)}
         />
       ) : null}
     </>

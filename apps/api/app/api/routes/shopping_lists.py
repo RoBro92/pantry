@@ -12,6 +12,7 @@ from app.schemas.shopping import (
     AddShoppingListItemRequest,
     AttachShoppingListProductRequest,
     CompleteShoppingListItemRequest,
+    FinalizePendingShoppingListRequest,
     MergePendingShoppingListsRequest,
     ShoppingListSummary,
     UpdateShoppingListItemRequest,
@@ -21,6 +22,7 @@ from app.services.shopping_lists import (
     attach_product_to_shopping_list_item,
     build_household_shopping_list,
     complete_shopping_list_item,
+    delete_shopping_list_item,
     export_active_shopping_list,
     finalize_pending_shopping_list,
     merge_pending_shopping_lists,
@@ -61,6 +63,7 @@ def post_shopping_list_item(
             quantity=payload.quantity,
             unit=payload.unit,
             note=payload.note,
+            pantry_location_external_id=payload.pantry_location_external_id,
             source_type=payload.source_type,
         )
     except ValueError as exc:
@@ -86,6 +89,26 @@ def put_shopping_list_item(
             quantity=payload.quantity,
             unit=payload.unit,
             note=payload.note,
+            pantry_location_external_id=payload.pantry_location_external_id,
+        )
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
+    return build_household_shopping_list(db, household=access.household)
+
+
+@router.delete("/shopping-list/items/{item_external_id}", response_model=ShoppingListSummary)
+def delete_shopping_list_item_route(
+    item_external_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
+    access: HouseholdAccess = Depends(require_household_access()),
+):
+    try:
+        delete_shopping_list_item(
+            db,
+            household=access.household,
+            actor=current_user,
+            item_external_id=item_external_id,
         )
     except ValueError as exc:
         raise _bad_request(exc) from exc
@@ -200,6 +223,7 @@ def post_return_pending_list_to_active(
 @router.post("/shopping-list/pending/{list_external_id}/finalize", response_model=ShoppingListSummary)
 def post_finalize_pending_list(
     list_external_id: str,
+    payload: FinalizePendingShoppingListRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(get_current_user),
     access: HouseholdAccess = Depends(require_household_access()),
@@ -210,6 +234,7 @@ def post_finalize_pending_list(
             household=access.household,
             actor=current_user,
             list_external_id=list_external_id,
+            return_shortfalls_to_active=payload.return_shortfalls_to_active,
         )
     except ValueError as exc:
         raise _bad_request(exc) from exc

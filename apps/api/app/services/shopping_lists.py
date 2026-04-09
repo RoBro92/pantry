@@ -1,16 +1,18 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import case, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.base import utc_now
 from app.models.household import Household
+from app.models.location import Location
 from app.models.product import Product
 from app.models.shopping_list import ShoppingList
 from app.models.shopping_list_item import ShoppingListItem
+from app.models.stock_lot import StockLot
 from app.models.user import User
 from app.schemas.shopping import (
     ShoppingListDetailSummary,
@@ -18,13 +20,14 @@ from app.schemas.shopping import (
     ShoppingListSummary,
 )
 from app.services.audit import record_audit_event
-from app.services.pantry_catalog import get_product_by_external_id
+from app.services.pantry_catalog import get_location_by_external_id, get_product_by_external_id
 from app.services.pantry_normalization import (
     lookup_token_signature,
     normalize_lookup_name,
     normalize_unit,
     require_text,
 )
+from app.services.pantry_stock import add_stock_lot
 
 DEFAULT_SHOPPING_LIST_NAME = "Shopping list"
 
@@ -63,9 +66,24 @@ def _list_name_timestamp(value: datetime) -> str:
 def _format_quantity(quantity: Decimal | None, unit: str | None) -> str | None:
     if quantity is None:
         return None
+    formatted_quantity = format(quantity, "f").rstrip("0").rstrip(".")
+    if not formatted_quantity:
+        formatted_quantity = "0"
     if unit:
-        return f"{quantity} {unit}"
-    return str(quantity)
+        return f"{formatted_quantity} {unit}"
+    return formatted_quantity
+
+
+def _same_requested_unit(item: ShoppingListItem, unit: str | None) -> bool:
+    return bool(item.requested_unit and unit and item.requested_unit == unit)
+
+
+def _requested_quantity(item: ShoppingListItem) -> Decimal | None:
+    return item.requested_quantity if item.requested_quantity is not None else item.quantity
+
+
+def _requested_unit(item: ShoppingListItem) -> str | None:
+    return item.requested_unit if item.requested_unit is not None else item.unit
 
 
 def _item_label_key(label: str) -> str:
@@ -129,8 +147,15 @@ def _serialize_item(item: ShoppingListItem) -> ShoppingListItemSummary:
         product_external_id=item.product.external_id if item.product is not None else None,
         product_name=item.product.name if item.product is not None else None,
         quantity=item.quantity,
+        requested_quantity=item.requested_quantity,
         unit=item.unit,
+        requested_unit=item.requested_unit,
         note=item.note,
+        pantry_location_external_id=item.pantry_location.external_id if item.pantry_location is not None else None,
+        pantry_location_name=item.pantry_location.name if item.pantry_location is not None else None,
+        pantry_location_group_name=(
+            item.pantry_location.location_group.name if item.pantry_location is not None else None
+        ),
         source_type=item.source_type,
         status=item.status,
         created_at=item.created_at,
@@ -184,6 +209,7 @@ def _load_shopping_list(
         .where(ShoppingList.external_id == external_id)
         .options(
             selectinload(ShoppingList.items).selectinload(ShoppingListItem.product),
+            selectinload(ShoppingList.items).selectinload(ShoppingListItem.pantry_location).selectinload(Location.location_group),
             selectinload(ShoppingList.merged_into_list),
         )
     )
@@ -195,6 +221,7 @@ def _load_all_lists(db: Session, *, household: Household) -> list[ShoppingList]:
         .where(ShoppingList.household_id == household.id)
         .options(
             selectinload(ShoppingList.items).selectinload(ShoppingListItem.product),
+            selectinload(ShoppingList.items).selectinload(ShoppingListItem.pantry_location).selectinload(Location.location_group),
             selectinload(ShoppingList.merged_into_list),
         )
         .order_by(ShoppingList.updated_at.desc(), ShoppingList.created_at.desc())
@@ -242,6 +269,7 @@ def get_or_create_active_shopping_list(
         .where(ShoppingList.is_default.is_(True))
         .where(ShoppingList.lifecycle_state == SHOPPING_LIST_STATE_ACTIVE)
         .options(selectinload(ShoppingList.items).selectinload(ShoppingListItem.product))
+        .options(selectinload(ShoppingList.items).selectinload(ShoppingListItem.pantry_location).selectinload(Location.location_group))
     )
     if shopping_list is not None:
         return shopping_list
@@ -274,7 +302,41 @@ def get_shopping_list_item_by_external_id(
         .where(ShoppingListItem.external_id == item_external_id)
         .options(
             selectinload(ShoppingListItem.product),
+            selectinload(ShoppingListItem.pantry_location).selectinload(Location.location_group),
             selectinload(ShoppingListItem.shopping_list).selectinload(ShoppingList.items),
+        )
+    )
+
+
+def _resolve_default_pantry_location(
+    db: Session,
+    *,
+    household: Household,
+    product: Product | None,
+    explicit_location_external_id: str | None = None,
+) -> Location | None:
+    if explicit_location_external_id:
+        location = get_location_by_external_id(
+            db,
+            household=household,
+            external_id=explicit_location_external_id,
+        )
+        if location is None:
+            raise ValueError("Pantry storage location not found.")
+        return location
+
+    if product is None:
+        return None
+
+    return db.scalar(
+        select(Location)
+        .join(StockLot, StockLot.location_id == Location.id)
+        .where(StockLot.household_id == household.id)
+        .where(StockLot.product_id == product.id)
+        .order_by(
+            case((StockLot.depleted_at.is_(None), 0), else_=1),
+            StockLot.updated_at.desc(),
+            StockLot.created_at.desc(),
         )
     )
 
@@ -310,6 +372,7 @@ def _merge_item_into_list(
     quantity: Decimal | None,
     unit: str | None,
     note: str | None,
+    pantry_location: Location | None,
     source_type: str,
     status: str,
 ) -> ShoppingListItem:
@@ -324,6 +387,9 @@ def _merge_item_into_list(
     )
     if existing_item is not None:
         _merge_item_fields(existing_item, quantity=quantity, unit=unit, note=note)
+        if pantry_location is not None and existing_item.pantry_location_id is None:
+            existing_item.pantry_location_id = pantry_location.id
+            existing_item.pantry_location = pantry_location
         db.add(existing_item)
         return existing_item
 
@@ -336,13 +402,18 @@ def _merge_item_into_list(
         quantity=quantity,
         unit=unit,
         note=note,
+        pantry_location_id=pantry_location.id if pantry_location is not None else None,
         source_type=source_type,
         status=status,
+        requested_quantity=quantity,
+        requested_unit=unit,
     )
     db.add(item)
     db.flush()
     if product is not None:
         item.product = product
+    if pantry_location is not None:
+        item.pantry_location = pantry_location
     existing_items.append(item)
     return item
 
@@ -402,6 +473,7 @@ def add_item_to_default_shopping_list(
     quantity: Decimal | None = None,
     unit: str | None = None,
     note: str | None = None,
+    pantry_location_external_id: str | None = None,
     source_type: str = "manual",
 ) -> ShoppingListItem:
     shopping_list = get_or_create_active_shopping_list(db, household=household)
@@ -420,6 +492,12 @@ def add_item_to_default_shopping_list(
     normalized_note = require_text(note, field_name="Note") if note else None
     normalized_quantity = _normalize_quantity(quantity)
     normalized_unit = normalize_unit(item_unit) if item_unit else None
+    pantry_location = _resolve_default_pantry_location(
+        db,
+        household=household,
+        product=product,
+        explicit_location_external_id=pantry_location_external_id,
+    )
 
     item = _merge_item_into_list(
         db,
@@ -431,6 +509,7 @@ def add_item_to_default_shopping_list(
         quantity=normalized_quantity,
         unit=normalized_unit,
         note=normalized_note,
+        pantry_location=pantry_location,
         source_type=source_type,
         status=SHOPPING_ITEM_STATUS_OPEN,
     )
@@ -451,6 +530,7 @@ def add_item_to_default_shopping_list(
         },
     )
     db.commit()
+    db.expire_all()
     db.refresh(item)
     return get_shopping_list_item_by_external_id(db, household=household, item_external_id=item.external_id) or item
 
@@ -465,6 +545,7 @@ def update_shopping_list_item(
     quantity: Decimal | None = None,
     unit: str | None = None,
     note: str | None = None,
+    pantry_location_external_id: str | None = None,
 ) -> ShoppingListItem:
     item = get_shopping_list_item_by_external_id(db, household=household, item_external_id=item_external_id)
     if item is None or item.shopping_list is None:
@@ -473,13 +554,30 @@ def update_shopping_list_item(
     normalized_quantity = _normalize_quantity(quantity) if quantity is not None else None
     normalized_unit = normalize_unit(unit) if unit else None
     normalized_note = require_text(note, field_name="Note") if note else None
+    pantry_location = (
+        _resolve_default_pantry_location(
+            db,
+            household=household,
+            product=item.product,
+            explicit_location_external_id=pantry_location_external_id,
+        )
+        if pantry_location_external_id is not None
+        else None
+    )
 
     if normalized_quantity is not None:
         item.quantity = normalized_quantity
+        if item.shopping_list.lifecycle_state == SHOPPING_LIST_STATE_ACTIVE:
+            item.requested_quantity = normalized_quantity
     if unit is not None:
         item.unit = normalized_unit
+        if item.shopping_list.lifecycle_state == SHOPPING_LIST_STATE_ACTIVE:
+            item.requested_unit = normalized_unit
     if note is not None:
         item.note = normalized_note
+    if pantry_location_external_id is not None:
+        item.pantry_location_id = pantry_location.id if pantry_location is not None else None
+        item.pantry_location = pantry_location
 
     if status is not None:
         valid_statuses = (
@@ -501,6 +599,17 @@ def update_shopping_list_item(
             item.completed_at = None
             item.purchased_at = None
             item.not_purchased_at = None
+    elif (
+        item.shopping_list.lifecycle_state == SHOPPING_LIST_STATE_AWAITING_PURCHASE
+        and normalized_quantity is not None
+        and item.requested_quantity is not None
+        and _same_requested_unit(item, normalized_unit or item.unit)
+        and normalized_quantity == item.requested_quantity
+    ):
+        item.status = SHOPPING_ITEM_STATUS_PURCHASED
+        item.completed_at = utc_now()
+        item.purchased_at = item.completed_at
+        item.not_purchased_at = None
 
     db.add(item)
     record_audit_event(
@@ -521,6 +630,41 @@ def update_shopping_list_item(
     db.commit()
     db.refresh(item)
     return get_shopping_list_item_by_external_id(db, household=household, item_external_id=item.external_id) or item
+
+
+def delete_shopping_list_item(
+    db: Session,
+    *,
+    household: Household,
+    actor: User,
+    item_external_id: str,
+) -> None:
+    item = get_shopping_list_item_by_external_id(db, household=household, item_external_id=item_external_id)
+    if item is None or item.shopping_list is None:
+        raise ValueError("Shopping list item not found.")
+    if item.shopping_list.lifecycle_state != SHOPPING_LIST_STATE_ACTIVE:
+        raise ValueError("Only active shopping list items can be removed.")
+
+    label = item.label
+    product_name = item.product.name if item.product is not None else None
+    external_id = item.external_id
+    if item.shopping_list is not None and item in item.shopping_list.items:
+        item.shopping_list.items.remove(item)
+    db.delete(item)
+    db.flush()
+    record_audit_event(
+        db,
+        household=household,
+        actor=actor,
+        action="shopping_list.item_removed",
+        target_type="shopping_list_item",
+        target_external_id=external_id,
+        event_metadata={
+            "label": label,
+            "product_name": product_name,
+        },
+    )
+    db.commit()
 
 
 def complete_shopping_list_item(
@@ -572,6 +716,13 @@ def attach_product_to_shopping_list_item(
     item.normalized_label = normalize_lookup_name(product.name)
     if item.unit is None:
         item.unit = product.default_unit
+    if item.requested_unit is None:
+        item.requested_unit = item.unit or product.default_unit
+    if item.pantry_location_id is None:
+        pantry_location = _resolve_default_pantry_location(db, household=household, product=product)
+        if pantry_location is not None:
+            item.pantry_location_id = pantry_location.id
+            item.pantry_location = pantry_location
     db.add(item)
     record_audit_event(
         db,
@@ -614,6 +765,13 @@ def export_active_shopping_list(
     active_list.normalized_name = normalize_lookup_name(active_list.name)
     for item in active_items:
         item.status = SHOPPING_ITEM_STATUS_AWAITING_PURCHASE
+        item.requested_quantity = item.quantity
+        item.requested_unit = item.unit
+        if item.product is not None and item.pantry_location_id is None:
+            pantry_location = _resolve_default_pantry_location(db, household=household, product=item.product)
+            if pantry_location is not None:
+                item.pantry_location_id = pantry_location.id
+                item.pantry_location = pantry_location
         db.add(item)
     db.add(active_list)
     new_active_list = get_or_create_active_shopping_list(db, household=household)
@@ -707,6 +865,7 @@ def merge_pending_shopping_lists(
                 quantity=item.quantity,
                 unit=item.unit,
                 note=item.note,
+                pantry_location=item.pantry_location,
                 source_type=item.source_type,
                 status=SHOPPING_ITEM_STATUS_AWAITING_PURCHASE,
             )
@@ -760,9 +919,10 @@ def return_pending_list_to_active(
             existing_items=active_items,
             product=item.product,
             label=item.label,
-            quantity=item.quantity,
-            unit=item.unit,
+            quantity=_requested_quantity(item),
+            unit=_requested_unit(item),
             note=item.note,
+            pantry_location=item.pantry_location,
             source_type=item.source_type,
             status=SHOPPING_ITEM_STATUS_OPEN,
         )
@@ -790,12 +950,89 @@ def return_pending_list_to_active(
     return _load_shopping_list(db, household=household, external_id=pending_list.external_id) or pending_list
 
 
+def _return_shortfall_to_active_list(
+    db: Session,
+    *,
+    household: Household,
+    active_list: ShoppingList,
+    active_items: list[ShoppingListItem],
+    item: ShoppingListItem,
+) -> bool:
+    requested_quantity = _requested_quantity(item)
+    if (
+        requested_quantity is None
+        or item.quantity is None
+        or item.quantity >= requested_quantity
+        or not _same_requested_unit(item, item.unit)
+    ):
+        return False
+
+    shortfall_quantity = (requested_quantity - item.quantity).quantize(Decimal("0.001"))
+    if shortfall_quantity <= Decimal("0.000"):
+        return False
+
+    _merge_item_into_list(
+        db,
+        shopping_list=active_list,
+        household=household,
+        existing_items=active_items,
+        product=item.product,
+        label=item.label,
+        quantity=shortfall_quantity,
+        unit=_requested_unit(item),
+        note=item.note,
+        pantry_location=item.pantry_location,
+        source_type=item.source_type,
+        status=SHOPPING_ITEM_STATUS_OPEN,
+    )
+    return True
+
+
+def _write_purchased_item_to_pantry(
+    db: Session,
+    *,
+    household: Household,
+    actor: User,
+    item: ShoppingListItem,
+    purchased_on: date,
+) -> None:
+    if item.product is None:
+        raise ValueError(f"Create a Pantry product for {item.label} before finishing reconciliation.")
+
+    quantity = item.quantity or item.requested_quantity or Decimal("1.000")
+    unit = item.unit or item.requested_unit or item.product.default_unit
+    pantry_location = item.pantry_location or _resolve_default_pantry_location(
+        db,
+        household=household,
+        product=item.product,
+    )
+    if pantry_location is None:
+        raise ValueError(
+            f"Choose a Pantry storage location for {item.product.name} before finishing reconciliation."
+        )
+
+    add_stock_lot(
+        db,
+        household=household,
+        actor=actor,
+        product_external_id=item.product.external_id,
+        location_external_id=pantry_location.external_id,
+        quantity=quantity,
+        note=item.note,
+        purchased_on=purchased_on,
+        expires_on=None,
+        unit_override=unit,
+        commit=False,
+    )
+
+
 def finalize_pending_shopping_list(
     db: Session,
     *,
     household: Household,
     actor: User,
     list_external_id: str,
+    return_shortfalls_to_active: bool = False,
 ) -> ShoppingList:
     pending_list = _load_shopping_list(db, household=household, external_id=list_external_id)
     if pending_list is None or pending_list.lifecycle_state != SHOPPING_LIST_STATE_AWAITING_PURCHASE:
@@ -810,23 +1047,47 @@ def finalize_pending_shopping_list(
     active_list = get_or_create_active_shopping_list(db, household=household)
     active_items = list(active_list.items)
     returned_item_count = 0
+    shortfall_return_count = 0
+    purchased_item_count = 0
+    purchased_on = utc_now().date()
     for item in pending_list.items:
-        if item.status != SHOPPING_ITEM_STATUS_NOT_PURCHASED:
+        if item.status == SHOPPING_ITEM_STATUS_NOT_PURCHASED:
+            _merge_item_into_list(
+                db,
+                shopping_list=active_list,
+                household=household,
+                existing_items=active_items,
+                product=item.product,
+                label=item.label,
+                quantity=_requested_quantity(item),
+                unit=_requested_unit(item),
+                note=item.note,
+                pantry_location=item.pantry_location,
+                source_type=item.source_type,
+                status=SHOPPING_ITEM_STATUS_OPEN,
+            )
+            returned_item_count += 1
             continue
-        _merge_item_into_list(
+
+        if item.status != SHOPPING_ITEM_STATUS_PURCHASED:
+            continue
+
+        _write_purchased_item_to_pantry(
             db,
-            shopping_list=active_list,
             household=household,
-            existing_items=active_items,
-            product=item.product,
-            label=item.label,
-            quantity=item.quantity,
-            unit=item.unit,
-            note=item.note,
-            source_type=item.source_type,
-            status=SHOPPING_ITEM_STATUS_OPEN,
+            actor=actor,
+            item=item,
+            purchased_on=purchased_on,
         )
-        returned_item_count += 1
+        purchased_item_count += 1
+        if return_shortfalls_to_active and _return_shortfall_to_active_list(
+            db,
+            household=household,
+            active_list=active_list,
+            active_items=active_items,
+            item=item,
+        ):
+            shortfall_return_count += 1
 
     pending_list.lifecycle_state = SHOPPING_LIST_STATE_RECONCILED
     pending_list.reconciled_at = utc_now()
@@ -841,11 +1102,8 @@ def finalize_pending_shopping_list(
         event_metadata={
             "name": pending_list.name,
             "returned_item_count": returned_item_count,
-            "purchased_item_count": sum(
-                1
-                for item in pending_list.items
-                if item.status == SHOPPING_ITEM_STATUS_PURCHASED
-            ),
+            "shortfall_return_count": shortfall_return_count,
+            "purchased_item_count": purchased_item_count,
         },
     )
     db.commit()
