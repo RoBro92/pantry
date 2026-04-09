@@ -73,6 +73,15 @@ def create_product(client, household_external_id: str, **payload) -> dict:
     return response.json()
 
 
+def update_product(client, household_external_id: str, product_external_id: str, **payload) -> dict:
+    response = client.put(
+        f"/api/households/{household_external_id}/products/{product_external_id}",
+        json=payload,
+    )
+    assert response.status_code == 200
+    return response.json()
+
+
 def add_stock_lot(client, household_external_id: str, **payload) -> dict:
     response = client.post(f"/api/households/{household_external_id}/stock-lots", json=payload)
     assert response.status_code == 201
@@ -352,6 +361,7 @@ def test_pantry_entry_creates_product_and_first_stock_lot_in_one_flow(client, db
         unit="kg",
         location_external_id=shelf["external_id"],
         aliases=["Ground beef", "Minced beef"],
+        product_notes="Freeze in flat packs for faster defrosting.",
         purchased_on="2026-04-01",
         expires_on="2026-04-03",
         note="Family pack",
@@ -360,9 +370,62 @@ def test_pantry_entry_creates_product_and_first_stock_lot_in_one_flow(client, db
     assert payload["status"] == "created"
     assert payload["product"]["name"] == "Beef mince"
     assert payload["product"]["default_unit"] == "kg"
+    assert payload["product"]["notes"] == "Freeze in flat packs for faster defrosting."
     assert payload["lot"]["product_name"] == "Beef mince"
     assert payload["lot"]["location_name"] == "Shelf"
     assert payload["lot"]["note"] == "Family pack"
+
+
+def test_product_update_replaces_product_metadata_and_notes(client, db_session):
+    _, household = create_household_with_role(
+        db_session,
+        email="product-update@example.com",
+        household_name="Product Update Household",
+        role_code=HOUSEHOLD_ADMIN_ROLE,
+    )
+    login(client, email="product-update@example.com")
+
+    product = create_product(
+        client,
+        household.external_id,
+        name="Soup base",
+        default_unit="jar",
+        aliases=["Base stock"],
+        barcodes=["10001"],
+        notes="Original notes",
+        manual_ingredient_tags=["Onion"],
+    )
+
+    updated = update_product(
+        client,
+        household.external_id,
+        product["external_id"],
+        name="Rich soup base",
+        default_unit="pack",
+        aliases=["Broth base", "Stock concentrate"],
+        barcodes=["20002"],
+        notes="Use half a pack for weeknight soups.",
+        manual_ingredient_tags=["Onion", "Celery"],
+    )
+
+    assert updated["name"] == "Rich soup base"
+    assert updated["default_unit"] == "pack"
+    assert updated["aliases"] == ["Broth base", "Stock concentrate"]
+    assert updated["barcodes"] == ["20002"]
+    assert updated["notes"] == "Use half a pack for weeknight soups."
+    assert updated["manual_ingredient_tags"] == ["Onion", "Celery"]
+
+    overview = client.get(
+        f"/api/households/{household.external_id}/pantry/overview",
+        params={"q": "broth base"},
+    )
+    assert overview.status_code == 200
+    assert overview.json()["catalog_products"][0]["notes"] == "Use half a pack for weeknight soups."
+
+    events = db_session.scalars(
+        select(AuditEvent).where(AuditEvent.action == "product.updated")
+    ).all()
+    assert len(events) == 1
 
 
 def test_pantry_entry_detects_existing_product_then_adds_new_stock_lot(client, db_session):
