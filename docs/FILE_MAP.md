@@ -12,13 +12,13 @@ Quick reference for the public repository layout.
 
 ## Deployment And Release Files
 
-- `compose.yml`: local source-based development stack
-- `compose.dev.yml`: local development overrides
+- `compose.yml`: local Docker-based contributor stack base
+- `compose.dev.yml`: local bind-mount and reload overrides for live development
 - `infra/compose/pantry.yml`: released self-hosted stack
 - `infra/env/pantry.env.example`: released environment template
 - `infra/docker/`: Dockerfiles for local and released images
 - `infra/scripts/`: install, update, health check, smoke check, release, and local helper scripts
-- `infra/scripts/dev-stack.sh`: local contributor helper for `fresh` and `demo` stack resets
+- `infra/scripts/dev-stack.sh`: local contributor helper for `fresh`, `demo`, rebuild, and stop flows
 - `.github/workflows/`: pull request validation and release publishing workflows
 
 ## Public Documentation

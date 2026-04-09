@@ -28,8 +28,17 @@ Pantry provides a source-based helper for local branch work:
 
 - `fresh` resets the local environment to the first run setup flow
 - `demo` resets the local environment and seeds stable demo data
+- switch modes without a rebuild with `./infra/scripts/dev-stack.sh reset fresh` or `./infra/scripts/dev-stack.sh reset demo`
 - stop the stack with `./infra/scripts/dev-stack.sh down`
 - follow logs with `./infra/scripts/dev-stack.sh logs`
+- rebuild images only when Dockerfiles or dependencies changed with `./infra/scripts/dev-stack.sh rebuild`
+- the helper prefers `.env.local`, falls back to `.env`, and bootstraps `.env.local` from `.env.example` if needed
+- web edits in `apps/web` and `packages/shared-types` hot reload in browser
+- API edits in `apps/api/app` and Alembic files auto-reload the FastAPI process
+- worker edits in `apps/worker/worker` and shared API-side worker dependencies restart the worker process automatically
+
+Cross-platform note:
+Docker Desktop file polling is enabled automatically by the helper on macOS and Windows-like shells. Linux keeps native file watching by default. If your host still misses changes, set `PANTRY_WEB_WATCHPACK_POLLING=true`, `PANTRY_API_WATCHFILES_FORCE_POLLING=true`, and `PANTRY_WORKER_WATCHFILES_FORCE_POLLING=true` before starting the stack.
 
 Demo credentials:
 
@@ -50,6 +59,9 @@ Start with [docs/TEST_STRATEGY.md](TEST_STRATEGY.md).
 Common commands:
 
 ```bash
+npm run dev:stack:fresh
+npm run dev:stack:demo
+npm run dev:stack:down
 npm run typecheck:web
 npm run build:web
 cd apps/api && pytest -q
