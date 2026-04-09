@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from decimal import Decimal
 
 from sqlalchemy import case, select
@@ -45,6 +45,8 @@ SHOPPING_ITEM_STATUS_NOT_PURCHASED = "not_purchased"
 BULK_PENDING_ACTION_RECONCILE = "reconcile_selected"
 BULK_PENDING_ACTION_RETURN = "return_selected"
 BULK_PENDING_ACTION_DELETE = "delete_selected"
+FINALIZE_UNRESOLVED_ACTION_RETURN = "return_to_active"
+FINALIZE_UNRESOLVED_ACTION_DELETE = "delete"
 
 ACTIVE_LIST_STATES = {SHOPPING_LIST_STATE_ACTIVE}
 PENDING_LIST_STATES = {SHOPPING_LIST_STATE_AWAITING_PURCHASE}
@@ -65,6 +67,14 @@ def _normalize_quantity(quantity: Decimal | None) -> Decimal | None:
 
 def _list_name_timestamp(value: datetime) -> str:
     return value.strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _sort_list_timestamp(value: datetime | None) -> datetime:
+    if value is None:
+        return datetime.min.replace(tzinfo=timezone.utc)
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value
 
 
 def _format_quantity(quantity: Decimal | None, unit: str | None) -> str | None:
@@ -451,11 +461,11 @@ def build_household_shopping_list(
     ]
 
     pending_lists.sort(
-        key=lambda shopping_list: shopping_list.generated_at or shopping_list.updated_at,
+        key=lambda shopping_list: _sort_list_timestamp(shopping_list.generated_at or shopping_list.updated_at),
         reverse=True,
     )
     history_lists.sort(
-        key=lambda shopping_list: shopping_list.reconciled_at or shopping_list.updated_at,
+        key=lambda shopping_list: _sort_list_timestamp(shopping_list.reconciled_at or shopping_list.updated_at),
         reverse=True,
     )
 
@@ -555,6 +565,11 @@ def update_shopping_list_item(
     item = get_shopping_list_item_by_external_id(db, household=household, item_external_id=item_external_id)
     if item is None or item.shopping_list is None:
         raise ValueError("Shopping list item not found.")
+    pending_list = (
+        item.shopping_list
+        if item.shopping_list.lifecycle_state == SHOPPING_LIST_STATE_AWAITING_PURCHASE
+        else None
+    )
 
     normalized_quantity = _normalize_quantity(quantity) if quantity is not None else None
     normalized_unit = normalize_unit(unit) if unit else None
@@ -635,6 +650,19 @@ def update_shopping_list_item(
             "unit": item.unit,
         },
     )
+    if pending_list is not None and all(
+        candidate.status != SHOPPING_ITEM_STATUS_AWAITING_PURCHASE
+        for candidate in pending_list.items
+    ):
+        _finalize_pending_shopping_list_record(
+            db,
+            household=household,
+            actor=actor,
+            pending_list=pending_list,
+            return_shortfalls_to_active=True,
+        )
+        return get_shopping_list_item_by_external_id(db, household=household, item_external_id=item.external_id) or item
+
     db.commit()
     db.refresh(item)
     return get_shopping_list_item_by_external_id(db, household=household, item_external_id=item.external_id) or item
@@ -1119,6 +1147,167 @@ def _resolve_reconciliation_location(
     )
 
 
+def _resolve_unresolved_pending_items_for_finalize(
+    db: Session,
+    *,
+    household: Household,
+    pending_list: ShoppingList,
+    active_list: ShoppingList,
+    active_items: list[ShoppingListItem],
+    unresolved_action: str,
+    resolved_at,
+) -> tuple[int, int]:
+    unresolved_items = [
+        item for item in pending_list.items if item.status == SHOPPING_ITEM_STATUS_AWAITING_PURCHASE
+    ]
+    returned_count = 0
+    deleted_count = 0
+
+    if unresolved_action == FINALIZE_UNRESOLVED_ACTION_RETURN:
+        for item in unresolved_items:
+            _merge_item_into_list(
+                db,
+                shopping_list=active_list,
+                household=household,
+                existing_items=active_items,
+                product=item.product,
+                label=item.label,
+                quantity=_requested_quantity(item),
+                unit=_requested_unit(item),
+                note=item.note,
+                pantry_location=item.pantry_location,
+                source_type=item.source_type,
+                status=SHOPPING_ITEM_STATUS_OPEN,
+            )
+            item.status = SHOPPING_ITEM_STATUS_NOT_PURCHASED
+            item.completed_at = resolved_at
+            item.purchased_at = None
+            item.not_purchased_at = resolved_at
+            item.reconciled_at = resolved_at
+            db.add(item)
+            returned_count += 1
+        return returned_count, deleted_count
+
+    if unresolved_action == FINALIZE_UNRESOLVED_ACTION_DELETE:
+        for item in unresolved_items:
+            if item.shopping_list is not None and item in item.shopping_list.items:
+                item.shopping_list.items.remove(item)
+            db.delete(item)
+            deleted_count += 1
+        return returned_count, deleted_count
+
+    raise ValueError("Choose how to handle the remaining unresolved shopping items first.")
+
+
+def _finalize_pending_shopping_list_record(
+    db: Session,
+    *,
+    household: Household,
+    actor: User,
+    pending_list: ShoppingList,
+    return_shortfalls_to_active: bool = False,
+    unresolved_action: str | None = None,
+) -> ShoppingList:
+    unresolved_items = [
+        item for item in pending_list.items if item.status == SHOPPING_ITEM_STATUS_AWAITING_PURCHASE
+    ]
+    if unresolved_items and unresolved_action not in {
+        FINALIZE_UNRESOLVED_ACTION_RETURN,
+        FINALIZE_UNRESOLVED_ACTION_DELETE,
+    }:
+        raise ValueError("Resolve each pending shopping item before finishing this list.")
+
+    active_list = get_or_create_active_shopping_list(db, household=household)
+    active_items = list(active_list.items)
+    returned_item_count = 0
+    deleted_unresolved_item_count = 0
+    shortfall_return_count = 0
+    purchased_on = utc_now().date()
+    reconciled_at = utc_now()
+
+    if unresolved_items:
+        returned_item_count, deleted_unresolved_item_count = _resolve_unresolved_pending_items_for_finalize(
+            db,
+            household=household,
+            pending_list=pending_list,
+            active_list=active_list,
+            active_items=active_items,
+            unresolved_action=unresolved_action or "",
+            resolved_at=reconciled_at,
+        )
+
+    for item in pending_list.items:
+        if item.status == SHOPPING_ITEM_STATUS_NOT_PURCHASED and item.reconciled_at is None:
+            _merge_item_into_list(
+                db,
+                shopping_list=active_list,
+                household=household,
+                existing_items=active_items,
+                product=item.product,
+                label=item.label,
+                quantity=_requested_quantity(item),
+                unit=_requested_unit(item),
+                note=item.note,
+                pantry_location=item.pantry_location,
+                source_type=item.source_type,
+                status=SHOPPING_ITEM_STATUS_OPEN,
+            )
+            item.reconciled_at = reconciled_at
+            item.completed_at = item.completed_at or reconciled_at
+            item.not_purchased_at = item.not_purchased_at or reconciled_at
+            db.add(item)
+            returned_item_count += 1
+            continue
+
+        if item.status != SHOPPING_ITEM_STATUS_PURCHASED or item.reconciled_at is not None:
+            continue
+
+        _write_purchased_item_to_pantry(
+            db,
+            household=household,
+            actor=actor,
+            item=item,
+            purchased_on=purchased_on,
+        )
+        if return_shortfalls_to_active and _return_shortfall_to_active_list(
+            db,
+            household=household,
+            active_list=active_list,
+            active_items=active_items,
+            item=item,
+        ):
+            shortfall_return_count += 1
+        item.reconciled_at = reconciled_at
+        item.completed_at = item.completed_at or reconciled_at
+        item.purchased_at = item.purchased_at or reconciled_at
+        db.add(item)
+
+    pending_list.lifecycle_state = SHOPPING_LIST_STATE_RECONCILED
+    pending_list.reconciled_at = reconciled_at
+    pending_list.archived_at = reconciled_at
+    db.add(pending_list)
+    record_audit_event(
+        db,
+        household=household,
+        actor=actor,
+        action="shopping_list.reconciled",
+        target_type="shopping_list",
+        target_external_id=pending_list.external_id,
+        event_metadata={
+            "name": pending_list.name,
+            "returned_item_count": returned_item_count,
+            "deleted_unresolved_item_count": deleted_unresolved_item_count,
+            "shortfall_return_count": shortfall_return_count,
+            "purchased_item_count": sum(
+                1 for item in pending_list.items if item.status == SHOPPING_ITEM_STATUS_PURCHASED
+            ),
+            "unresolved_action": unresolved_action,
+        },
+    )
+    db.commit()
+    return _load_shopping_list(db, household=household, external_id=pending_list.external_id) or pending_list
+
+
 def bulk_operate_pending_shopping_list_items(
     db: Session,
     *,
@@ -1245,6 +1434,15 @@ def bulk_operate_pending_shopping_list_items(
             "shortfall_return_count": shortfall_return_count,
         },
     )
+    if all(item.status != SHOPPING_ITEM_STATUS_AWAITING_PURCHASE for item in pending_list.items):
+        return _finalize_pending_shopping_list_record(
+            db,
+            household=household,
+            actor=actor,
+            pending_list=pending_list,
+            return_shortfalls_to_active=False,
+        )
+
     db.commit()
     return _load_shopping_list(db, household=household, external_id=pending_list.external_id) or pending_list
 
@@ -1256,90 +1454,16 @@ def finalize_pending_shopping_list(
     actor: User,
     list_external_id: str,
     return_shortfalls_to_active: bool = False,
+    unresolved_action: str | None = None,
 ) -> ShoppingList:
     pending_list = _load_shopping_list(db, household=household, external_id=list_external_id)
     if pending_list is None or pending_list.lifecycle_state != SHOPPING_LIST_STATE_AWAITING_PURCHASE:
         raise ValueError("Awaiting-purchase list not found.")
-
-    unresolved_items = [
-        item for item in pending_list.items if item.status == SHOPPING_ITEM_STATUS_AWAITING_PURCHASE
-    ]
-    if unresolved_items:
-        raise ValueError("Resolve each pending shopping item before finishing this list.")
-
-    active_list = get_or_create_active_shopping_list(db, household=household)
-    active_items = list(active_list.items)
-    returned_item_count = 0
-    shortfall_return_count = 0
-    purchased_on = utc_now().date()
-    reconciled_at = utc_now()
-    for item in pending_list.items:
-        if item.status == SHOPPING_ITEM_STATUS_NOT_PURCHASED and item.reconciled_at is None:
-            _merge_item_into_list(
-                db,
-                shopping_list=active_list,
-                household=household,
-                existing_items=active_items,
-                product=item.product,
-                label=item.label,
-                quantity=_requested_quantity(item),
-                unit=_requested_unit(item),
-                note=item.note,
-                pantry_location=item.pantry_location,
-                source_type=item.source_type,
-                status=SHOPPING_ITEM_STATUS_OPEN,
-            )
-            item.reconciled_at = reconciled_at
-            item.completed_at = item.completed_at or reconciled_at
-            item.not_purchased_at = item.not_purchased_at or reconciled_at
-            db.add(item)
-            returned_item_count += 1
-            continue
-
-        if item.status != SHOPPING_ITEM_STATUS_PURCHASED or item.reconciled_at is not None:
-            continue
-
-        _write_purchased_item_to_pantry(
-            db,
-            household=household,
-            actor=actor,
-            item=item,
-            purchased_on=purchased_on,
-        )
-        if return_shortfalls_to_active and _return_shortfall_to_active_list(
-            db,
-            household=household,
-            active_list=active_list,
-            active_items=active_items,
-            item=item,
-        ):
-            shortfall_return_count += 1
-        item.reconciled_at = reconciled_at
-        item.completed_at = item.completed_at or reconciled_at
-        item.purchased_at = item.purchased_at or reconciled_at
-        db.add(item)
-
-    pending_list.lifecycle_state = SHOPPING_LIST_STATE_RECONCILED
-    pending_list.reconciled_at = reconciled_at
-    pending_list.archived_at = reconciled_at
-    db.add(pending_list)
-    record_audit_event(
+    return _finalize_pending_shopping_list_record(
         db,
         household=household,
         actor=actor,
-        action="shopping_list.reconciled",
-        target_type="shopping_list",
-        target_external_id=pending_list.external_id,
-        event_metadata={
-            "name": pending_list.name,
-            "returned_item_count": sum(
-                1 for item in pending_list.items if item.status == SHOPPING_ITEM_STATUS_NOT_PURCHASED
-            ),
-            "shortfall_return_count": shortfall_return_count,
-            "purchased_item_count": sum(
-                1 for item in pending_list.items if item.status == SHOPPING_ITEM_STATUS_PURCHASED
-            ),
-        },
+        pending_list=pending_list,
+        return_shortfalls_to_active=return_shortfalls_to_active,
+        unresolved_action=unresolved_action,
     )
-    db.commit()
-    return _load_shopping_list(db, household=household, external_id=pending_list.external_id) or pending_list

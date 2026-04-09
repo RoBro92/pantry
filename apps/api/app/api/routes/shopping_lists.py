@@ -269,6 +269,7 @@ def post_finalize_pending_list(
             actor=current_user,
             list_external_id=list_external_id,
             return_shortfalls_to_active=payload.return_shortfalls_to_active,
+            unresolved_action=payload.unresolved_action,
         )
     except ValueError as exc:
         raise _bad_request(exc) from exc

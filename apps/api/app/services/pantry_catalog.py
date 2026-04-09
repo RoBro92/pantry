@@ -5,10 +5,15 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.models.barcode import Barcode
 from app.models.household import Household
+from app.models.import_line import ImportLine
 from app.models.location import Location
 from app.models.location_group import LocationGroup
 from app.models.product import Product
 from app.models.product_alias import ProductAlias
+from app.models.product_enrichment import ProductEnrichment
+from app.models.recipe_ingredient import RecipeIngredient
+from app.models.shopping_list_item import ShoppingListItem
+from app.models.stock_lot import StockLot
 from app.models.user import User
 from app.services.audit import record_audit_event
 from app.services.pantry_normalization import (
@@ -518,6 +523,119 @@ def update_product(
         return get_product_by_external_id(db, household=household, external_id=product.external_id) or product
 
     return product
+
+
+def delete_product(
+    db: Session,
+    *,
+    household: Household,
+    actor: User,
+    product: Product,
+    commit: bool = True,
+) -> None:
+    stock_lots = db.scalars(
+        select(StockLot)
+        .where(StockLot.household_id == household.id)
+        .where(StockLot.product_id == product.id)
+    ).all()
+    stock_lot_ids = [lot.id for lot in stock_lots]
+
+    if stock_lot_ids:
+        import_lines_with_lots = db.scalars(
+            select(ImportLine)
+            .where(ImportLine.household_id == household.id)
+            .where(ImportLine.confirmed_stock_lot_id.in_(stock_lot_ids))
+        ).all()
+        for import_line in import_lines_with_lots:
+            import_line.confirmed_stock_lot_id = None
+            import_line.confirmed_stock_lot = None
+            db.add(import_line)
+
+    shopping_items = db.scalars(
+        select(ShoppingListItem)
+        .where(ShoppingListItem.household_id == household.id)
+        .where(ShoppingListItem.product_id == product.id)
+    ).all()
+    for item in shopping_items:
+        item.product_id = None
+        item.product = None
+        db.add(item)
+
+    recipe_ingredients = db.scalars(
+        select(RecipeIngredient)
+        .where(RecipeIngredient.household_id == household.id)
+        .where(RecipeIngredient.product_id == product.id)
+    ).all()
+    for ingredient in recipe_ingredients:
+        ingredient.product_id = None
+        ingredient.product = None
+        db.add(ingredient)
+
+    import_lines = db.scalars(
+        select(ImportLine)
+        .where(ImportLine.household_id == household.id)
+        .where(
+            (ImportLine.product_id == product.id)
+            | (ImportLine.suggested_product_id == product.id)
+        )
+    ).all()
+    for import_line in import_lines:
+        if import_line.product_id == product.id:
+            import_line.product_id = None
+            import_line.product = None
+        if import_line.suggested_product_id == product.id:
+            import_line.suggested_product_id = None
+            import_line.suggested_product = None
+        db.add(import_line)
+
+    aliases = db.scalars(
+        select(ProductAlias)
+        .where(ProductAlias.household_id == household.id)
+        .where(ProductAlias.product_id == product.id)
+    ).all()
+    barcodes = db.scalars(
+        select(Barcode)
+        .where(Barcode.household_id == household.id)
+        .where(Barcode.product_id == product.id)
+    ).all()
+    enrichments = db.scalars(
+        select(ProductEnrichment)
+        .where(ProductEnrichment.household_id == household.id)
+        .where(ProductEnrichment.product_id == product.id)
+    ).all()
+
+    record_audit_event(
+        db,
+        household=household,
+        actor=actor,
+        action="product.deleted",
+        target_type="product",
+        target_external_id=product.external_id,
+        event_metadata={
+            "name": product.name,
+            "stock_lot_count": len(stock_lots),
+            "alias_count": len(aliases),
+            "barcode_count": len(barcodes),
+            "enrichment_count": len(enrichments),
+            "shopping_item_reference_count": len(shopping_items),
+            "recipe_reference_count": len(recipe_ingredients),
+            "import_line_reference_count": len(import_lines),
+        },
+    )
+
+    for alias in aliases:
+        db.delete(alias)
+    for barcode in barcodes:
+        db.delete(barcode)
+    for enrichment in enrichments:
+        db.delete(enrichment)
+    for lot in stock_lots:
+        db.delete(lot)
+
+    db.delete(product)
+
+    if commit:
+        db.commit()
 
 
 def ensure_product_alias(

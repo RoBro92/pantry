@@ -204,6 +204,10 @@ class ProductSummary(BaseModel):
     enrichment: ProductEnrichmentSummary | None = None
 
 
+class DeleteProductResponse(BaseModel):
+    message: str
+
+
 class ProductLocationSummary(BaseModel):
     location_external_id: str
     location_name: str

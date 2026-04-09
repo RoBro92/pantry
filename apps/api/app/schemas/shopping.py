@@ -40,6 +40,7 @@ class MergePendingShoppingListsRequest(BaseModel):
 
 class FinalizePendingShoppingListRequest(BaseModel):
     return_shortfalls_to_active: bool = False
+    unresolved_action: str | None = None
 
 
 class BulkPendingShoppingListItemRequest(BaseModel):

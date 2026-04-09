@@ -15,6 +15,7 @@ from app.schemas.pantry import (
     CreatePantryEntryRequest,
     CreateLocationGroupRequest,
     CreateLocationRequest,
+    DeleteProductResponse,
     ProductEnrichmentPreviewRequest,
     ProductEnrichmentPreviewResponse,
     CreateProductRequest,
@@ -32,8 +33,14 @@ from app.schemas.pantry import (
     StockMutationResponse,
     UpdateStockLotRequest,
 )
-from app.services.pantry_catalog import create_location, create_location_group, create_product, get_product_by_external_id
-from app.services.pantry_catalog import update_product
+from app.services.pantry_catalog import (
+    create_location,
+    create_location_group,
+    create_product,
+    delete_product,
+    get_product_by_external_id,
+    update_product,
+)
 from app.services.location_links import serialize_location_link
 from app.services.pantry_queries import (
     PantryFilterOptions,
@@ -232,6 +239,28 @@ def put_product(
             pass
 
     return serialize_product_summary(product)
+
+
+@router.delete("/products/{product_external_id}", response_model=DeleteProductResponse)
+def delete_product_route(
+    product_external_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
+    access: HouseholdAccess = Depends(require_household_access(allowed_roles={HOUSEHOLD_ADMIN_ROLE})),
+):
+    product = get_product_by_external_id(db, household=access.household, external_id=product_external_id)
+    if product is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found.")
+
+    delete_product(
+        db,
+        household=access.household,
+        actor=current_user,
+        product=product,
+    )
+    return DeleteProductResponse(
+        message=f"Deleted {product.name} and its associated stock lots from Pantry.",
+    )
 
 
 @router.post("/pantry/enrichment/preview", response_model=ProductEnrichmentPreviewResponse)
