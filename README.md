@@ -1,163 +1,79 @@
 # Pantry
 
-Pantry is a self-hosted household inventory and meal management application for tracking food, reducing waste, and keeping day-to-day kitchen workflows clear. It was built to stay practical and lightweight, with support for multiple households and everyday actions that should feel quick rather than cumbersome.
+Pantry is a self-hosted household inventory application for tracking food, planning around what is already at home, and reducing avoidable waste.
 
-## Features
+It is built for local operation rather than hosted sync. The repository ships the web app, API, worker, Docker deployment assets, and the core contributor documentation needed to run and maintain the project safely.
 
-- Pantry inventory with Rooms, storage locations, product-first browsing, condensed stock-lot actions, and expiry tracking
-- Optional Open Food Facts product enrichment with compact barcode lookup, duplicate-aware product creation, and user-owned product identity
-- Shopping lists with active, awaiting-purchase, merge, return, export, and reconciliation flows
-- Password change in user settings plus optional self-service password reset by email when SMTP is configured, tested, and enabled
-- Recipe management with pantry insights
-- QR location access with quick add/remove flows
-- Diagnostics, update visibility, and manual update guidance
-- Native backup export plus guarded restore foundations
-- Optional AI-powered suggestions for recipes based on dietary requirements for users with suggestions on additional purchase
-- Guided first run setup and login flow, including restore from backup
+## What Pantry Includes
+
+- Pantry inventory with households, rooms, storage locations, stock lots, and expiry tracking
+- Shopping lists with review and reconciliation flows
+- Recipes with pantry coverage summaries
+- Optional Open Food Facts lookup for product enrichment
+- Guided first-run setup, including restore from a Pantry backup bundle
+- Admin tools for users, backups, diagnostics, updates, SMTP, and optional AI provider configuration
 
 ## Quick Start
+
+For a supported self-hosted install on Debian:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/RoBro92/pantry/main/infra/scripts/install-pantry.sh | bash
 ```
 
-The installer prepares Docker, writes environment defaults, pulls the release assets, runs migrations, and starts the stack.
+The installer prepares Docker, downloads the release assets, writes `.env`, generates required secrets, runs migrations, starts the stack, and runs a health check.
+
+Open `http://<your-server>:3000/` when the installer finishes.
 
 ## Manual Installation
 
+1. Download the release assets for the version you want to run.
+2. Copy `infra/env/pantry.env.example` to `.env` in the install directory.
+3. Set the required URLs, database password, and secret keys.
+4. Start PostgreSQL and Redis, run the `migrate` job, then start the stack.
+
+The full manual flow lives in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+
+## Updating
+
+Pantry does not self-update. Operators update it deliberately:
+
 ```bash
-git clone https://github.com/RoBro92/pantry.git
-cd pantry
-
-cp infra/env/pantry.env.example .env
-
-docker compose -f infra/compose/pantry.yml up -d
-docker compose exec api alembic upgrade head
+./update-pantry.sh
 ```
+
+That flow refreshes release assets by default, updates `PANTRY_VERSION`, pulls images, runs migrations, restarts services, and runs the bundled health check.
 
 ## First Run
 
-Open:
+Fresh installs open into the setup flow. Pantry currently supports two install paths:
 
-```text
-http://<your-server-ip>:3000
-```
-Pantry supports two first run paths:
+- Fresh install
+- Restore from backup
 
-- `Fresh install`
-- `Restore from backup`
+Restore accepts Pantry backup bundle JSON files only. Uploaded bundles are validated and staged before any destructive action is applied.
 
-Restore currently accepts Pantry native full instance JSON backup bundles only. Uploaded restore files are validated, staged in quarantine, and never executed as code.
+## Local Development
 
-## Pantry Workflow
-
-The household pantry page is built as a compact product browser with inline search and filters. Search by product name, alias, or barcode, switch between table and list views, expand a product only when you need stock-lot detail, and use `Add product` to create a product and its first stock lot in one flow.
-
-When adding a product, Pantry supports:
-
-- duplicate detection before you commit, including exact barcode matching and name-similarity checks
-- optional Open Food Facts preview and enrichment linking
-- manual ingredient tags that stay user-owned
-- barcode entry with USB-scanner friendly input, inline lookup, and browser camera hooks where supported
-- clean duplicate-product detection that routes directly into adding another stock lot instead of creating a second product when Pantry already knows the item
-
-Open Food Facts data is advisory enrichment only. Pantry keeps the product name, aliases, and stock identity as user-owned records, while attached enrichment survives backups and restores for later UI, filtering, and AI use.
-
-## Accounts And Access
-
-Logged-in users can change their own password from Settings. Self-service password reset from the login page stays hidden unless a platform admin has configured SMTP, run a successful SMTP test, and explicitly enabled password reset emails for the instance.
-
-Accounts without an email address can still sign in normally, but they cannot use self-service password reset and will need an admin-led reset instead.
-
-## Updating Pantry
-
-```bash
-./infra/scripts/update-pantry.sh
-```
-
-Pantry does not self-update. Platform admins can review the current version, latest published release metadata, changelog summaries, breaking change notes, and operator commands from the admin `Updates` page.
-
-## Backups And Recovery
-
-Platform admins can use the admin `Backups` page to:
-
-- export a full instance Pantry backup bundle
-- export a household-specific Pantry bundle for retention or inspection
-- upload and validate a full instance restore bundle before applying it deliberately
-
-Current restore support is limited to Pantry backup bundle v1 JSON files from the same schema revision or from older revisions explicitly marked restore-compatible by Pantry.
-
-## Configuration
-
-Edit:
-
-```text
-infra/env/pantry.env.example
-```
-
-Key options include:
-
-- `WEB_APP_URL`
-- `API_BASE_URL`
-- `NEXT_PUBLIC_API_BASE_URL`
-- `PUBLIC_BROWSER_BASE_URL`
-- database credentials
-- optional AI provider settings
-- optional SMTP settings
-
-## Validation And Local Development
-
-See:
-
-- [docs/CONTRIBUTING.md](/Users/robinbrown/Documents/GitHub/pantry/docs/CONTRIBUTING.md)
-- [docs/DEPLOYMENT.md](/Users/robinbrown/Documents/GitHub/pantry/docs/DEPLOYMENT.md)
-- [docs/ARCHITECTURE.md](/Users/robinbrown/Documents/GitHub/pantry/docs/ARCHITECTURE.md)
-- [docs/TEST_STRATEGY.md](/Users/robinbrown/Documents/GitHub/pantry/docs/TEST_STRATEGY.md)
-- [docs/REPOSITORY_MAINTENANCE.md](/Users/robinbrown/Documents/GitHub/pantry/docs/REPOSITORY_MAINTENANCE.md)
-
-Local source development uses the repository-root compose files:
+Local branch work uses the source-based development stack:
 
 ```bash
 ./infra/scripts/dev-stack.sh start fresh
 ./infra/scripts/dev-stack.sh start demo
 ```
 
-Choose the mode explicitly for local branch work. `fresh` resets to the first-run setup wizard, while `demo` resets and seeds stable local demo data before landing on the login page. This is development-only and does not change the public production or self-hosted install flow.
+- `fresh` resets the local stack to the setup flow
+- `demo` resets and seeds a repeatable local demo account set
 
-The helper script runs the repository-root compose files with bind-mounted source, `next dev` for the web app, and `uvicorn --reload` for the API so normal UI, CSS, content, and Python edits do not require rebuilding containers.
+Contributor workflow details live in [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md).
 
-## Development Workflow
+## Public Docs
 
-Pantry uses a branch and pull request workflow for ongoing development.
-
-1. Branch from `main`.
-2. Make one focused, reviewable change.
-3. Run the relevant local validation.
-4. Open a pull request and review the diff and checks.
-5. Merge back to `main` after the change is ready.
-
-Recommended branch prefixes:
-
-- `feature/...`
-- `fix/...`
-- `docs/...`
-- `release/...`
-
-Public contributor and Codex guidance lives in [AGENTS.md](/Users/robinbrown/Documents/GitHub/pantry/AGENTS.md), with a docs-set copy in [docs/AGENTS.md](/Users/robinbrown/Documents/GitHub/pantry/docs/AGENTS.md). Internal planning material belongs in `private-docs/`, not the public repo.
-
-## Troubleshooting
-
-```bash
-docker compose logs -f
-docker compose restart
-./infra/scripts/healthcheck-pantry.sh
-```
-
-## Versioning
-
-The running version is defined by the `VERSION` file and surfaced across the app, diagnostics, and updates UI.
-
-See also:
-
-- [docs/VERSIONING.md](/Users/robinbrown/Documents/GitHub/pantry/docs/VERSIONING.md)
-- [docs/SECURITY.md](/Users/robinbrown/Documents/GitHub/pantry/docs/SECURITY.md)
+- [docs/FILE_MAP.md](docs/FILE_MAP.md)
+- [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- [docs/SECURITY.md](docs/SECURITY.md)
+- [docs/VERSIONING.md](docs/VERSIONING.md)
+- [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md)
+- [docs/TEST_STRATEGY.md](docs/TEST_STRATEGY.md)
+- [AGENTS.md](AGENTS.md)

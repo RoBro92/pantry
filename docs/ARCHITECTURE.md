@@ -1,58 +1,37 @@
 # Architecture
 
-Pantry is a small monorepo with three runtime services, a staged first-run setup layer, and operator-controlled lifecycle tooling.
+Pantry is a small monorepo for a self-hosted product with three runtime services and a shared deployment layer.
 
 ## Runtime Services
 
-- `apps/web`: Next.js application for login, setup, admin, pantry, shopping list, recipe, import, and AI pages
-- `apps/api`: FastAPI application for auth, setup, admin, diagnostics, pantry, shopping list, recipe, and import APIs
-- `apps/worker`: Python worker for background import processing and related jobs
+- `apps/web`: Next.js application for setup, authentication, pantry, shopping list, recipes, imports, and admin pages
+- `apps/api`: FastAPI application for domain APIs, setup flows, admin operations, release metadata, backups, and authentication
+- `apps/worker`: Python worker for background import and recipe URL processing
 
-## Supporting Services
+## Shared Infrastructure
 
-- PostgreSQL stores Pantry domain data plus staged setup state
-- Redis supports worker coordination and runtime state
-- Docker Compose provides local development and released self-hosted stacks
+- PostgreSQL stores Pantry domain and configuration data
+- Redis supports worker coordination and runtime queues
+- Docker Compose is used for both the local source stack and the released self-hosted stack
 
-## Setup Architecture
+## Product Boundaries
 
-- Fresh installs enter through `/`
-- If setup is incomplete, Pantry routes users into the first-run wizard
-- The wizard supports both `fresh_install` and `restore_backup` installation modes
-- Wizard progress is stored in a dedicated `setup_states` record
-- Household setup stages multiple Rooms and their storage locations before finalization
-- Staged setup data is kept separate from live household/user/settings tables
-- Restore uploads are validated and staged separately from live data until finalization
-- Final completion writes live records in one controlled transactional flow and only then marks setup complete
+- Pantry is self-hosted and operator-managed
+- Household access is enforced server-side
+- Product identity stays Pantry-owned even when external enrichment is linked
+- Open Food Facts is optional advisory enrichment, not the source of truth for Pantry records
+- Uploaded files and restore bundles are treated as hostile input
+- Updates are advisory and operator-triggered; Pantry does not auto-update
 
-## Lifecycle And Recovery
+## Setup And Recovery
 
-- Release visibility is advisory-only and centered on GitHub Releases metadata
-- Optional `release.json` assets can enrich published release notes and operator commands
-- GHCR is treated as image hosting, not a metadata source
-- Backup export uses Pantry-native JSON bundles
-- Restore currently supports full instance bundles only and requires schema parity
-- Household export exists for retention and future recovery work, but not for direct restore in this milestone
+- New installs route through a first-run setup flow until initialization is complete
+- Setup supports both a fresh install path and restore from a Pantry backup bundle
+- Restore validation happens before any destructive action is applied
+- Backup export and restore tooling is surfaced through the admin experience and CLI/container fallbacks
 
-## Admin Management
+## Deployment Surfaces
 
-- Platform admins manage users, households, memberships, updates, backups, SMTP, AI, settings, and diagnostics from the admin console
-- Household membership removal and household deletion are guarded by server-side safety checks and audit logging
-- Destructive flows require explicit confirmation in the UI and on the server
-
-## Operating Boundaries
-
-- Household scoping is enforced server-side
-- Pantry product identity stays user-owned even when external enrichment is linked
-- Products remain durable records even if every stock lot is depleted
-- Shopping lists are a household domain surface, not a hosted sync feature
-- Shopping lists move deliberately between `active`, `awaiting purchase`, `merged`, `returned`, and `reconciled` states instead of acting like a single disposable checklist
-- Imports remain review-first
-- External food data enrichment is confirmation-first, source-attributed, and stored separately from Pantry product identity
-- Open Food Facts is the first external enrichment source; provider-specific logic stays isolated in a dedicated service module
-- Pantry stores both UI-friendly enrichment summaries and structured ingredient, dietary, and nutriment fields so later filtering and AI context can use the same attached record
-- Uploaded files are treated as hostile input
-- Backup uploads are validated as data only, staged in quarantine, and never executed
-- Secrets are encrypted before being stored in database-backed configuration or staged setup state
-- Self-service password reset is instance-scoped and only becomes available when SMTP delivery is configured, successfully tested, and explicitly enabled
-- Provider-specific AI details stay in the configuration layer, not core pantry domain models
+- `compose.yml`: source-based local development stack
+- `infra/compose/pantry.yml`: released self-hosted stack
+- `infra/env/pantry.env.example`: released environment template
