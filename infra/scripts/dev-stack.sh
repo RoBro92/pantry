@@ -56,6 +56,7 @@ Usage:
   ./infra/scripts/dev-stack.sh rebuild
   ./infra/scripts/dev-stack.sh down
   ./infra/scripts/dev-stack.sh logs
+  ./infra/scripts/dev-stack.sh status
 
 Modes:
   fresh  Reset to an uninitialized first-run state and land on /setup
@@ -146,9 +147,15 @@ main() {
     logs)
       compose logs -f web api worker
       ;;
+    status)
+      compose ps
+      ;;
     rebuild)
       compose up -d --build --remove-orphans
       wait_for_api
+      ;;
+    help)
+      usage
       ;;
     *)
       usage >&2
