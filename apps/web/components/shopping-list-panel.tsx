@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type {
   PantryLocationSummary,
@@ -13,7 +13,7 @@ import { appConfig } from "../lib/app-config";
 import { deleteToApi, postToApi, putToApi, readApiErrorMessage } from "../lib/client-api";
 import { formatQuantityValue, formatQuantityWithUnit } from "../lib/quantity-format";
 import { ModalShell } from "./modal-shell";
-import { PantryProductCreateDialog } from "./pantry-product-create-dialog";
+import { PantryProductDialog } from "./pantry-product-create-dialog";
 
 type ShoppingListPanelProps = {
   householdExternalId: string;
@@ -81,6 +81,61 @@ function sortPendingItems(items: ShoppingListItemSummary[]) {
   });
 }
 
+function getPendingItemBadge(item: ShoppingListItemSummary) {
+  if (item.product_external_id === null) {
+    return { label: "New product", className: "pill is-warning" };
+  }
+  return { label: "Pantry product", className: "pill is-success" };
+}
+
+function buildLocationSummary(item: ShoppingListItemSummary, locations: PantryLocationSummary[], draft: PendingItemDraft) {
+  const selectedLocation =
+    locations.find((location) => location.external_id === draft.pantryLocationExternalId) ?? null;
+  if (selectedLocation) {
+    return `${selectedLocation.location_group_name} / ${selectedLocation.name}`;
+  }
+  if (item.pantry_location_name) {
+    return `${item.pantry_location_group_name} / ${item.pantry_location_name}`;
+  }
+  return "Choose later";
+}
+
+type ShoppingIconButtonProps = {
+  label: string;
+  intent?: "default" | "danger" | "success";
+  onClick: () => void;
+  disabled?: boolean;
+  children: ReactNode;
+};
+
+function ShoppingIconButton({
+  label,
+  intent = "default",
+  onClick,
+  disabled = false,
+  children,
+}: ShoppingIconButtonProps) {
+  const className =
+    intent === "danger"
+      ? "shopping-icon-button is-danger"
+      : intent === "success"
+        ? "shopping-icon-button is-success"
+        : "shopping-icon-button";
+
+  return (
+    <button
+      type="button"
+      className={className}
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      disabled={disabled}
+    >
+      {children}
+    </button>
+  );
+}
+
 export function ShoppingListPanel({
   householdExternalId,
   shoppingList,
@@ -95,6 +150,7 @@ export function ShoppingListPanel({
   );
   const [activeItemEditor, setActiveItemEditor] = useState<ActiveItemEditorState>(null);
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
+  const [expandedItemIds, setExpandedItemIds] = useState<string[]>([]);
   const [pendingItemDrafts, setPendingItemDrafts] = useState<Record<string, PendingItemDraft>>({});
   const [productCreationQueue, setProductCreationQueue] = useState<ShoppingListItemSummary[]>([]);
   const [queuedBulkAction, setQueuedBulkAction] = useState<QueuedBulkAction>(null);
@@ -149,6 +205,11 @@ export function ShoppingListPanel({
     setSelectedItemIds((current) => current.filter((itemId) => unresolvedIds.has(itemId)));
   }, [unresolvedPendingItems]);
 
+  useEffect(() => {
+    const unresolvedIds = new Set(unresolvedPendingItems.map((item) => item.external_id));
+    setExpandedItemIds((current) => current.filter((itemId) => unresolvedIds.has(itemId)));
+  }, [unresolvedPendingItems]);
+
   function updatePendingDraft(itemExternalId: string, patch: Partial<PendingItemDraft>) {
     setPendingItemDrafts((current) => ({
       ...current,
@@ -171,6 +232,14 @@ export function ShoppingListPanel({
 
   function setAllSelected(nextSelected: boolean) {
     setSelectedItemIds(nextSelected ? unresolvedPendingItems.map((item) => item.external_id) : []);
+  }
+
+  function toggleExpanded(itemExternalId: string) {
+    setExpandedItemIds((current) =>
+      current.includes(itemExternalId)
+        ? current.filter((candidate) => candidate !== itemExternalId)
+        : [...current, itemExternalId],
+    );
   }
 
   function getDraftForItem(item: ShoppingListItemSummary) {
@@ -697,16 +766,29 @@ export function ShoppingListPanel({
                 <p>This trip has no unresolved items left. Finish it to move it into shopping history.</p>
               </div>
             ) : (
-              <div className="shopping-reconcile-list shopping-reconcile-list-dense">
+              <div className="shopping-reconcile-table">
+                <div className="shopping-reconcile-table-heading" aria-hidden="true">
+                  <span>Select</span>
+                  <span>Product</span>
+                  <span>Purchased qty</span>
+                  <span>Unit</span>
+                  <span>Pantry location</span>
+                  <span>Actions</span>
+                </div>
+
                 {unresolvedPendingItems.map((item) => {
                   const draft = getDraftForItem(item);
                   const isSelected = selectedItemIds.includes(item.external_id);
+                  const isExpanded = expandedItemIds.includes(item.external_id);
+                  const badge = getPendingItemBadge(item);
+                  const locationSummary = buildLocationSummary(item, locations, draft);
                   return (
                     <article
                       key={item.external_id}
                       className={`shopping-reconcile-row shopping-reconcile-row-dense${isSelected ? " is-selected" : ""}`}
+                      data-testid={`shopping-reconcile-row-${item.external_id}`}
                     >
-                      <div className="shopping-reconcile-row-heading">
+                      <div className="shopping-reconcile-row-mainline">
                         <label className="checkbox-row shopping-reconcile-checkbox">
                           <input
                             type="checkbox"
@@ -716,27 +798,14 @@ export function ShoppingListPanel({
                           <span className="sr-only">Select {item.product_name ?? item.label}</span>
                         </label>
                         <div className="stack compact-stack shopping-reconcile-title">
-                          <div className="shopping-row-heading">
-                            <strong>{item.product_name ?? item.label}</strong>
-                            <div className="tag-row">
-                              <span className="pill">{item.source_type.replaceAll("_", " ")}</span>
-                              {item.product_external_id === null ? <span className="pill is-warning">New product</span> : null}
-                            </div>
+                          <strong>{item.product_name ?? item.label}</strong>
+                          <div className="tag-row">
+                            <span className={badge.className}>{badge.label}</span>
                           </div>
-                          <p className="helper-text">
-                            Requested {buildRequestedSummary(item)} · Planned reconcile {buildPurchasedSummary(item, draft)}
-                          </p>
-                          <p className="helper-text">
-                            {item.pantry_location_name
-                              ? `Default location ${item.pantry_location_group_name} / ${item.pantry_location_name}`
-                              : "Choose a pantry location while reconciling"}
-                          </p>
                         </div>
-                      </div>
 
-                      <div className="shopping-reconcile-row-fields">
-                        <label className="field compact">
-                          <span>Purchased qty</span>
+                        <label className="field compact shopping-reconcile-inline-field">
+                          <span className="sr-only">Purchased qty</span>
                           <input
                             type="number"
                             min="0.001"
@@ -747,8 +816,8 @@ export function ShoppingListPanel({
                             }
                           />
                         </label>
-                        <label className="field compact">
-                          <span>Unit</span>
+                        <label className="field compact shopping-reconcile-inline-field">
+                          <span className="sr-only">Unit</span>
                           <input
                             value={draft.unit}
                             onChange={(event) =>
@@ -756,8 +825,8 @@ export function ShoppingListPanel({
                             }
                           />
                         </label>
-                        <label className="field compact">
-                          <span>Pantry location</span>
+                        <label className="field compact shopping-reconcile-inline-field shopping-reconcile-location-field">
+                          <span className="sr-only">Pantry location</span>
                           <select
                             value={draft.pantryLocationExternalId}
                             onChange={(event) =>
@@ -774,47 +843,119 @@ export function ShoppingListPanel({
                             ))}
                           </select>
                         </label>
-                        <label className="field compact shopping-reconcile-note">
-                          <span>Note</span>
-                          <input
-                            value={draft.note}
-                            onChange={(event) =>
-                              updatePendingDraft(item.external_id, { note: event.target.value })
-                            }
-                          />
-                        </label>
+
+                        <div className="shopping-reconcile-actions">
+                          <ShoppingIconButton
+                            label="Delete item"
+                            intent="danger"
+                            disabled={pending}
+                            onClick={() => void runBulkAction("delete_selected", [item.external_id])}
+                          >
+                            <svg viewBox="0 0 20 20" aria-hidden="true">
+                              <path d="M6.5 3.5h7l.5 2H17v1.5H3V5.5h3zM7 8.5v6M10 8.5v6M13 8.5v6M5.5 7h9l-.6 9.2a1 1 0 0 1-1 .8H7.1a1 1 0 0 1-1-.8z" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
+                            </svg>
+                          </ShoppingIconButton>
+                          <ShoppingIconButton
+                            label="Return item to shopping list"
+                            disabled={pending}
+                            onClick={() => void runBulkAction("return_selected", [item.external_id])}
+                          >
+                            <svg viewBox="0 0 20 20" aria-hidden="true">
+                              <path d="M7 6 3.5 9.5 7 13M4 9.5h7a4.5 4.5 0 1 1 0 9" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
+                            </svg>
+                          </ShoppingIconButton>
+                          <ShoppingIconButton
+                            label="Reconcile item"
+                            intent="success"
+                            disabled={pending}
+                            onClick={() => void runBulkAction("reconcile_selected", [item.external_id])}
+                          >
+                            <svg viewBox="0 0 20 20" aria-hidden="true">
+                              <path d="M10 4v12M4 10h12" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+                              <path d="m6.5 10.5 2.2 2.2 4.8-5.4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.4" />
+                            </svg>
+                          </ShoppingIconButton>
+                          <ShoppingIconButton
+                            label={isExpanded ? "Collapse details" : "Expand details"}
+                            onClick={() => toggleExpanded(item.external_id)}
+                          >
+                            <svg
+                              viewBox="0 0 20 20"
+                              aria-hidden="true"
+                              className={isExpanded ? "is-expanded" : ""}
+                            >
+                              <path d="m5.5 7.5 4.5 4.5 4.5-4.5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+                            </svg>
+                          </ShoppingIconButton>
+                        </div>
                       </div>
 
-                      <div className="shopping-reconcile-actions">
-                        <button
-                          type="button"
-                          className="ghost-button compact-button"
-                          onClick={() =>
-                            updatePendingDraft(item.external_id, {
-                              quantity: item.requested_quantity ?? item.quantity ?? "",
-                              unit: item.requested_unit ?? item.unit ?? draft.unit,
-                            })
-                          }
-                        >
-                          Use requested
-                        </button>
-                        <button
-                          type="button"
-                          className="ghost-button compact-button"
-                          disabled={pending}
-                          onClick={() => void runBulkAction("return_selected", [item.external_id])}
-                        >
-                          Return
-                        </button>
-                        <button
-                          type="button"
-                          className="ghost-button compact-button"
-                          disabled={pending}
-                          onClick={() => void runBulkAction("delete_selected", [item.external_id])}
-                        >
-                          Delete
-                        </button>
-                      </div>
+                      {isExpanded ? (
+                        <div className="shopping-reconcile-details">
+                          <div className="shopping-reconcile-detail-grid">
+                            <div className="stack compact-stack">
+                              <span className="shopping-detail-label">Requested</span>
+                              <span>{buildRequestedSummary(item)}</span>
+                            </div>
+                            <div className="stack compact-stack">
+                              <span className="shopping-detail-label">Planned reconcile</span>
+                              <span>{buildPurchasedSummary(item, draft)}</span>
+                            </div>
+                            <div className="stack compact-stack">
+                              <span className="shopping-detail-label">Pantry location</span>
+                              <span>{locationSummary}</span>
+                            </div>
+                            <div className="stack compact-stack">
+                              <span className="shopping-detail-label">Source</span>
+                              <span>{item.source_type.replaceAll("_", " ")}</span>
+                            </div>
+                          </div>
+
+                          <label className="field compact shopping-reconcile-note-field">
+                            <span>Notes</span>
+                            <input
+                              value={draft.note}
+                              onChange={(event) =>
+                                updatePendingDraft(item.external_id, { note: event.target.value })
+                              }
+                              placeholder="Optional purchased note"
+                            />
+                          </label>
+
+                          <div className="page-actions shopping-reconcile-detail-actions">
+                            <button
+                              type="button"
+                              className="ghost-button compact-button"
+                              onClick={() =>
+                                updatePendingDraft(item.external_id, {
+                                  quantity: item.requested_quantity ?? item.quantity ?? "",
+                                  unit: item.requested_unit ?? item.unit ?? draft.unit,
+                                })
+                              }
+                            >
+                              Use requested amount
+                            </button>
+                            {item.product_external_id === null ? (
+                              canAdminister ? (
+                                <button
+                                  type="button"
+                                  className="ghost-button compact-button"
+                                  onClick={() => {
+                                    setQueuedBulkAction(null);
+                                    setProductCreationQueue([item]);
+                                  }}
+                                >
+                                  Create Pantry product
+                                </button>
+                              ) : (
+                                <span className="helper-text">
+                                  A household admin must create the Pantry product before this item can be reconciled.
+                                </span>
+                              )
+                            ) : null}
+                          </div>
+                        </div>
+                      ) : null}
                     </article>
                   );
                 })}
@@ -887,12 +1028,33 @@ export function ShoppingListPanel({
       ) : null}
 
       {productCreationItem ? (
-        <PantryProductCreateDialog
+        <PantryProductDialog
           householdExternalId={householdExternalId}
-          initialName={productCreationItem.label}
-          initialUnit={getDraftForItem(productCreationItem).unit || productCreationItem.unit || productCreationItem.requested_unit || "count"}
-          quantitySummary={buildPurchasedSummary(productCreationItem, getDraftForItem(productCreationItem))}
-          note={getDraftForItem(productCreationItem).note || productCreationItem.note}
+          mode="create"
+          title="Create Pantry product"
+          description="Create the missing Pantry product with the full product fields, then return to reconciliation."
+          submitLabel="Create product"
+          initialValues={{
+            name: productCreationItem.label,
+            defaultUnit:
+              getDraftForItem(productCreationItem).unit ||
+              productCreationItem.unit ||
+              productCreationItem.requested_unit ||
+              "count",
+            aliases: [],
+            barcodes: [],
+            notes: getDraftForItem(productCreationItem).note || productCreationItem.note,
+            manualIngredientTags: [],
+          }}
+          contextSummary={{
+            quantitySummary: buildPurchasedSummary(productCreationItem, getDraftForItem(productCreationItem)),
+            pantryLocationSummary: buildLocationSummary(
+              productCreationItem,
+              locations,
+              getDraftForItem(productCreationItem),
+            ),
+            note: getDraftForItem(productCreationItem).note || productCreationItem.note,
+          }}
           onCompleted={async (product) => {
             await handleProductCreationCompleted(product.external_id, productCreationItem);
           }}

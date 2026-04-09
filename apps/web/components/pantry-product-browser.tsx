@@ -7,6 +7,7 @@ import { formatQuantityWithUnit } from "../lib/quantity-format";
 import { PantryLotActions } from "./pantry-lot-actions";
 import { ProductEnrichmentDetails } from "./product-enrichment-details";
 import { ProductEnrichmentLookupDialog } from "./product-enrichment-lookup-dialog";
+import { PantryProductDialog } from "./pantry-product-create-dialog";
 import { ShoppingListAddDialog } from "./shopping-list-add-dialog";
 import { StockLotEditorDialog } from "./stock-lot-editor-dialog";
 
@@ -68,6 +69,7 @@ export function PantryProductBrowser({
   const [shoppingDialogProduct, setShoppingDialogProduct] = useState<PantryProductSummary | null>(null);
   const [stockLotEditorProduct, setStockLotEditorProduct] = useState<PantryProductSummary | null>(null);
   const [lookupDialogProduct, setLookupDialogProduct] = useState<PantryProductSummary | null>(null);
+  const [productEditorProduct, setProductEditorProduct] = useState<PantryProductSummary | null>(null);
 
   useEffect(() => {
     if (expandedProductId === null || products.some((product) => product.product_external_id === expandedProductId)) {
@@ -177,6 +179,10 @@ export function PantryProductBrowser({
               </dd>
             </div>
             <div>
+              <dt>Product notes</dt>
+              <dd>{product.notes || "None"}</dd>
+            </div>
+            <div>
               <dt>Expiry</dt>
               <dd>{formatExpirySummary(product)}</dd>
             </div>
@@ -202,6 +208,13 @@ export function PantryProductBrowser({
           ) : null}
 
           <div className="page-actions inventory-actions">
+            <button
+              type="button"
+              className="ghost-button"
+              onClick={() => setProductEditorProduct(product)}
+            >
+              Edit product
+            </button>
             {!product.enrichment ? (
               <button
                 type="button"
@@ -369,17 +382,26 @@ export function PantryProductBrowser({
                       </div>
                     </td>
                     <td>{formatExpirySummary(product)}</td>
-                    <td>{renderStatusPills(product)}</td>
+                    <td className="pantry-status-cell">{renderStatusPills(product)}</td>
                     <td>
-                      <button
-                        type="button"
-                        className="ghost-button compact-button"
-                        onClick={() =>
-                          setExpandedProductId(isExpanded ? null : product.product_external_id)
-                        }
-                      >
-                        {isExpanded ? "Hide" : "Show"}
-                      </button>
+                      <div className="inventory-row-actions">
+                        <button
+                          type="button"
+                          className="ghost-button compact-button"
+                          onClick={() => setProductEditorProduct(product)}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          className="ghost-button compact-button"
+                          onClick={() =>
+                            setExpandedProductId(isExpanded ? null : product.product_external_id)
+                          }
+                        >
+                          {isExpanded ? "Hide" : "Show"}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                   {isExpanded ? (
@@ -434,6 +456,26 @@ export function PantryProductBrowser({
           householdExternalId={householdExternalId}
           product={lookupDialogProduct}
           onClose={() => setLookupDialogProduct(null)}
+        />
+      ) : null}
+
+      {productEditorProduct ? (
+        <PantryProductDialog
+          householdExternalId={householdExternalId}
+          mode="edit"
+          title={`Edit ${productEditorProduct.product_name}`}
+          description="Update the saved product details without changing stock-lot quantity, location, or expiry."
+          submitLabel="Save product"
+          initialValues={{
+            externalId: productEditorProduct.product_external_id,
+            name: productEditorProduct.product_name,
+            defaultUnit: productEditorProduct.unit,
+            aliases: productEditorProduct.aliases,
+            barcodes: productEditorProduct.barcodes,
+            notes: productEditorProduct.notes,
+            manualIngredientTags: productEditorProduct.manual_ingredient_tags,
+          }}
+          onClose={() => setProductEditorProduct(null)}
         />
       ) : null}
     </>

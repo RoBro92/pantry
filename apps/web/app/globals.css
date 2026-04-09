@@ -29,6 +29,7 @@ body {
   margin: 0;
   padding: 0;
   min-height: 100%;
+  scrollbar-gutter: stable;
   background:
     radial-gradient(circle at top left, rgba(255, 255, 255, 0.9), transparent 28%),
     radial-gradient(circle at 85% 8%, rgba(232, 205, 165, 0.55), transparent 22%),
@@ -83,7 +84,8 @@ code {
 }
 
 .dashboard-page-shell {
-  width: min(1440px, calc(100% - 2rem));
+  width: min(1720px, calc(100vw - 2.25rem));
+  padding-top: 1.5rem;
 }
 
 .setup-page {
@@ -338,14 +340,20 @@ code {
 
 .shell-grid {
   display: grid;
-  gap: 1rem;
-  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  gap: 1.25rem;
+  align-items: start;
+  grid-template-columns: 18.5rem minmax(0, 1fr);
 }
 
 .sidebar {
   display: grid;
+  position: sticky;
+  top: 1rem;
+  align-self: start;
   align-content: start;
   gap: 1rem;
+  max-height: calc(100vh - 2rem);
+  overflow: auto;
 }
 
 .shell-title {
@@ -393,6 +401,14 @@ code {
 }
 
 .shell-content {
+  min-width: 0;
+  display: grid;
+  gap: 1rem;
+  align-content: start;
+  overflow-x: clip;
+}
+
+.shell-content > * {
   min-width: 0;
 }
 
@@ -1353,6 +1369,9 @@ button.smtp-template-pill {
 .pantry-lot-list-compact {
   gap: 0.6rem;
   align-content: start;
+  max-height: 34rem;
+  overflow: auto;
+  padding-right: 0.15rem;
 }
 
 .pantry-support-grid {
@@ -1403,7 +1422,8 @@ button.smtp-template-pill {
 .inventory-detail-grid {
   display: grid;
   gap: 1rem;
-  grid-template-columns: minmax(320px, 0.95fr) minmax(0, 1.35fr);
+  align-items: stretch;
+  grid-template-columns: minmax(420px, 0.9fr) minmax(420px, 1.2fr);
 }
 
 .inventory-context-card,
@@ -1411,11 +1431,17 @@ button.smtp-template-pill {
 .inventory-list-card,
 .shopping-item-card {
   display: grid;
+  align-content: start;
   gap: 1rem;
   padding: 1.15rem;
   border-radius: 22px;
   border: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.52);
+}
+
+.inventory-lot-stack {
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
 }
 
 .inventory-meta-grid {
@@ -1467,6 +1493,13 @@ button.smtp-template-pill {
   font-size: 0.9rem;
 }
 
+.inventory-row-actions {
+  display: flex;
+  justify-content: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
 .inventory-expanded-row td {
   background: rgba(255, 255, 255, 0.26);
 }
@@ -1489,6 +1522,11 @@ button.smtp-template-pill {
 }
 
 .pantry-status-column-heading {
+  text-align: center;
+  width: 13.5rem;
+}
+
+.pantry-status-cell {
   text-align: center;
 }
 
@@ -1581,6 +1619,7 @@ button.smtp-template-pill {
 
 .pantry-lot-row {
   display: grid;
+  align-content: start;
   gap: 0.85rem;
   padding: 0.95rem 1rem;
 }
@@ -1651,6 +1690,7 @@ button.smtp-template-pill {
 
 .lot-actions {
   display: grid;
+  align-content: start;
   gap: 0.45rem;
   justify-items: start;
 }
@@ -1664,6 +1704,35 @@ button.smtp-template-pill {
 
 .lot-actions-row .compact-button {
   min-width: 0;
+}
+
+.lot-action-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.2rem;
+  min-width: 2.2rem;
+  height: 2.2rem;
+  border-radius: 13px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.76);
+  color: var(--text);
+  transition: transform 120ms ease, background-color 120ms ease, border-color 120ms ease;
+}
+
+.lot-action-button:hover {
+  transform: translateY(-1px);
+}
+
+.lot-action-button svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.lot-action-button.is-danger {
+  border-color: rgba(159, 49, 36, 0.24);
+  background: rgba(159, 49, 36, 0.08);
+  color: var(--danger);
 }
 
 .inline-form {
@@ -1825,8 +1894,7 @@ button.smtp-template-pill {
 .shopping-reconcile-row {
   display: grid;
   gap: 0.85rem;
-  align-items: end;
-  grid-template-columns: minmax(180px, 1.15fr) repeat(3, minmax(110px, 0.55fr)) minmax(180px, 1fr) auto;
+  align-content: start;
   padding: 1rem;
   border-radius: 20px;
   border: 1px solid var(--border);
@@ -1845,7 +1913,7 @@ button.smtp-template-pill {
 
 .shopping-reconcile-row-dense {
   gap: 0.65rem;
-  padding: 0.8rem 0.95rem;
+  padding: 0.65rem 0.8rem;
   border-radius: 18px;
   border: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.5);
@@ -1881,6 +1949,137 @@ button.smtp-template-pill {
   min-width: 0;
 }
 
+.shopping-reconcile-table {
+  display: grid;
+  gap: 0.55rem;
+  max-height: 70vh;
+  overflow: auto;
+  padding-right: 0.15rem;
+}
+
+.shopping-reconcile-table-heading,
+.shopping-reconcile-row-mainline {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: auto minmax(220px, 1.2fr) minmax(110px, 0.42fr) minmax(100px, 0.4fr) minmax(220px, 0.95fr) auto;
+  align-items: center;
+}
+
+.shopping-reconcile-table-heading {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 0 0.85rem;
+  background: rgba(244, 239, 232, 0.92);
+  color: var(--accent-strong);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.shopping-reconcile-table-heading span:last-child {
+  text-align: right;
+}
+
+.shopping-reconcile-inline-field {
+  min-width: 0;
+}
+
+.shopping-reconcile-inline-field input,
+.shopping-reconcile-inline-field select {
+  min-height: 2.35rem;
+  padding: 0.55rem 0.72rem;
+}
+
+.shopping-reconcile-location-field select {
+  width: 100%;
+}
+
+.shopping-reconcile-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.shopping-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.35rem;
+  min-width: 2.35rem;
+  height: 2.35rem;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--text);
+  transition: transform 120ms ease, background-color 120ms ease, border-color 120ms ease;
+}
+
+.shopping-icon-button:hover {
+  transform: translateY(-1px);
+}
+
+.shopping-icon-button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.shopping-icon-button svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.shopping-icon-button svg.is-expanded {
+  transform: rotate(180deg);
+}
+
+.shopping-icon-button.is-success {
+  border-color: rgba(15, 124, 89, 0.25);
+  background: rgba(15, 124, 89, 0.12);
+  color: var(--success);
+}
+
+.shopping-icon-button.is-danger {
+  border-color: rgba(159, 49, 36, 0.24);
+  background: rgba(159, 49, 36, 0.09);
+  color: var(--danger);
+}
+
+.shopping-reconcile-details {
+  display: grid;
+  gap: 0.85rem;
+  padding-top: 0.7rem;
+  padding-left: 2.35rem;
+  border-top: 1px solid var(--border);
+}
+
+.shopping-reconcile-detail-grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
+.shopping-detail-label {
+  color: var(--accent-strong);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.shopping-reconcile-note-field input {
+  min-height: 2.45rem;
+  padding: 0.6rem 0.78rem;
+}
+
+.shopping-reconcile-detail-actions {
+  align-items: center;
+}
+
 .shopping-reconcile-row-fields {
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
 }
@@ -1892,22 +2091,14 @@ button.smtp-template-pill {
 }
 
 .shopping-history-item-row {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.85rem;
-  padding-top: 0.75rem;
-  border-top: 1px solid var(--border);
-}
-
-.shopping-reconcile-note {
-  min-width: 0;
-}
-
-.shopping-reconcile-actions {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
   gap: 0.65rem;
+  align-items: start;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.46);
 }
 
 .shopping-add-form-compact {
@@ -1932,6 +2123,11 @@ button.smtp-template-pill {
     grid-template-columns: minmax(0, 1fr);
   }
 
+  .sidebar {
+    position: static;
+    max-height: none;
+  }
+
   .setup-sidebar {
     position: static;
   }
@@ -1944,8 +2140,18 @@ button.smtp-template-pill {
   .setup-review-layout,
   .shopping-reconcile-row,
   .shopping-bulk-toolbar,
-  .shopping-reconcile-row-heading {
+  .shopping-reconcile-row-heading,
+  .shopping-reconcile-row-mainline,
+  .shopping-reconcile-detail-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .shopping-reconcile-table-heading {
+    display: none;
+  }
+
+  .shopping-reconcile-details {
+    padding-left: 0;
   }
 }
 
