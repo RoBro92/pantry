@@ -1,11 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import type { PantryLocationSummary, PantryStockLotSummary } from "../lib/api-types";
-import { postToApi } from "../lib/client-api";
 import { StockLotAdjustDialog } from "./stock-lot-adjust-dialog";
 import { StockLotDeleteDialog } from "./stock-lot-delete-dialog";
+import { ShoppingListAddDialog } from "./shopping-list-add-dialog";
 import { StockLotEditorDialog } from "./stock-lot-editor-dialog";
 import { StockLotMoveDialog } from "./stock-lot-move-dialog";
 
@@ -20,38 +19,15 @@ export function PantryLotActions({
   lot,
   locations,
 }: PantryLotActionsProps) {
-  const router = useRouter();
   const [dialog, setDialog] = useState<"adjust" | "edit" | "move" | "delete" | null>(null);
-  const [shoppingPending, setShoppingPending] = useState(false);
-  const [shoppingError, setShoppingError] = useState<string | null>(null);
-
-  async function addToShoppingList() {
-    setShoppingPending(true);
-    setShoppingError(null);
-    try {
-      await postToApi(`/api/households/${householdExternalId}/shopping-list/items`, {
-        product_external_id: lot.product_external_id,
-        quantity: lot.quantity,
-        unit: lot.unit,
-        note: lot.note,
-        source_type: "pantry_product",
-      });
-      router.refresh();
-    } catch (requestError) {
-      setShoppingError(
-        requestError instanceof Error ? requestError.message : "Could not add this lot to the shopping list.",
-      );
-    } finally {
-      setShoppingPending(false);
-    }
-  }
+  const [shoppingOpen, setShoppingOpen] = useState(false);
 
   return (
     <>
       <div className="lot-actions" data-testid={`lot-actions-${lot.external_id}`}>
         <div className="lot-actions-row">
           <button type="button" className="ghost-button compact-button" onClick={() => setDialog("adjust")}>
-            Adjust
+            Qty
           </button>
           <button type="button" className="ghost-button compact-button" onClick={() => setDialog("edit")}>
             Edit
@@ -62,16 +38,14 @@ export function PantryLotActions({
           <button
             type="button"
             className="ghost-button compact-button"
-            disabled={shoppingPending}
-            onClick={() => void addToShoppingList()}
+            onClick={() => setShoppingOpen(true)}
           >
-            {shoppingPending ? "Adding..." : "Buy again"}
+            Shop
           </button>
           <button type="button" className="ghost-button compact-button" onClick={() => setDialog("delete")}>
             Delete
           </button>
         </div>
-        {shoppingError ? <p className="error-text compact-error">{shoppingError}</p> : null}
       </div>
 
       {dialog === "adjust" ? (
@@ -128,6 +102,20 @@ export function PantryLotActions({
           quantity={lot.quantity}
           unit={lot.unit}
           onClose={() => setDialog(null)}
+        />
+      ) : null}
+
+      {shoppingOpen ? (
+        <ShoppingListAddDialog
+          householdExternalId={householdExternalId}
+          productExternalId={lot.product_external_id}
+          productName={lot.product_name}
+          sourceType="pantry_product"
+          defaultQuantity="1"
+          defaultUnit={lot.unit}
+          defaultNote={lot.note}
+          defaultLocationExternalId={lot.location_external_id}
+          onClose={() => setShoppingOpen(false)}
         />
       ) : null}
     </>

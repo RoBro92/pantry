@@ -69,6 +69,14 @@ def _stock_lot_summary(lot: StockLot, *, near_expiry_days: int) -> StockLotSumma
     )
 
 
+def _format_quantity_display(value: str | Decimal | None) -> str:
+    if value is None:
+        return "0"
+    decimal_value = value if isinstance(value, Decimal) else Decimal(str(value))
+    formatted = format(decimal_value, "f").rstrip("0").rstrip(".")
+    return formatted or "0"
+
+
 def build_stock_lot_summary(lot: StockLot, *, near_expiry_days: int = 14) -> StockLotSummary:
     return _stock_lot_summary(lot, near_expiry_days=near_expiry_days)
 
@@ -79,7 +87,7 @@ def _event_summary(event: AuditEvent) -> AuditEventSummary:
 
     if action == "stock.added":
         summary = (
-            f"Added {metadata['quantity']} {metadata['unit']} {metadata['product_name']} "
+            f"Added {_format_quantity_display(metadata['quantity'])} {metadata['unit']} {metadata['product_name']} "
             f"to {metadata['location_group_name']} / {metadata['location_name']}"
         )
     elif action == "stock.removed":
@@ -90,12 +98,12 @@ def _event_summary(event: AuditEvent) -> AuditEventSummary:
             )
         else:
             summary = (
-                f"Removed {metadata['quantity']} {metadata['unit']} {metadata['product_name']} "
+                f"Removed {_format_quantity_display(metadata['quantity'])} {metadata['unit']} {metadata['product_name']} "
                 f"from {metadata['location_group_name']} / {metadata['location_name']}"
             )
     elif action == "stock.moved":
         summary = (
-            f"Moved {metadata['quantity']} {metadata['unit']} {metadata['product_name']} "
+            f"Moved {_format_quantity_display(metadata['quantity'])} {metadata['unit']} {metadata['product_name']} "
             f"to {metadata['to_location_group_name']} / {metadata['to_location_name']}"
         )
     elif action == "stock.updated":
@@ -298,6 +306,8 @@ def build_pantry_overview(
     *,
     access: HouseholdAccess,
     filters: PantryFilterOptions,
+    page: int = 1,
+    page_size: int = 25,
     near_expiry_days: int = 14,
 ) -> PantryOverviewResponse:
     location_groups, locations, products = _load_reference_lists(db, household_id=access.household.id)
@@ -344,13 +354,18 @@ def build_pantry_overview(
             item.product_name.lower(),
         )
     )
+    matched_product_count = len(product_summaries)
+    page_count = max(1, (matched_product_count + page_size - 1) // page_size)
+    current_page = min(page, page_count)
+    page_start = (current_page - 1) * page_size
+    paginated_products = product_summaries[page_start : page_start + page_size]
 
     recent_events = db.scalars(
         select(AuditEvent)
         .where(AuditEvent.household_id == access.household.id)
         .options(selectinload(AuditEvent.actor_user))
         .order_by(AuditEvent.occurred_at.desc())
-        .limit(12)
+        .limit(40)
     ).all()
 
     return PantryOverviewResponse(
@@ -358,6 +373,10 @@ def build_pantry_overview(
         household_name=access.household.name,
         effective_role=access.effective_role,
         can_administer=access.can_administer,
+        page=current_page,
+        page_size=page_size,
+        page_count=page_count,
+        matched_product_count=matched_product_count,
         filters=PantryFilters(
             q=filters.q,
             location_group_external_id=filters.location_group_external_id,
@@ -402,7 +421,7 @@ def build_pantry_overview(
             }
             for product in products
         ],
-        products=product_summaries,
+        products=paginated_products,
         stock_lots=[
             _stock_lot_summary(lot, near_expiry_days=near_expiry_days)
             for lot in sorted(

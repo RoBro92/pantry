@@ -59,6 +59,70 @@ def _load_stock_lot(
     )
 
 
+def _append_lot_note(existing_note: str | None, next_note: str | None) -> str | None:
+    if not next_note:
+        return existing_note
+    if not existing_note:
+        return next_note
+    if next_note.casefold() in existing_note.casefold():
+        return existing_note
+    combined = f"{existing_note}; {next_note}"
+    return combined[:512]
+
+
+def _merge_purchased_on(existing_value: date | None, next_value: date | None) -> date | None:
+    if existing_value is None:
+        return next_value
+    if next_value is None:
+        return existing_value
+    return min(existing_value, next_value)
+
+
+def _find_mergeable_stock_lot(
+    db: Session,
+    *,
+    household: Household,
+    product_id,
+    location_id,
+    unit: str,
+    expires_on: date | None,
+    exclude_lot_id=None,
+) -> StockLot | None:
+    statement = (
+        select(StockLot)
+        .where(StockLot.household_id == household.id)
+        .where(StockLot.product_id == product_id)
+        .where(StockLot.location_id == location_id)
+        .where(StockLot.unit == unit)
+        .where(StockLot.depleted_at.is_(None))
+        .where(StockLot.quantity > Decimal("0"))
+        .where(StockLot.expires_on == expires_on)
+        .options(
+            selectinload(StockLot.product).selectinload(Product.aliases),
+            selectinload(StockLot.product).selectinload(Product.barcodes),
+            selectinload(StockLot.product).selectinload(Product.enrichments),
+            selectinload(StockLot.location).selectinload(Location.location_group),
+        )
+    )
+    if exclude_lot_id is not None:
+        statement = statement.where(StockLot.id != exclude_lot_id)
+    statement = statement.order_by(StockLot.created_at.asc())
+    return db.scalar(statement)
+
+
+def _merge_into_stock_lot(
+    lot: StockLot,
+    *,
+    quantity: Decimal,
+    note: str | None,
+    purchased_on: date | None,
+) -> StockLot:
+    lot.quantity = (lot.quantity + quantity).quantize(Decimal("0.001"))
+    lot.note = _append_lot_note(lot.note, note)
+    lot.purchased_on = _merge_purchased_on(lot.purchased_on, purchased_on)
+    return lot
+
+
 def get_stock_lot_by_external_id(
     db: Session,
     *,
@@ -95,6 +159,44 @@ def add_stock_lot(
     normalized_unit = normalize_unit(unit_override) if unit_override else product.default_unit
     if purchased_on and expires_on and expires_on < purchased_on:
         raise ValueError("Expiry date cannot be earlier than purchase date.")
+
+    merge_target = _find_mergeable_stock_lot(
+        db,
+        household=household,
+        product_id=product.id,
+        location_id=location.id,
+        unit=normalized_unit,
+        expires_on=expires_on,
+    )
+    if merge_target is not None:
+        _merge_into_stock_lot(
+            merge_target,
+            quantity=normalized_quantity,
+            note=normalized_note,
+            purchased_on=purchased_on,
+        )
+        db.add(merge_target)
+        record_audit_event(
+            db,
+            household=household,
+            actor=actor,
+            action="stock.added",
+            target_type="stock_lot",
+            target_external_id=merge_target.external_id,
+            event_metadata={
+                "product_name": product.name,
+                "location_name": location.name,
+                "location_group_name": location.location_group.name,
+                "quantity": str(normalized_quantity),
+                "unit": normalized_unit,
+                "merged": True,
+            },
+        )
+        if commit:
+            db.commit()
+            db.refresh(merge_target)
+            return get_stock_lot_by_external_id(db, household=household, external_id=merge_target.external_id) or merge_target
+        return merge_target
 
     lot = StockLot(
         household_id=household.id,
@@ -598,6 +700,46 @@ def update_stock_lot(
     if purchased_on and expires_on and expires_on < purchased_on:
         raise ValueError("Expiry date cannot be earlier than purchase date.")
 
+    merge_target = _find_mergeable_stock_lot(
+        db,
+        household=household,
+        product_id=lot.product_id,
+        location_id=location.id,
+        unit=lot.unit,
+        expires_on=expires_on,
+        exclude_lot_id=lot.id,
+    )
+    if merge_target is not None:
+        _merge_into_stock_lot(
+            merge_target,
+            quantity=normalized_quantity,
+            note=normalized_note,
+            purchased_on=purchased_on,
+        )
+        lot.quantity = Decimal("0.000")
+        lot.depleted_at = utc_now()
+        db.add(lot)
+        db.add(merge_target)
+        record_audit_event(
+            db,
+            household=household,
+            actor=actor,
+            action="stock.updated",
+            target_type="stock_lot",
+            target_external_id=merge_target.external_id,
+            event_metadata={
+                "product_name": lot.product.name,
+                "location_name": location.name,
+                "location_group_name": location.location_group.name,
+                "quantity": str(normalized_quantity),
+                "unit": lot.unit,
+                "merged": True,
+            },
+        )
+        db.commit()
+        db.refresh(merge_target)
+        return get_stock_lot_by_external_id(db, household=household, external_id=merge_target.external_id) or merge_target
+
     lot.quantity = normalized_quantity
     lot.location_id = location.id
     lot.location = location
@@ -654,8 +796,34 @@ def move_stock_lot(
 
     created_lot: StockLot | None = None
     source_location = lot.location
+    merge_target = _find_mergeable_stock_lot(
+        db,
+        household=household,
+        product_id=lot.product_id,
+        location_id=destination.id,
+        unit=lot.unit,
+        expires_on=lot.expires_on,
+        exclude_lot_id=lot.id,
+    )
 
-    if normalized_quantity == lot.quantity:
+    if merge_target is not None:
+        _merge_into_stock_lot(
+            merge_target,
+            quantity=normalized_quantity,
+            note=lot.note,
+            purchased_on=lot.purchased_on,
+        )
+        if normalized_quantity == lot.quantity:
+            lot.quantity = Decimal("0.000")
+            lot.depleted_at = utc_now()
+        else:
+            lot.quantity = (lot.quantity - normalized_quantity).quantize(Decimal("0.001"))
+        db.add(lot)
+        db.add(merge_target)
+        target_external_id = merge_target.external_id
+        created_external_id = merge_target.external_id
+        created_lot = merge_target
+    elif normalized_quantity == lot.quantity:
         lot.location_id = destination.id
         lot.location = destination
         db.add(lot)
@@ -694,7 +862,7 @@ def move_stock_lot(
             "to_location_group_name": destination.location_group.name,
             "quantity": str(normalized_quantity),
             "unit": lot.unit,
-            "preserved_lot_identity": created_lot is None,
+            "preserved_lot_identity": created_lot is None and merge_target is None,
             "created_lot_external_id": created_external_id,
         },
     )
@@ -729,6 +897,7 @@ def buy_more_from_stock_lot(
         quantity=lot.quantity,
         unit=lot.unit,
         note=lot.note,
+        pantry_location_external_id=lot.location.external_id,
         source_type="pantry_depleted",
     )
     return remove_stock_from_lot(

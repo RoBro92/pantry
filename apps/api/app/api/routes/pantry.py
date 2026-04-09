@@ -68,6 +68,8 @@ def get_pantry_overview(
     location_group_external_id: str | None = None,
     location_external_id: str | None = None,
     near_expiry_only: bool = False,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=25, ge=10, le=50),
     db: Session = Depends(get_db_session),
     access: HouseholdAccess = Depends(require_household_access()),
 ):
@@ -80,6 +82,8 @@ def get_pantry_overview(
             location_external_id=location_external_id,
             near_expiry_only=near_expiry_only,
         ),
+        page=page,
+        page_size=page_size,
     )
 
 

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { postToApi } from "../lib/client-api";
+import { formatQuantityWithUnit } from "../lib/quantity-format";
 import { ModalShell } from "./modal-shell";
 
 type StockLotDeleteDialogProps = {
@@ -49,7 +50,7 @@ export function StockLotDeleteDialog({
   return (
     <ModalShell
       title="Remove stock lot"
-      description={`Remove ${quantity} ${unit} of ${productName}. You can also add it to the shopping list first.`}
+      description={`Remove ${formatQuantityWithUnit(quantity, unit)} of ${productName}. You can also add it to the shopping list first.`}
       onClose={onClose}
     >
       <div className="stack">

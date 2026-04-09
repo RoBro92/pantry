@@ -4,6 +4,7 @@ import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { PantryLocationSummary } from "../lib/api-types";
 import { postToApi, putToApi } from "../lib/client-api";
+import { formatQuantityValue } from "../lib/quantity-format";
 import { ModalShell } from "./modal-shell";
 
 type StockLotEditorDialogProps = {
@@ -33,7 +34,7 @@ export function StockLotEditorDialog({
   initialValues,
 }: StockLotEditorDialogProps) {
   const router = useRouter();
-  const [quantity, setQuantity] = useState(initialValues.quantity);
+  const [quantity, setQuantity] = useState(formatQuantityValue(initialValues.quantity));
   const [locationExternalId, setLocationExternalId] = useState(initialValues.locationExternalId);
   const [purchasedOn, setPurchasedOn] = useState(initialValues.purchasedOn ?? "");
   const [expiresOn, setExpiresOn] = useState(initialValues.expiresOn ?? "");

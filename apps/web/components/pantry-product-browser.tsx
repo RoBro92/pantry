@@ -1,17 +1,23 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { PantryLocationSummary, PantryProductSummary } from "../lib/api-types";
-import { postToApi } from "../lib/client-api";
+import { formatQuantityWithUnit } from "../lib/quantity-format";
 import { PantryLotActions } from "./pantry-lot-actions";
 import { ProductEnrichmentDetails } from "./product-enrichment-details";
+import { ShoppingListAddDialog } from "./shopping-list-add-dialog";
 import { StockLotEditorDialog } from "./stock-lot-editor-dialog";
 
 type PantryProductBrowserProps = {
   householdExternalId: string;
   products: PantryProductSummary[];
   locations: PantryLocationSummary[];
+  page: number;
+  pageSize: number;
+  pageCount: number;
+  matchedProductCount: number;
+  hasActiveFilters: boolean;
 };
 
 function formatDateLabel(value: string | null) {
@@ -33,41 +39,85 @@ function formatExpirySummary(product: PantryProductSummary) {
   return product.stock_status === "out_of_stock" ? "Out of stock" : "No dated lots";
 }
 
-function formatLotDateSummary(purchasedOn: string | null, expiresOn: string | null) {
-  return `Purchased ${formatDateLabel(purchasedOn)} · Expires ${formatDateLabel(expiresOn)}`;
-}
-
 export function PantryProductBrowser({
   householdExternalId,
   products,
   locations,
+  page,
+  pageSize,
+  pageCount,
+  matchedProductCount,
+  hasActiveFilters,
 }: PantryProductBrowserProps) {
+  const pathname = usePathname();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [view, setView] = useState<"table" | "list">("table");
-  const [expandedProductId, setExpandedProductId] = useState<string | null>(
-    products[0]?.product_external_id ?? null,
-  );
-  const [shoppingPendingProductId, setShoppingPendingProductId] = useState<string | null>(null);
+  const [expandedProductId, setExpandedProductId] = useState<string | null>(null);
+  const [shoppingDialogProduct, setShoppingDialogProduct] = useState<PantryProductSummary | null>(null);
   const [stockLotEditorProduct, setStockLotEditorProduct] = useState<PantryProductSummary | null>(null);
 
   useEffect(() => {
-    if (products.some((product) => product.product_external_id === expandedProductId)) {
+    if (expandedProductId === null || products.some((product) => product.product_external_id === expandedProductId)) {
       return;
     }
-    setExpandedProductId(products[0]?.product_external_id ?? null);
+    setExpandedProductId(null);
   }, [expandedProductId, products]);
 
-  async function addToShoppingList(product: PantryProductSummary) {
-    setShoppingPendingProductId(product.product_external_id);
-    try {
-      await postToApi(`/api/households/${householdExternalId}/shopping-list/items`, {
-        product_external_id: product.product_external_id,
-        source_type: product.stock_status === "out_of_stock" ? "pantry_depleted" : "pantry_product",
-      });
-      router.refresh();
-    } finally {
-      setShoppingPendingProductId(null);
+  function updatePagination(nextPage: number, nextPageSize = pageSize) {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("page", String(nextPage));
+    params.set("page_size", String(nextPageSize));
+    router.push(`${pathname}?${params.toString()}`, { scroll: false });
+  }
+
+  function updatePageSize(nextPageSize: number) {
+    updatePagination(1, nextPageSize);
+  }
+
+  function renderPagination() {
+    if (matchedProductCount <= pageSize) {
+      return null;
     }
+
+    const start = matchedProductCount === 0 ? 0 : (page - 1) * pageSize + 1;
+    const end = Math.min(page * pageSize, matchedProductCount);
+    return (
+      <div className="inventory-pagination">
+        <p className="helper-text">
+          Showing {start}-{end} of {matchedProductCount}
+        </p>
+        <div className="page-actions">
+          <label className="field compact inventory-page-size">
+            <span>Page size</span>
+            <select value={pageSize} onChange={(event) => updatePageSize(Number(event.target.value))}>
+              <option value="10">10</option>
+              <option value="25">25</option>
+              <option value="50">50</option>
+            </select>
+          </label>
+          <button
+            type="button"
+            className="ghost-button compact-button"
+            disabled={page <= 1}
+            onClick={() => updatePagination(page - 1)}
+          >
+            Previous
+          </button>
+          <span className="pill">
+            Page {page} of {pageCount}
+          </span>
+          <button
+            type="button"
+            className="ghost-button compact-button"
+            disabled={page >= pageCount}
+            onClick={() => updatePagination(page + 1)}
+          >
+            Next
+          </button>
+        </div>
+      </div>
+    );
   }
 
   function renderProductDetail(product: PantryProductSummary) {
@@ -80,7 +130,7 @@ export function PantryProductBrowser({
               <p className="helper-text">
                 {product.stock_status === "out_of_stock"
                   ? "This product record still exists even though no active stock lots remain."
-                  : `${product.total_quantity} ${product.unit} across ${product.lot_count} active lot${product.lot_count === 1 ? "" : "s"}.`}
+                  : `${formatQuantityWithUnit(product.total_quantity, product.unit)} across ${product.lot_count} active lot${product.lot_count === 1 ? "" : "s"}.`}
               </p>
             </div>
             <div className="tag-row">
@@ -133,7 +183,7 @@ export function PantryProductBrowser({
                       {location.location_group_name} / {location.location_name}
                     </strong>
                     <span>
-                      {location.total_quantity} {product.unit} across {location.lot_count} lot
+                      {formatQuantityWithUnit(location.total_quantity, product.unit)} across {location.lot_count} lot
                       {location.lot_count === 1 ? "" : "s"}
                     </span>
                   </li>
@@ -146,14 +196,12 @@ export function PantryProductBrowser({
             <button
               type="button"
               className="ghost-button"
-              disabled={product.is_in_shopping_list || shoppingPendingProductId === product.product_external_id}
-              onClick={() => void addToShoppingList(product)}
+              disabled={product.is_in_shopping_list}
+              onClick={() => setShoppingDialogProduct(product)}
             >
               {product.is_in_shopping_list
                 ? "Already on shopping list"
-                : shoppingPendingProductId === product.product_external_id
-                  ? "Adding..."
-                  : "Add to shopping list"}
+                : "Add to shopping list"}
             </button>
             <button
               type="button"
@@ -198,17 +246,26 @@ export function PantryProductBrowser({
                   data-testid={`stock-lot-card-${lot.external_id}`}
                 >
                   <div className="pantry-lot-row-main">
-                    <div className="stack compact-stack">
-                      <div className="pantry-lot-row-heading">
-                        <strong>
-                          {lot.quantity} {lot.unit}
-                        </strong>
-                        <span className="helper-text">
-                          {lot.location_group_name} / {lot.location_name}
-                        </span>
+                    <div className="pantry-lot-row-summary">
+                      <div className="stack compact-stack">
+                        <div className="pantry-lot-row-heading">
+                          <strong>{formatQuantityWithUnit(lot.quantity, lot.unit)}</strong>
+                          <span className="helper-text">
+                            {lot.location_group_name} / {lot.location_name}
+                          </span>
+                        </div>
+                        {lot.note ? <p className="helper-text">{lot.note}</p> : null}
                       </div>
-                      <p className="helper-text">{formatLotDateSummary(lot.purchased_on, lot.expires_on)}</p>
-                      {lot.note ? <p className="helper-text">{lot.note}</p> : null}
+                      <div className="lot-meta-grid pantry-lot-inline-grid">
+                        <div>
+                          <dt>Purchased</dt>
+                          <dd>{formatDateLabel(lot.purchased_on)}</dd>
+                        </div>
+                        <div>
+                          <dt>Expiry</dt>
+                          <dd>{formatDateLabel(lot.expires_on)}</dd>
+                        </div>
+                      </div>
                     </div>
                     <div className="tag-row">
                       {lot.is_near_expiry ? <span className="pill is-warning">Near expiry</span> : null}
@@ -255,6 +312,11 @@ export function PantryProductBrowser({
             <p className="section-copy">
               One row per product, with stock-lot detail available on demand.
             </p>
+            <p className="helper-text">
+              {hasActiveFilters
+                ? `${matchedProductCount} matching product${matchedProductCount === 1 ? "" : "s"}`
+                : `${matchedProductCount} product${matchedProductCount === 1 ? "" : "s"} in this pantry`}
+            </p>
           </div>
           <div className="view-toggle" role="tablist" aria-label="Inventory view">
             <button
@@ -273,6 +335,7 @@ export function PantryProductBrowser({
             </button>
           </div>
         </div>
+        {renderPagination()}
 
         {view === "table" ? (
           <div className="table-wrap pantry-table-wrap">
@@ -309,7 +372,7 @@ export function PantryProductBrowser({
                       <td>
                         {product.stock_status === "out_of_stock"
                           ? "Out of stock"
-                          : `${product.total_quantity} ${product.unit} across ${product.lot_count} lot${product.lot_count === 1 ? "" : "s"}`}
+                          : `${formatQuantityWithUnit(product.total_quantity, product.unit)} across ${product.lot_count} lot${product.lot_count === 1 ? "" : "s"}`}
                       </td>
                       <td>
                         <div className="inventory-product-cell">
@@ -368,7 +431,7 @@ export function PantryProductBrowser({
                       <p className="helper-text">
                         {product.stock_status === "out_of_stock"
                           ? "Out of stock"
-                          : `${product.total_quantity} ${product.unit} across ${product.lot_count} lot${product.lot_count === 1 ? "" : "s"}`}
+                          : `${formatQuantityWithUnit(product.total_quantity, product.unit)} across ${product.lot_count} lot${product.lot_count === 1 ? "" : "s"}`}
                       </p>
                     </div>
                     <div className="tag-row">
@@ -390,7 +453,23 @@ export function PantryProductBrowser({
             })}
           </div>
         )}
+        {renderPagination()}
       </section>
+
+      {shoppingDialogProduct ? (
+        <ShoppingListAddDialog
+          householdExternalId={householdExternalId}
+          productExternalId={shoppingDialogProduct.product_external_id}
+          productName={shoppingDialogProduct.product_name}
+          sourceType={
+            shoppingDialogProduct.stock_status === "out_of_stock" ? "pantry_depleted" : "pantry_product"
+          }
+          defaultQuantity="1"
+          defaultUnit={shoppingDialogProduct.unit}
+          defaultLocationExternalId={shoppingDialogProduct.locations[0]?.location_external_id ?? null}
+          onClose={() => setShoppingDialogProduct(null)}
+        />
+      ) : null}
 
       {stockLotEditorProduct ? (
         <StockLotEditorDialog
@@ -400,7 +479,7 @@ export function PantryProductBrowser({
           mode="create"
           initialValues={{
             productName: stockLotEditorProduct.product_name,
-            quantity: "1.000",
+            quantity: "1",
             unit: stockLotEditorProduct.unit,
             locationExternalId: stockLotEditorProduct.locations[0]?.location_external_id ?? "",
             purchasedOn: null,

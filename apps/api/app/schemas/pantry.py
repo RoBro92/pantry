@@ -283,6 +283,10 @@ class PantryOverviewResponse(BaseModel):
     household_name: str
     effective_role: str
     can_administer: bool
+    page: int = 1
+    page_size: int = 25
+    page_count: int = 1
+    matched_product_count: int = 0
     filters: PantryFilters
     counts: PantryCounts
     location_groups: list[LocationGroupSummary]
