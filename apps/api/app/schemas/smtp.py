@@ -72,6 +72,10 @@ class SMTPTemplateUpdateRequest(BaseModel):
     body_template: str | None = None
 
 
+class SMTPTemplateToggleRequest(BaseModel):
+    is_enabled: bool
+
+
 class SMTPTestResponse(BaseModel):
     ok: bool
     status: str

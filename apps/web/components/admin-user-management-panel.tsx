@@ -3,7 +3,7 @@
 import { FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { AdminHouseholdSummary, AdminUserSummary } from "../lib/api-types";
-import { patchToApi, postToApi } from "../lib/client-api";
+import { deleteToApi, patchToApi, postToApi } from "../lib/client-api";
 import { getPlatformRoleLabel } from "../lib/role-labels";
 import { ModalShell } from "./modal-shell";
 
@@ -25,6 +25,7 @@ export function AdminUserManagementPanel({
 }: AdminUserManagementPanelProps) {
   const router = useRouter();
   const [editingUser, setEditingUser] = useState<AdminUserSummary | null>(null);
+  const [deletingUser, setDeletingUser] = useState<AdminUserSummary | null>(null);
   const [pendingResetUserId, setPendingResetUserId] = useState<string | null>(null);
   const [pageError, setPageError] = useState<string | null>(null);
   const [pageStatus, setPageStatus] = useState<string | null>(null);
@@ -96,6 +97,13 @@ export function AdminUserManagementPanel({
                       >
                         Edit
                       </button>
+                      <button
+                        type="button"
+                        className="ghost-button compact-button"
+                        onClick={() => setDeletingUser(user)}
+                      >
+                        Delete
+                      </button>
                       {passwordResetEnabled ? (
                         <button
                           type="button"
@@ -125,9 +133,26 @@ export function AdminUserManagementPanel({
             setEditingUser(null);
             router.refresh();
           }}
+          onDeleteRequested={(user) => {
+            setEditingUser(null);
+            setDeletingUser(user);
+          }}
           onResetSent={(message) => {
             setPageStatus(message);
             setEditingUser(null);
+            router.refresh();
+          }}
+        />
+      ) : null}
+
+      {deletingUser ? (
+        <AdminUserDeleteDialog
+          user={deletingUser}
+          onClose={() => setDeletingUser(null)}
+          onDeleted={(message) => {
+            setDeletingUser(null);
+            setEditingUser(null);
+            setPageStatus(message);
             router.refresh();
           }}
         />
@@ -142,6 +167,7 @@ type AdminUserEditDialogProps = {
   passwordResetEnabled: boolean;
   onClose: () => void;
   onSaved: () => void;
+  onDeleteRequested: (user: AdminUserSummary) => void;
   onResetSent: (message: string) => void;
 };
 
@@ -151,6 +177,7 @@ function AdminUserEditDialog({
   passwordResetEnabled,
   onClose,
   onSaved,
+  onDeleteRequested,
   onResetSent,
 }: AdminUserEditDialogProps) {
   const [email, setEmail] = useState(user.email);
@@ -310,6 +337,94 @@ function AdminUserEditDialog({
               Send reset email
             </button>
           ) : null}
+          <button
+            type="button"
+            className="ghost-button"
+            disabled={pending}
+            onClick={() => onDeleteRequested(user)}
+          >
+            Delete user
+          </button>
+        </div>
+      </form>
+    </ModalShell>
+  );
+}
+
+type AdminUserDeleteDialogProps = {
+  user: AdminUserSummary;
+  onClose: () => void;
+  onDeleted: (message: string) => void;
+};
+
+function AdminUserDeleteDialog({ user, onClose, onDeleted }: AdminUserDeleteDialogProps) {
+  const [confirmEmail, setConfirmEmail] = useState("");
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const canDelete = confirmEmail.trim().toLowerCase() === user.email.toLowerCase();
+
+  async function handleDelete(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!canDelete) {
+      setError("Enter the exact user sign-in email to confirm deletion.");
+      return;
+    }
+
+    setPending(true);
+    setError(null);
+    try {
+      const response = await deleteToApi<{ message: string }>(
+        `/api/platform-admin/users/${user.external_id}`,
+        { confirm_user_email: confirmEmail.trim() },
+      );
+      onDeleted(response.message);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Could not delete this user.");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <ModalShell
+      title={`Delete ${user.display_name ?? user.email}`}
+      description="Delete this user account, remove household memberships, and clear any outstanding reset tokens."
+      onClose={onClose}
+      closeOnBackdropClick={false}
+    >
+      <form className="stack" onSubmit={handleDelete}>
+        <article className="inline-status-card is-warning">
+          <strong>This permanently removes the user account.</strong>
+          <p className="helper-text">
+            Current sign-in: {user.email}
+          </p>
+          <p className="helper-text">
+            Household memberships:{" "}
+            {user.memberships.length > 0
+              ? user.memberships.map((membership) => membership.household_name).join(", ")
+              : "None"}
+          </p>
+        </article>
+        <label className="field">
+          <span>Type the user email to confirm</span>
+          <input
+            value={confirmEmail}
+            onChange={(event) => setConfirmEmail(event.target.value)}
+            placeholder={user.email}
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+          />
+        </label>
+        {error ? <p className="error-text">{error}</p> : null}
+        <div className="page-actions">
+          <button type="button" className="ghost-button" disabled={pending} onClick={onClose}>
+            Cancel
+          </button>
+          <button type="submit" className="primary-button" disabled={pending || !canDelete}>
+            {pending ? "Deleting..." : "Delete user"}
+          </button>
         </div>
       </form>
     </ModalShell>

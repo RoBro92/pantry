@@ -8,7 +8,11 @@ from app.domain.roles import PLATFORM_ADMIN_ROLE
 from app.models.base import Base
 from app.domain.roles import HOUSEHOLD_ROLE_CODES
 from app.models.household import Household
+from app.models.import_job import ImportJob
+from app.models.import_source_file import ImportSourceFile
 from app.models.membership import Membership
+from app.models.password_reset_token import PasswordResetToken
+from app.models.recipe_url_import import RecipeURLImport
 from app.models.user import User
 from app.services.audit import record_audit_event
 from app.services.auth import create_household, create_user, get_user_by_email, get_user_by_external_id
@@ -358,6 +362,79 @@ def send_managed_user_password_reset(
     )
     db.commit()
     return get_user_by_external_id(db, user.external_id) or user
+
+
+def delete_managed_user(
+    db: Session,
+    *,
+    actor: User,
+    user_external_id: str,
+    confirm_user_email: str,
+) -> None:
+    user = get_user_by_external_id(db, user_external_id)
+    if user is None:
+        raise ValueError("User not found.")
+
+    if user.email.strip().casefold() != confirm_user_email.strip().casefold():
+        raise ValueError("Enter the exact user sign-in email to delete this account.")
+
+    if (
+        user.platform_role is not None
+        and user.platform_role.code == PLATFORM_ADMIN_ROLE
+        and _count_platform_admins(db) <= 1
+    ):
+        raise ValueError("Pantry must keep at least one platform admin.")
+
+    for membership in list(user.memberships):
+        if (
+            membership.role is not None
+            and membership.role.code == "household_admin"
+            and membership.is_active
+            and _count_household_admins(db, household_id=membership.household_id) <= 1
+        ):
+            raise ValueError(
+                f"{membership.household.name} must keep at least one household admin before this user can be deleted."
+            )
+
+    db.execute(
+        delete(PasswordResetToken)
+        .where(PasswordResetToken.user_id == user.id)
+    )
+    db.execute(
+        delete(Membership)
+        .where(Membership.user_id == user.id)
+    )
+    db.execute(
+        delete(ImportJob)
+        .where(ImportJob.requested_by_user_id == user.id)
+    )
+    db.execute(
+        delete(ImportSourceFile)
+        .where(ImportSourceFile.uploaded_by_user_id == user.id)
+    )
+    db.execute(
+        delete(RecipeURLImport)
+        .where(RecipeURLImport.requested_by_user_id == user.id)
+    )
+
+    deleted_email = user.email
+    deleted_display_name = user.display_name
+    deleted_external_id = user.external_id
+    db.delete(user)
+    db.flush()
+    record_audit_event(
+        db,
+        household=None,
+        actor=actor,
+        action="admin.user.deleted",
+        target_type="user",
+        target_external_id=deleted_external_id,
+        event_metadata={
+            "email": deleted_email,
+            "display_name": deleted_display_name,
+        },
+    )
+    db.commit()
 
 
 def remove_household_membership(

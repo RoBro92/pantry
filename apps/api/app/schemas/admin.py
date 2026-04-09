@@ -79,5 +79,9 @@ class DeleteAdminHouseholdRequest(BaseModel):
     acknowledge_last_household_deletion: bool = False
 
 
+class DeleteAdminUserRequest(BaseModel):
+    confirm_user_email: str
+
+
 class AdminActionResponse(BaseModel):
     message: str

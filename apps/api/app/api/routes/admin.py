@@ -23,6 +23,7 @@ from app.schemas.admin import (
     CreateAdminMembershipRequest,
     CreateAdminUserRequest,
     DeleteAdminHouseholdRequest,
+    DeleteAdminUserRequest,
     UpdateAdminUserRequest,
     UpdateAdminHouseholdRequest,
 )
@@ -44,6 +45,7 @@ from app.services.platform_admin import (
     create_managed_household,
     create_managed_user,
     delete_managed_household,
+    delete_managed_user,
     rename_managed_household,
     remove_household_membership,
     send_managed_user_password_reset,
@@ -206,6 +208,26 @@ def post_user_password_reset(
         raise _bad_request(exc) from exc
 
     return AdminActionResponse(message=f"Sent a password reset email to {user.email}.")
+
+
+@router.delete("/users/{user_external_id}", response_model=AdminActionResponse)
+def delete_user(
+    user_external_id: str,
+    payload: DeleteAdminUserRequest,
+    current_user: User = Depends(require_platform_admin),
+    db: Session = Depends(get_db_session),
+):
+    try:
+        delete_managed_user(
+            db,
+            actor=current_user,
+            user_external_id=user_external_id,
+            confirm_user_email=payload.confirm_user_email,
+        )
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
+
+    return AdminActionResponse(message="User deleted.")
 
 
 @router.get("/households", response_model=list[AdminHouseholdSummary])

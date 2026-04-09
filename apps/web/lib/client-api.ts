@@ -73,8 +73,8 @@ export async function patchToApi<T>(path: string, payload: unknown): Promise<T> 
   return sendToApi("PATCH", path, payload);
 }
 
-export async function deleteToApi<T>(path: string): Promise<T> {
-  return sendToApi("DELETE", path);
+export async function deleteToApi<T>(path: string, payload?: unknown): Promise<T> {
+  return sendToApi("DELETE", path, payload);
 }
 
 export async function postFormToApi<T>(path: string, payload: FormData): Promise<T> {

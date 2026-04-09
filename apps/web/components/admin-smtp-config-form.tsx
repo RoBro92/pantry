@@ -44,6 +44,7 @@ export function AdminSMTPConfigForm({ initialConfig }: AdminSMTPConfigFormProps)
   const [isTesting, setIsTesting] = useState(false);
   const [isSendingTestEmail, setIsSendingTestEmail] = useState(false);
   const [templatePending, setTemplatePending] = useState(false);
+  const [templateToggleKey, setTemplateToggleKey] = useState<string | null>(null);
   const [templateModal, setTemplateModal] = useState<TemplateModalState>(null);
 
   const passwordResetTemplate = useMemo(
@@ -173,6 +174,35 @@ export function AdminSMTPConfigForm({ initialConfig }: AdminSMTPConfigFormProps)
       setTemplateMessage(error instanceof Error ? error.message : "Could not restore the default template.");
     } finally {
       setTemplatePending(false);
+    }
+  }
+
+  async function handleToggleTemplate(template: SMTPTemplateSummary) {
+    setTemplateToggleKey(template.key);
+    setTemplateMessage(null);
+    try {
+      const response = await postToApi<SMTPConfigResponse>(
+        `/api/platform-admin/smtp/templates/${template.key}/toggle`,
+        { is_enabled: !template.is_enabled },
+      );
+      setConfig(response);
+      const updatedTemplate = response.templates.find((candidate) => candidate.key === template.key);
+      if (updatedTemplate && templateModal?.key === updatedTemplate.key) {
+        setTemplateModal({
+          key: updatedTemplate.key,
+          label: updatedTemplate.label,
+          subject: updatedTemplate.subject,
+          bodyTemplate: updatedTemplate.body_template,
+          isEnabled: updatedTemplate.is_enabled,
+        });
+      }
+      setTemplateMessage(
+        `${template.label} ${template.is_enabled ? "disabled" : "enabled"}.`,
+      );
+    } catch (error) {
+      setTemplateMessage(error instanceof Error ? error.message : "Template toggle failed.");
+    } finally {
+      setTemplateToggleKey(null);
     }
   }
 
@@ -306,9 +336,18 @@ export function AdminSMTPConfigForm({ initialConfig }: AdminSMTPConfigFormProps)
                   <h3>{template.label}</h3>
                   <p className="helper-text">{template.description}</p>
                 </div>
-                <span className={getTemplateStatusClass(template)}>
-                  {template.is_enabled ? "Enabled" : "Disabled"}
-                </span>
+                <button
+                  type="button"
+                  className={getTemplateStatusClass(template)}
+                  disabled={templateToggleKey === template.key}
+                  onClick={() => void handleToggleTemplate(template)}
+                >
+                  {templateToggleKey === template.key
+                    ? "Saving..."
+                    : template.is_enabled
+                      ? "Enabled"
+                      : "Disabled"}
+                </button>
               </div>
               <p className="helper-text">
                 {template.is_available
@@ -374,7 +413,7 @@ export function AdminSMTPConfigForm({ initialConfig }: AdminSMTPConfigFormProps)
       {templateModal && passwordResetTemplate ? (
         <ModalShell
           title={templateModal.label}
-          description="Update the template copy, toggle availability, or restore the Pantry default."
+          description="Update the template copy or restore the Pantry default."
           onClose={() => {
             if (!templatePending) {
               setTemplateModal(null);
