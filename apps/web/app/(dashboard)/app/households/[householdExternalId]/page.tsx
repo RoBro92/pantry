@@ -13,6 +13,8 @@ type PantryPageProps = {
     location_group_external_id?: string;
     location_external_id?: string;
     near_expiry_only?: string;
+    page?: string;
+    page_size?: string;
   }>;
 };
 
@@ -29,6 +31,8 @@ export default async function HouseholdPantryPage({
     location_external_id: filters.location_external_id ?? null,
     near_expiry_only:
       filters.near_expiry_only === "true" || filters.near_expiry_only === "1",
+    page: filters.page ? Number(filters.page) : null,
+    page_size: filters.page_size ? Number(filters.page_size) : null,
   });
 
   return (
@@ -47,6 +51,17 @@ export default async function HouseholdPantryPage({
         householdExternalId={overview.household_external_id}
         products={overview.products}
         locations={overview.locations}
+        canAdminister={overview.can_administer}
+        page={overview.page}
+        pageSize={overview.page_size}
+        pageCount={overview.page_count}
+        matchedProductCount={overview.matched_product_count}
+        hasActiveFilters={Boolean(
+          overview.filters.q ||
+            overview.filters.location_group_external_id ||
+            overview.filters.location_external_id ||
+            overview.filters.near_expiry_only,
+        )}
       />
 
       <section className="content-grid pantry-support-grid">

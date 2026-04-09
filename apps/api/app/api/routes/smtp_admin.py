@@ -9,6 +9,7 @@ from app.models.user import User
 from app.schemas.smtp import (
     SMTPConfigResponse,
     SMTPConfigUpdateRequest,
+    SMTPTemplateToggleRequest,
     SMTPTemplateUpdateRequest,
     SMTPTestEmailResponse,
     SMTPTestResponse,
@@ -140,6 +141,31 @@ def put_smtp_template(
             is_enabled=payload.is_enabled,
             subject=payload.subject,
             body_template=payload.body_template,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return _build_response(db)
+
+
+@router.post("/templates/{template_key}/toggle", response_model=SMTPConfigResponse)
+def post_toggle_smtp_template(
+    template_key: str,
+    payload: SMTPTemplateToggleRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
+    _: User = Depends(require_platform_admin),
+):
+    if template_key != PASSWORD_RESET_TEMPLATE_KEY:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="SMTP template not found.")
+
+    settings = get_or_create_instance_settings(db)
+    try:
+        upsert_password_reset_email_template(
+            db,
+            actor=current_user,
+            is_enabled=payload.is_enabled,
+            subject=settings.password_reset_subject_template,
+            body_template=settings.password_reset_body_template,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc

@@ -20,6 +20,17 @@ class CreateProductRequest(BaseModel):
     default_unit: str
     aliases: list[str] = Field(default_factory=list)
     barcodes: list[str] = Field(default_factory=list)
+    notes: str | None = None
+    manual_ingredient_tags: list[str] = Field(default_factory=list)
+    confirmed_enrichment: "ConfirmedProductEnrichmentRequest | None" = None
+
+
+class UpdateProductRequest(BaseModel):
+    name: str
+    default_unit: str
+    aliases: list[str] = Field(default_factory=list)
+    barcodes: list[str] = Field(default_factory=list)
+    notes: str | None = None
     manual_ingredient_tags: list[str] = Field(default_factory=list)
     confirmed_enrichment: "ConfirmedProductEnrichmentRequest | None" = None
 
@@ -31,6 +42,7 @@ class CreatePantryEntryRequest(BaseModel):
     location_external_id: str
     barcode: str | None = None
     aliases: list[str] = Field(default_factory=list)
+    product_notes: str | None = None
     manual_ingredient_tags: list[str] = Field(default_factory=list)
     purchased_on: date | None = None
     expires_on: date | None = None
@@ -187,8 +199,13 @@ class ProductSummary(BaseModel):
     default_unit: str
     aliases: list[str]
     barcodes: list[str]
+    notes: str | None = None
     manual_ingredient_tags: list[str] = Field(default_factory=list)
     enrichment: ProductEnrichmentSummary | None = None
+
+
+class DeleteProductResponse(BaseModel):
+    message: str
 
 
 class ProductLocationSummary(BaseModel):
@@ -210,6 +227,7 @@ class PantryProductSummary(BaseModel):
     storage_summary: str
     nearest_expiry_on: date | None = None
     near_expiry_lot_count: int = 0
+    notes: str | None = None
     manual_ingredient_tags: list[str] = Field(default_factory=list)
     aliases: list[str]
     barcodes: list[str]
@@ -283,6 +301,10 @@ class PantryOverviewResponse(BaseModel):
     household_name: str
     effective_role: str
     can_administer: bool
+    page: int = 1
+    page_size: int = 25
+    page_count: int = 1
+    matched_product_count: int = 0
     filters: PantryFilters
     counts: PantryCounts
     location_groups: list[LocationGroupSummary]

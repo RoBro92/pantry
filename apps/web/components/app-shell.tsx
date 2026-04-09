@@ -33,6 +33,9 @@ export function AppShell({ session, releaseStatus, children }: AppShellProps) {
                 <Link href={`/app/households/${membership.household_external_id}/shopping-list`}>
                   Shopping List
                 </Link>
+                <Link href={`/app/households/${membership.household_external_id}/shopping-list/history`}>
+                  Shopping History
+                </Link>
                 <Link href={`/app/households/${membership.household_external_id}/imports`}>
                   Imports
                 </Link>

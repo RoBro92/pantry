@@ -101,6 +101,138 @@ class RestoreCompatibility:
 
 _SCHEMA_COMPATIBILITY: dict[tuple[str | None, str | None], RestoreCompatibility] = {
     (
+        "20260409_000016",
+        "20260409_000015",
+    ): RestoreCompatibility(
+        supported=True,
+        allowed_missing_tables=frozenset(),
+        warnings=(),
+    ),
+    (
+        "20260409_000016",
+        "20260409_000014",
+    ): RestoreCompatibility(
+        supported=True,
+        allowed_missing_tables=frozenset(),
+        warnings=(),
+    ),
+    (
+        "20260409_000016",
+        "20260408_000013",
+    ): RestoreCompatibility(
+        supported=True,
+        allowed_missing_tables=frozenset({"password_reset_tokens"}),
+        warnings=(
+            "This backup predates password reset token support. Existing reset tokens will restore as empty.",
+        ),
+    ),
+    (
+        "20260409_000016",
+        "20260408_000012",
+    ): RestoreCompatibility(
+        supported=True,
+        allowed_missing_tables=frozenset({"password_reset_tokens"}),
+        warnings=(
+            "This backup predates password reset token support. Existing reset tokens will restore as empty.",
+        ),
+    ),
+    (
+        "20260409_000016",
+        "20260408_000011",
+    ): RestoreCompatibility(
+        supported=True,
+        allowed_missing_tables=frozenset({"password_reset_tokens"}),
+        warnings=(
+            "This backup predates password reset token support. Existing reset tokens will restore as empty.",
+        ),
+    ),
+    (
+        "20260409_000016",
+        "20260407_000010",
+    ): RestoreCompatibility(
+        supported=True,
+        allowed_missing_tables=frozenset({"shopping_lists", "shopping_list_items", "password_reset_tokens"}),
+        warnings=(
+            "This backup predates shopping list foundations. Shopping list records will restore as empty.",
+            "This backup predates password reset token support. Existing reset tokens will restore as empty.",
+        ),
+    ),
+    (
+        "20260409_000016",
+        "20260407_000009",
+    ): RestoreCompatibility(
+        supported=True,
+        allowed_missing_tables=frozenset(
+            {"product_enrichments", "shopping_lists", "shopping_list_items", "password_reset_tokens"}
+        ),
+        warnings=(
+            "This backup predates product enrichment support. Product enrichment records will restore as empty.",
+            "This backup predates shopping list foundations. Shopping list records will restore as empty.",
+            "This backup predates password reset token support. Existing reset tokens will restore as empty.",
+        ),
+    ),
+    (
+        "20260409_000015",
+        "20260409_000014",
+    ): RestoreCompatibility(
+        supported=True,
+        allowed_missing_tables=frozenset(),
+        warnings=(),
+    ),
+    (
+        "20260409_000015",
+        "20260408_000013",
+    ): RestoreCompatibility(
+        supported=True,
+        allowed_missing_tables=frozenset(),
+        warnings=(),
+    ),
+    (
+        "20260409_000015",
+        "20260408_000012",
+    ): RestoreCompatibility(
+        supported=True,
+        allowed_missing_tables=frozenset({"password_reset_tokens"}),
+        warnings=(
+            "This backup predates password reset token support. Existing reset tokens will restore as empty.",
+        ),
+    ),
+    (
+        "20260409_000015",
+        "20260408_000011",
+    ): RestoreCompatibility(
+        supported=True,
+        allowed_missing_tables=frozenset({"password_reset_tokens"}),
+        warnings=(
+            "This backup predates password reset token support. Existing reset tokens will restore as empty.",
+        ),
+    ),
+    (
+        "20260409_000015",
+        "20260407_000010",
+    ): RestoreCompatibility(
+        supported=True,
+        allowed_missing_tables=frozenset({"shopping_lists", "shopping_list_items", "password_reset_tokens"}),
+        warnings=(
+            "This backup predates shopping list foundations. Shopping list records will restore as empty.",
+            "This backup predates password reset token support. Existing reset tokens will restore as empty.",
+        ),
+    ),
+    (
+        "20260409_000015",
+        "20260407_000009",
+    ): RestoreCompatibility(
+        supported=True,
+        allowed_missing_tables=frozenset(
+            {"product_enrichments", "shopping_lists", "shopping_list_items", "password_reset_tokens"}
+        ),
+        warnings=(
+            "This backup predates product enrichment support. Product enrichment records will restore as empty.",
+            "This backup predates shopping list foundations. Shopping list records will restore as empty.",
+            "This backup predates password reset token support. Existing reset tokens will restore as empty.",
+        ),
+    ),
+    (
         "20260409_000014",
         "20260408_000013",
     ): RestoreCompatibility(
@@ -264,6 +396,12 @@ _SCHEMA_COMPATIBILITY: dict[tuple[str | None, str | None], RestoreCompatibility]
             "This backup predates product enrichment support. Product enrichment records will restore as empty.",
         ),
     ),
+}
+
+# Revisions listed here keep the same backup table layout and restore compatibility
+# behaviour as the mapped baseline revision.
+_SCHEMA_COMPATIBILITY_ALIASES: dict[str, str] = {
+    "20260409_000017": "20260409_000016",
 }
 
 
@@ -473,14 +611,21 @@ def _validate_bundle_payload(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def _restore_compatibility(*, current_revision: str | None, bundle_revision: str | None) -> RestoreCompatibility:
-    if current_revision == bundle_revision:
+    normalized_current_revision = _SCHEMA_COMPATIBILITY_ALIASES.get(
+        current_revision, current_revision
+    )
+    normalized_bundle_revision = _SCHEMA_COMPATIBILITY_ALIASES.get(
+        bundle_revision, bundle_revision
+    )
+
+    if normalized_current_revision == normalized_bundle_revision:
         return RestoreCompatibility(
             supported=True,
             allowed_missing_tables=frozenset(),
             warnings=(),
         )
     return _SCHEMA_COMPATIBILITY.get(
-        (current_revision, bundle_revision),
+        (normalized_current_revision, normalized_bundle_revision),
         RestoreCompatibility(
             supported=False,
             allowed_missing_tables=frozenset(),

@@ -391,10 +391,38 @@ test("platform admin updates and backups pages load from the admin navigation", 
   ).toBeVisible();
 
   await page.goto("/admin/backups");
-  await expect(page.getByRole("heading", { name: "Export and recovery foundations" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Backup and Restore" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Updates", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Download full backup" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Upload and validate" })).toBeVisible();
+});
+
+test("authenticated shell stays horizontally stable across admin tabs", async ({ page }) => {
+  await loginThroughApi(page, {
+    email: manifest.admin_email,
+    password: manifest.password
+  });
+  await dismissAdminWhatsNewIfVisible(page);
+
+  await page.goto("/admin/updates");
+  const sidebar = page.locator(".sidebar");
+  const shellContent = page.locator(".shell-content");
+
+  const firstSidebarBox = await sidebar.boundingBox();
+  const firstContentBox = await shellContent.boundingBox();
+  expect(firstSidebarBox).not.toBeNull();
+  expect(firstContentBox).not.toBeNull();
+
+  await page.goto("/admin/backups");
+  await expect(page.getByRole("heading", { name: "Backup and Restore" })).toBeVisible();
+
+  const secondSidebarBox = await sidebar.boundingBox();
+  const secondContentBox = await shellContent.boundingBox();
+  expect(secondSidebarBox).not.toBeNull();
+  expect(secondContentBox).not.toBeNull();
+
+  expect(Math.abs((firstSidebarBox?.x ?? 0) - (secondSidebarBox?.x ?? 0))).toBeLessThan(1);
+  expect(Math.abs((firstContentBox?.x ?? 0) - (secondContentBox?.x ?? 0))).toBeLessThan(1);
 });
 
 test("update availability banner is shown only to admins when an update is available", async ({
@@ -453,14 +481,14 @@ test("pantry flow covers room management, combined add flow, duplicate handling,
   const addEntryForm = page.getByTestId("pantry-add-entry-form");
   await addEntryForm.getByLabel("Product name").fill("Beef mince");
   await addEntryForm.getByLabel("Manual ingredients").fill("Beef");
-  await addEntryForm.getByRole("button", { name: "Add" }).click();
+  await addEntryForm.getByRole("button", { name: "Add", exact: true }).click();
   await addEntryForm.getByLabel("Storage location").selectOption({ label: "Kitchen / Freezer" });
   await addEntryForm.getByLabel("Quantity").fill("2");
-  await addEntryForm.getByLabel("Unit").fill("kg");
+  await addEntryForm.getByLabel("Unit").selectOption("kg");
   await addEntryForm.getByLabel("Aliases").fill("Ground beef,mince beef");
   await addEntryForm.getByLabel("Purchase date").fill("2026-04-01");
   await addEntryForm.getByLabel("Expiry date").fill("2026-04-04");
-  await addEntryForm.getByLabel("Notes").fill("First pack");
+  await addEntryForm.getByLabel("Lot note").fill("First pack");
   await expect(addEntryForm.getByRole("button", { name: "Look up" })).toBeVisible();
   await expect(addEntryForm.getByRole("button", { name: "Scan" })).toBeVisible();
   await addEntryForm.getByRole("button", { name: "Add to pantry" }).click();
@@ -468,7 +496,7 @@ test("pantry flow covers room management, combined add flow, duplicate handling,
   const beefMinceCard = page
     .locator('[data-testid^="product-card-"]')
     .filter({ hasText: "Beef mince" });
-  await expect(beefMinceCard).toContainText("2.000 kg across 1 lot");
+  await expect(beefMinceCard).toContainText("2 kg across 1 lot");
   await expect(beefMinceCard).toContainText("Kitchen / Freezer");
   await expect(beefMinceCard).toContainText("4 Apr 2026");
   await expect(beefMinceCard).toContainText("Beef");
@@ -484,17 +512,15 @@ test("pantry flow covers room management, combined add flow, duplicate handling,
   await duplicateForm.getByLabel("Product name").fill("Mince beef");
   await duplicateForm.getByLabel("Storage location").selectOption({ label: "Kitchen / Shelf A" });
   await duplicateForm.getByLabel("Quantity").fill("1");
-  await duplicateForm.getByLabel("Unit").fill("kg");
-  await duplicateForm.getByLabel("Notes").fill("Second pack");
+  await duplicateForm.getByLabel("Unit").selectOption("kg");
+  await duplicateForm.getByLabel("Lot note").fill("Second pack");
   await duplicateForm.getByRole("button", { name: "Add to pantry" }).click();
 
   await expect(page.getByText("Beef mince already looks like the right product")).toBeVisible();
-  await expect(duplicateForm.getByRole("button", { name: "Keep as separate product" })).toBeVisible();
-  await duplicateForm
-    .getByRole("button", { name: "Add stock lot to existing product" })
-    .click();
+  await duplicateForm.getByRole("button", { name: "Add to pantry" }).click();
 
-  await expect(beefMinceCard).toContainText("3.000 kg across 2 lots");
+  await expect(beefMinceCard).toContainText("3 kg across 2 lots");
+  await beefMinceCard.getByRole("button", { name: "Show" }).click();
   await expect(beefMinceCard.locator('[data-testid^="stock-lot-card-"]')).toHaveCount(2);
   await expect(beefMinceCard).toContainText("Second pack");
 });
@@ -517,6 +543,80 @@ test("pantry add flow warns when an alias is already used by another product", a
   await addEntryForm.getByRole("button", { name: "Add to pantry" }).click();
 
   await expect(page.getByText("Dry pasta is already used by Pasta")).toBeVisible();
+});
+
+test("shopping reconciliation uses dense rows, full Pantry product creation, and product editing", async ({
+  page
+}) => {
+  await loginThroughApi(page, {
+    email: manifest.member_email,
+    password: manifest.password
+  });
+
+  await page.goto(`/app/households/${manifest.household_external_id}/shopping-list`);
+
+  const addForm = page.locator(".shopping-add-form");
+  await addForm.getByLabel("Add item").fill("Olive oil");
+  await addForm.getByLabel("Qty").fill("2");
+  await addForm.getByLabel("Unit").fill("bottle");
+  await addForm.getByLabel("Note").fill("Extra virgin");
+  await addForm.getByRole("button", { name: "Add item" }).click();
+
+  await page.getByRole("button", { name: "Export checklist (.txt)" }).click();
+  const pendingTrips = page
+    .locator(".content-grid.shopping-columns article.panel")
+    .nth(1)
+    .locator(".shopping-item-card");
+  await expect(pendingTrips.first()).toBeVisible();
+
+  const pendingTrip = pendingTrips.first();
+  await pendingTrip.getByRole("button").click();
+
+  await expect(page.locator(".shopping-reconcile-table-heading")).toContainText("Purchased qty");
+  const oliveOilRow = page
+    .locator('[data-testid^="shopping-reconcile-row-"]')
+    .filter({ hasText: "Olive oil" });
+  await expect(oliveOilRow).toBeVisible();
+  await expect(oliveOilRow.getByLabel("Delete item")).toBeVisible();
+  await expect(oliveOilRow.getByLabel("Return item to shopping list")).toBeVisible();
+  await expect(oliveOilRow.getByLabel("Reconcile item")).toBeVisible();
+
+  await oliveOilRow.getByLabel("Expand details").click();
+  await expect(oliveOilRow).toContainText("Requested");
+  await oliveOilRow.getByRole("button", { name: "Create Pantry product" }).click();
+
+  const productForm = page.getByTestId("pantry-product-form");
+  await expect(productForm.getByLabel("Barcode")).toBeVisible();
+  await expect(productForm.getByLabel("Aliases")).toBeVisible();
+  await expect(productForm.getByLabel("Product notes")).toBeVisible();
+  await productForm.getByLabel("Barcode").fill("5060000000001");
+  await productForm.getByLabel("Aliases").fill("EVOO, extra virgin oil");
+  await productForm.getByLabel("Product notes").fill("Use for dressings and low-heat cooking.");
+  await productForm.getByLabel("Manual ingredients").fill("Olives");
+  await productForm.getByRole("button", { name: "Add" }).click();
+  await productForm.getByRole("button", { name: "Create product" }).click();
+
+  const refreshedOliveOilRow = page
+    .locator('[data-testid^="shopping-reconcile-row-"]')
+    .filter({ hasText: "Olive oil" });
+  await expect(refreshedOliveOilRow).toContainText("Pantry product");
+  await page.goto(`/app/households/${manifest.household_external_id}/shopping-list/history`);
+  await expect(page.getByRole("heading", { name: "Shopping history" })).toBeVisible();
+  await page.goto(`/app/households/${manifest.household_external_id}/shopping-list`);
+
+  await page.goto(`/app/households/${manifest.household_external_id}`);
+  const oliveOilProductRow = page
+    .locator('[data-testid^="product-card-"]')
+    .filter({ hasText: "Olive oil" });
+  await expect(oliveOilProductRow).toBeVisible();
+  await oliveOilProductRow.getByRole("button", { name: "Edit" }).click();
+
+  const editProductForm = page.getByTestId("pantry-product-form");
+  await editProductForm.getByLabel("Product name").fill("Extra virgin olive oil");
+  await editProductForm.getByLabel("Product notes").fill("Use for dressings and finishing.");
+  await editProductForm.getByRole("button", { name: "Save product" }).click();
+
+  await expect(page.locator('[data-testid^="product-card-"]').filter({ hasText: "Extra virgin olive oil" })).toBeVisible();
 });
 
 test("recipe flow covers create, detail view, and pantry coverage display", async ({ page }) => {

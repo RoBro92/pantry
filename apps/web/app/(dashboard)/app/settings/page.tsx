@@ -1,3 +1,4 @@
+import { AccountSettingsForm } from "../../../../components/account-settings-form";
 import { PasswordChangeForm } from "../../../../components/password-change-form";
 import { getPasswordResetAvailability, requireSession } from "../../../../lib/server-auth";
 import { looksLikeEmailAddress } from "../../../../lib/user-identifiers";
@@ -13,13 +14,12 @@ export default async function AccountSettingsPage() {
         <p className="eyebrow">Account</p>
         <h1>Settings</h1>
         <p className="section-copy">
-          Manage your sign-in details and review how password recovery works on this Pantry
-          installation.
+          Manage your own sign-in details here. Roles and household memberships remain admin-led.
         </p>
         <div className="content-grid">
           <article className="status-card">
-            <p className="eyebrow">Display name</p>
-            <h2>{session.user.display_name ?? "Not set"}</h2>
+            <p className="eyebrow">Signed in as</p>
+            <h2>{session.user.display_name ?? session.user.email}</h2>
             <p>{session.user.email}</p>
           </article>
           <article className="status-card">
@@ -37,6 +37,11 @@ export default async function AccountSettingsPage() {
           </article>
         </div>
       </section>
+
+      <AccountSettingsForm
+        email={session.user.email}
+        displayName={session.user.display_name}
+      />
 
       <PasswordChangeForm />
     </div>

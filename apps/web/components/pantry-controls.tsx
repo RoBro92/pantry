@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useRef, useState } from "react";
 import type {
   PantryLocationGroupSummary,
@@ -42,6 +42,7 @@ export function PantryControls({
 }: PantryControlsProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const roomSelectRef = useRef<HTMLSelectElement | null>(null);
   const locationSelectRef = useRef<HTMLSelectElement | null>(null);
   const [isAddOpen, setIsAddOpen] = useState(false);
@@ -77,6 +78,11 @@ export function PantryControls({
     if (nextNearExpiryOnly) {
       params.set("near_expiry_only", "true");
     }
+    const pageSize = searchParams.get("page_size");
+    if (pageSize) {
+      params.set("page_size", pageSize);
+    }
+    params.set("page", "1");
     const url = params.toString() ? `${pathname}?${params.toString()}` : pathname;
     router.push(url, { scroll: false });
   }

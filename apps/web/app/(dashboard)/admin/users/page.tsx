@@ -1,28 +1,22 @@
 import { AdminUserCreationForm } from "../../../../components/admin-user-creation-form";
-import { DataTable } from "../../../../components/data-table";
-import { getPlatformRoleLabel } from "../../../../lib/role-labels";
-import { getAdminUsers } from "../../../../lib/server-auth";
+import { AdminUserManagementPanel } from "../../../../components/admin-user-management-panel";
+import { getAdminHouseholds, getAdminUsers, getSMTPConfig } from "../../../../lib/server-auth";
 
 export default async function AdminUsersPage() {
-  const users = await getAdminUsers();
+  const [users, households, smtpConfig] = await Promise.all([
+    getAdminUsers(),
+    getAdminHouseholds(),
+    getSMTPConfig(),
+  ]);
 
   return (
     <div className="stack">
       <AdminUserCreationForm />
-      <DataTable
-        title="Users"
-        columns={["Sign-in ID", "Display Name", "Access", "Memberships", "Status"]}
-      >
-        {users.map((user) => (
-          <tr key={user.external_id}>
-            <td>{user.email}</td>
-            <td>{user.display_name ?? "Unspecified"}</td>
-            <td>{getPlatformRoleLabel(user.platform_role, { detailed: true })}</td>
-            <td>{user.membership_count}</td>
-            <td>{user.is_active ? "Active" : "Inactive"}</td>
-          </tr>
-        ))}
-      </DataTable>
+      <AdminUserManagementPanel
+        users={users}
+        households={households}
+        passwordResetEnabled={smtpConfig.password_reset.is_available}
+      />
     </div>
   );
 }
