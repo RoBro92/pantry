@@ -48,11 +48,12 @@ cp pantry.env.example .env
 - `PANTRY_IMAGE_NAMESPACE`
 - `WEB_APP_URL`
 - `API_BASE_URL`
-- `NEXT_PUBLIC_API_BASE_URL`
 - `PUBLIC_BROWSER_BASE_URL`
 - `POSTGRES_PASSWORD`
 - `SETTINGS_ENCRYPTION_KEY`
 - `SESSION_SECRET_KEY`
+
+Browser-side web requests use the web container's same-origin `/api/*` proxy in self-hosted releases. Operators only need `INTERNAL_API_BASE_URL=http://api:8000` so the web container can reach the API container internally.
 
 3. Validate and start the stack.
 

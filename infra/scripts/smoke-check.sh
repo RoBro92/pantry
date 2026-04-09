@@ -32,6 +32,7 @@ fi
 
 check_http "web home" "${WEB_URL}/" "Welcome back"
 check_http "web login" "${WEB_URL}/login" "Username or email"
+check_http "web api health" "${WEB_URL}/api/health" "\"status\":\"ok\""
 check_http "api health" "${API_URL}/api/health" "\"status\":\"ok\""
 
 echo "Checking worker status"
