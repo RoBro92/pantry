@@ -131,6 +131,42 @@ def test_logged_in_user_can_change_password_with_current_password(client, db_ses
     assert new_login.status_code == 200
 
 
+def test_logged_in_user_can_update_their_own_profile_details(client, db_session):
+    create_user(
+        db_session,
+        email="member@example.com",
+        password="correct horse battery",
+        display_name="Member",
+    )
+
+    login_response = client.post(
+        "/api/auth/login",
+        json={"email": "member@example.com", "password": "correct horse battery"},
+    )
+    assert login_response.status_code == 200
+
+    update_response = client.patch(
+        "/api/auth/profile",
+        json={"email": "member-renamed", "display_name": "Updated Member"},
+    )
+    assert update_response.status_code == 200
+    payload = update_response.json()
+    assert payload["user"]["email"] == "member-renamed"
+    assert payload["user"]["display_name"] == "Updated Member"
+
+    old_login = client.post(
+        "/api/auth/login",
+        json={"email": "member@example.com", "password": "correct horse battery"},
+    )
+    assert old_login.status_code == 401
+
+    new_login = client.post(
+        "/api/auth/login",
+        json={"email": "member-renamed", "password": "correct horse battery"},
+    )
+    assert new_login.status_code == 200
+
+
 def test_password_reset_status_only_becomes_available_after_smtp_is_tested(client, db_session):
     admin = create_platform_admin(
         db_session,

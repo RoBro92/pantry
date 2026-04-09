@@ -15,9 +15,10 @@ from app.schemas.auth import (
     PasswordResetConfirmRequest,
     PasswordResetRequest,
     PasswordResetTokenStatusResponse,
+    ProfileUpdateRequest,
     SessionResponse,
 )
-from app.services.auth import authenticate_user, build_session_response
+from app.services.auth import authenticate_user, build_session_response, update_user_profile
 from app.services.instance_settings import resolve_password_reset_email_settings
 from app.services.password_resets import (
     change_password,
@@ -159,3 +160,23 @@ def post_change_password(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
     return PasswordActionResponse(ok=True, message="Password updated.")
+
+
+@router.patch("/profile", response_model=SessionResponse)
+def patch_profile(
+    payload: ProfileUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+):
+    try:
+        updated_user = update_user_profile(
+            db,
+            user=current_user,
+            email=payload.email,
+            display_name=payload.display_name,
+        )
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    return build_session_response(updated_user)

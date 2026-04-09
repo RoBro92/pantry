@@ -48,6 +48,11 @@ class PasswordChangeRequest(BaseModel):
     new_password: str
 
 
+class ProfileUpdateRequest(BaseModel):
+    email: str
+    display_name: str | None = None
+
+
 class PasswordActionResponse(BaseModel):
     ok: bool
     message: str

@@ -17,11 +17,14 @@ from app.schemas.admin import (
     AdminHouseholdMemberSummary,
     AdminHouseholdSummary,
     AdminOverviewResponse,
+    AdminUserMembershipSummary,
     AdminUserSummary,
     CreateAdminHouseholdRequest,
     CreateAdminMembershipRequest,
     CreateAdminUserRequest,
     DeleteAdminHouseholdRequest,
+    DeleteAdminUserRequest,
+    UpdateAdminUserRequest,
     UpdateAdminHouseholdRequest,
 )
 from app.schemas.backups import (
@@ -42,8 +45,11 @@ from app.services.platform_admin import (
     create_managed_household,
     create_managed_user,
     delete_managed_household,
+    delete_managed_user,
     rename_managed_household,
     remove_household_membership,
+    send_managed_user_password_reset,
+    update_managed_user,
     upsert_household_membership,
 )
 
@@ -77,6 +83,32 @@ def _bad_request(exc: ValueError) -> HTTPException:
     return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
 
+def _serialize_user_summary(user: User) -> AdminUserSummary:
+    active_memberships = [
+        membership
+        for membership in user.memberships
+        if membership.is_active and membership.household is not None and membership.role is not None
+    ]
+    sorted_memberships = sorted(active_memberships, key=lambda item: item.household.name.lower())
+    return AdminUserSummary(
+        external_id=user.external_id,
+        email=user.email,
+        display_name=user.display_name,
+        is_active=user.is_active,
+        platform_role=user.platform_role.code if user.platform_role else None,
+        membership_count=len(sorted_memberships),
+        memberships=[
+            AdminUserMembershipSummary(
+                household_external_id=membership.household.external_id,
+                household_name=membership.household.name,
+                role=membership.role.code,
+                is_active=membership.is_active,
+            )
+            for membership in sorted_memberships
+        ],
+    )
+
+
 @router.get("/overview", response_model=AdminOverviewResponse)
 def get_overview(_: User = Depends(require_platform_admin), db: Session = Depends(get_db_session)):
     platform_admin_count = db.scalar(
@@ -94,25 +126,14 @@ def get_overview(_: User = Depends(require_platform_admin), db: Session = Depend
 
 @router.get("/users", response_model=list[AdminUserSummary])
 def list_users(_: User = Depends(require_platform_admin), db: Session = Depends(get_db_session)):
-    membership_counts = {
-        user_id: count
-        for user_id, count in db.execute(
-            select(Membership.user_id, func.count(Membership.id)).group_by(Membership.user_id)
-        ).all()
-    }
-
-    users = db.scalars(select(User).options(selectinload(User.platform_role)).order_by(User.email)).all()
-    return [
-        AdminUserSummary(
-            external_id=user.external_id,
-            email=user.email,
-            display_name=user.display_name,
-            is_active=user.is_active,
-            platform_role=user.platform_role.code if user.platform_role else None,
-            membership_count=membership_counts.get(user.id, 0),
-        )
-        for user in users
-    ]
+    users = db.scalars(
+        select(User)
+        .options(selectinload(User.platform_role))
+        .options(selectinload(User.memberships).selectinload(Membership.household))
+        .options(selectinload(User.memberships).selectinload(Membership.role))
+        .order_by(User.email)
+    ).all()
+    return [_serialize_user_summary(user) for user in users]
 
 
 @router.post("/users", response_model=AdminUserSummary, status_code=status.HTTP_201_CREATED)
@@ -132,15 +153,81 @@ def post_user(
     except ValueError as exc:
         raise _bad_request(exc) from exc
 
-    membership_count = db.scalar(select(func.count(Membership.id)).where(Membership.user_id == user.id)) or 0
-    return AdminUserSummary(
-        external_id=user.external_id,
-        email=user.email,
-        display_name=user.display_name,
-        is_active=user.is_active,
-        platform_role=user.platform_role.code if user.platform_role else None,
-        membership_count=membership_count,
-    )
+    refreshed_user = db.scalar(
+        select(User)
+        .where(User.id == user.id)
+        .options(selectinload(User.platform_role))
+        .options(selectinload(User.memberships).selectinload(Membership.household))
+        .options(selectinload(User.memberships).selectinload(Membership.role))
+    ) or user
+    return _serialize_user_summary(refreshed_user)
+
+
+@router.patch("/users/{user_external_id}", response_model=AdminUserSummary)
+def patch_user(
+    user_external_id: str,
+    payload: UpdateAdminUserRequest,
+    current_user: User = Depends(require_platform_admin),
+    db: Session = Depends(get_db_session),
+):
+    try:
+        user = update_managed_user(
+            db,
+            actor=current_user,
+            user_external_id=user_external_id,
+            email=payload.email,
+            display_name=payload.display_name,
+            platform_role_code=payload.platform_role,
+            memberships=[
+                {
+                    "household_external_id": membership.household_external_id,
+                    "role": membership.role,
+                }
+                for membership in payload.memberships
+            ],
+        )
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
+
+    return _serialize_user_summary(user)
+
+
+@router.post("/users/{user_external_id}/send-password-reset", response_model=AdminActionResponse)
+def post_user_password_reset(
+    user_external_id: str,
+    current_user: User = Depends(require_platform_admin),
+    db: Session = Depends(get_db_session),
+):
+    try:
+        user = send_managed_user_password_reset(
+            db,
+            actor=current_user,
+            user_external_id=user_external_id,
+        )
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
+
+    return AdminActionResponse(message=f"Sent a password reset email to {user.email}.")
+
+
+@router.delete("/users/{user_external_id}", response_model=AdminActionResponse)
+def delete_user(
+    user_external_id: str,
+    payload: DeleteAdminUserRequest,
+    current_user: User = Depends(require_platform_admin),
+    db: Session = Depends(get_db_session),
+):
+    try:
+        delete_managed_user(
+            db,
+            actor=current_user,
+            user_external_id=user_external_id,
+            confirm_user_email=payload.confirm_user_email,
+        )
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
+
+    return AdminActionResponse(message="User deleted.")
 
 
 @router.get("/households", response_model=list[AdminHouseholdSummary])

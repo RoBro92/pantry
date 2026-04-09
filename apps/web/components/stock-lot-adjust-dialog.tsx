@@ -3,6 +3,7 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { putToApi } from "../lib/client-api";
+import { formatQuantityValue } from "../lib/quantity-format";
 import { ModalShell } from "./modal-shell";
 
 type StockLotAdjustDialogProps = {
@@ -31,7 +32,7 @@ export function StockLotAdjustDialog({
   onClose,
 }: StockLotAdjustDialogProps) {
   const router = useRouter();
-  const [nextQuantity, setNextQuantity] = useState(quantity);
+  const [nextQuantity, setNextQuantity] = useState(formatQuantityValue(quantity));
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

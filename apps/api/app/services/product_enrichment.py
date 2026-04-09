@@ -79,6 +79,7 @@ def serialize_product_summary(product: Product) -> ProductSummary:
         default_unit=product.default_unit,
         aliases=[alias.name for alias in product.aliases],
         barcodes=[barcode.value for barcode in product.barcodes],
+        notes=product.notes,
         manual_ingredient_tags=list(product.manual_ingredient_tags or []),
         enrichment=serialize_product_enrichment(get_primary_enrichment(product)),
     )

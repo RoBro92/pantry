@@ -102,7 +102,7 @@ export async function getReleaseStatus(): Promise<ReleaseCheckResponse> {
 
 function withQuery(
   path: string,
-  params: Record<string, string | boolean | null | undefined>
+  params: Record<string, string | number | boolean | null | undefined>
 ): string {
   const search = new URLSearchParams();
 
@@ -124,6 +124,8 @@ export async function getPantryOverview(
     location_group_external_id?: string | null;
     location_external_id?: string | null;
     near_expiry_only?: boolean | null;
+    page?: number | null;
+    page_size?: number | null;
   } = {}
 ): Promise<PantryOverview> {
   return apiGet<PantryOverview>(
@@ -132,9 +134,14 @@ export async function getPantryOverview(
 }
 
 export async function getShoppingList(
-  householdExternalId: string
+  householdExternalId: string,
+  params: {
+    history_limit?: number | null;
+  } = {}
 ): Promise<ShoppingListSummary> {
-  return apiGet<ShoppingListSummary>(`/api/households/${householdExternalId}/shopping-list`);
+  return apiGet<ShoppingListSummary>(
+    withQuery(`/api/households/${householdExternalId}/shopping-list`, params)
+  );
 }
 
 export async function getNearExpiry(

@@ -18,6 +18,8 @@ from app.models.usage_counter import UsageCounter
 from app.services.ai_config import upsert_instance_provider_config
 from app.services.auth import create_household, create_membership, create_platform_admin, create_user
 from app.services.instance_settings import (
+    record_smtp_test_result,
+    upsert_password_reset_email_template,
     upsert_public_base_url,
     upsert_smtp_settings,
 )
@@ -283,6 +285,30 @@ def test_platform_admin_smtp_validation_requires_reset_link_placeholder(client, 
     assert "{{reset_link}}" in response.json()["detail"]
 
 
+def test_platform_admin_can_toggle_smtp_template_enabled_state(client, db_session):
+    create_platform_admin(
+        db_session,
+        email="smtp-toggle@example.com",
+        password=PASSWORD,
+        display_name="SMTP Toggle Admin",
+    )
+    login(client, email="smtp-toggle@example.com")
+
+    disabled = client.post(
+        "/api/platform-admin/smtp/templates/password_reset/toggle",
+        json={"is_enabled": False},
+    )
+    assert disabled.status_code == 200
+    assert disabled.json()["templates"][0]["is_enabled"] is False
+
+    enabled = client.post(
+        "/api/platform-admin/smtp/templates/password_reset/toggle",
+        json={"is_enabled": True},
+    )
+    assert enabled.status_code == 200
+    assert enabled.json()["templates"][0]["is_enabled"] is True
+
+
 def test_platform_admin_can_create_users_households_and_memberships(client, db_session):
     admin = create_platform_admin(
         db_session,
@@ -328,6 +354,140 @@ def test_platform_admin_can_create_users_households_and_memberships(client, db_s
     assert households_response.status_code == 200
     household_payload = households_response.json()[0]
     assert household_payload["memberships"][0]["email"] == "managed-user@example.com"
+
+
+def test_platform_admin_can_update_users_and_send_reset_email(client, db_session, monkeypatch):
+    admin = create_platform_admin(
+        db_session,
+        email="management-admin@example.com",
+        password=PASSWORD,
+        display_name="Management Admin",
+    )
+    managed_user = create_user(
+        db_session,
+        email="managed-user@example.com",
+        password=PASSWORD,
+        display_name="Managed User",
+    )
+    household = create_household(db_session, name="Managed Household")
+    create_membership(db_session, user=managed_user, household=household, role_code="household_user")
+
+    upsert_smtp_settings(
+        db_session,
+        actor=admin,
+        host="smtp.example.com",
+        port=587,
+        username="mailer",
+        password="top-secret",
+        from_email="pantry@example.com",
+        from_name="Pantry",
+        security="starttls",
+        is_enabled=True,
+    )
+    upsert_password_reset_email_template(
+        db_session,
+        actor=admin,
+        is_enabled=True,
+        subject=None,
+        body_template=None,
+    )
+    record_smtp_test_result(db_session, actor=admin, status="passed", error=None)
+
+    sent_messages: list[str] = []
+    monkeypatch.setattr(
+        "app.services.password_resets.send_email",
+        lambda *args, **kwargs: sent_messages.append(kwargs["to_email"]),
+    )
+
+    login(client, email="management-admin@example.com")
+
+    update_response = client.patch(
+        f"/api/platform-admin/users/{managed_user.external_id}",
+        json={
+          "email": "managed-user-renamed@example.com",
+          "display_name": "Managed User Renamed",
+          "platform_role": "platform_admin",
+          "memberships": [
+              {
+                  "household_external_id": household.external_id,
+                  "role": "household_admin",
+              }
+          ],
+        },
+    )
+    assert update_response.status_code == 200
+    payload = update_response.json()
+    assert payload["email"] == "managed-user-renamed@example.com"
+    assert payload["platform_role"] == "platform_admin"
+    assert payload["memberships"][0]["role"] == "household_admin"
+
+    reset_response = client.post(
+        f"/api/platform-admin/users/{managed_user.external_id}/send-password-reset",
+        json={},
+    )
+    assert reset_response.status_code == 200
+    assert sent_messages == ["managed-user-renamed@example.com"]
+
+
+def test_platform_admin_can_delete_managed_user_with_confirmation(client, db_session):
+    create_platform_admin(
+        db_session,
+        email="delete-admin@example.com",
+        password=PASSWORD,
+        display_name="Delete Admin",
+    )
+    managed_user = create_user(
+        db_session,
+        email="delete-me@example.com",
+        password=PASSWORD,
+        display_name="Delete Me",
+    )
+    household = create_household(db_session, name="Delete Household")
+    create_membership(db_session, user=managed_user, household=household, role_code="household_user")
+    db_session.commit()
+
+    login(client, email="delete-admin@example.com")
+
+    response = client.request(
+        "DELETE",
+        f"/api/platform-admin/users/{managed_user.external_id}",
+        json={"confirm_user_email": "delete-me@example.com"},
+    )
+    assert response.status_code == 200
+    assert response.json()["message"] == "User deleted."
+
+    managed_user_id = managed_user.id
+    db_session.expire_all()
+    assert db_session.scalar(select(User).where(User.id == managed_user_id)) is None
+    assert db_session.scalar(select(Membership).where(Membership.user_id == managed_user_id)) is None
+
+
+def test_platform_admin_delete_user_surfaces_last_household_admin_guard(client, db_session):
+    create_platform_admin(
+        db_session,
+        email="delete-guard-admin@example.com",
+        password=PASSWORD,
+        display_name="Delete Guard Admin",
+    )
+    guarded_user = create_user(
+        db_session,
+        email="last-household-admin@example.com",
+        password=PASSWORD,
+        display_name="Guarded Admin",
+    )
+    household = create_household(db_session, name="Guarded Delete Household")
+    create_membership(db_session, user=guarded_user, household=household, role_code="household_admin")
+    db_session.commit()
+
+    login(client, email="delete-guard-admin@example.com")
+
+    response = client.request(
+        "DELETE",
+        f"/api/platform-admin/users/{guarded_user.external_id}",
+        json={"confirm_user_email": "last-household-admin@example.com"},
+    )
+    assert response.status_code == 400
+    assert "must keep at least one household admin" in response.json()["detail"]
 
 
 def test_platform_admin_can_rename_households(client, db_session):

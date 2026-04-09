@@ -22,6 +22,7 @@ class Product(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     normalized_name: Mapped[str] = mapped_column(String(255), nullable=False)
     default_unit: Mapped[str] = mapped_column(String(32), nullable=False)
+    notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     manual_ingredient_tags: Mapped[list[str] | None] = mapped_column(JSON(), nullable=True)
 
     household = relationship("Household", back_populates="products")
