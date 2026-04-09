@@ -258,6 +258,47 @@ def test_pantry_overview_aggregates_and_supports_search_and_filters(client, db_s
     assert near_expiry_payload["lots"][0]["location_name"] == "Top Shelf"
 
 
+def test_pantry_overview_supports_product_pagination_metadata(client, db_session):
+    _, household = create_household_with_role(
+        db_session,
+        email="pagination@example.com",
+        household_name="Pagination Household",
+        role_code=HOUSEHOLD_ADMIN_ROLE,
+    )
+    login(client, email="pagination@example.com")
+
+    room = create_location_group(client, household.external_id, "Kitchen")
+    shelf = create_location(client, household.external_id, room["external_id"], "Shelf")
+    for index in range(12):
+        product = create_product(
+            client,
+            household.external_id,
+            name=f"Product {index:02d}",
+            default_unit="count",
+            aliases=[],
+            barcodes=[],
+        )
+        add_stock_lot(
+            client,
+            household.external_id,
+            product_external_id=product["external_id"],
+            location_external_id=shelf["external_id"],
+            quantity="1.000",
+        )
+
+    response = client.get(
+        f"/api/households/{household.external_id}/pantry/overview",
+        params={"page": 2, "page_size": 10},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["page"] == 2
+    assert payload["page_size"] == 10
+    assert payload["page_count"] == 2
+    assert payload["matched_product_count"] == 12
+    assert len(payload["products"]) == 2
+
+
 def test_product_creation_rejects_alias_name_collision(client, db_session):
     _, household = create_household_with_role(
         db_session,
@@ -889,6 +930,86 @@ def test_stock_lot_update_and_buy_more_adds_shopping_item(client, db_session):
     assert shopping_payload["active_list"]["items"][0]["quantity"] == "3.000"
 
 
+def test_stock_lots_merge_only_when_location_unit_and_expiry_match(client, db_session):
+    _, household = create_household_with_role(
+        db_session,
+        email="merge@example.com",
+        household_name="Merge Household",
+        role_code=HOUSEHOLD_ADMIN_ROLE,
+    )
+    login(client, email="merge@example.com")
+
+    room = create_location_group(client, household.external_id, "Kitchen")
+    shelf = create_location(client, household.external_id, room["external_id"], "Shelf")
+    fridge = create_location(client, household.external_id, room["external_id"], "Fridge")
+    product = create_product(
+        client,
+        household.external_id,
+        name="Milk",
+        default_unit="bottle",
+        aliases=[],
+        barcodes=[],
+    )
+
+    first = add_stock_lot(
+        client,
+        household.external_id,
+        product_external_id=product["external_id"],
+        location_external_id=shelf["external_id"],
+        quantity="1.000",
+        expires_on="2026-05-01",
+    )
+    merged_same_expiry = add_stock_lot(
+        client,
+        household.external_id,
+        product_external_id=product["external_id"],
+        location_external_id=shelf["external_id"],
+        quantity="2.000",
+        expires_on="2026-05-01",
+    )
+    merged_without_expiry = add_stock_lot(
+        client,
+        household.external_id,
+        product_external_id=product["external_id"],
+        location_external_id=fridge["external_id"],
+        quantity="1.000",
+    )
+    add_stock_lot(
+        client,
+        household.external_id,
+        product_external_id=product["external_id"],
+        location_external_id=fridge["external_id"],
+        quantity="3.000",
+    )
+    add_stock_lot(
+        client,
+        household.external_id,
+        product_external_id=product["external_id"],
+        location_external_id=shelf["external_id"],
+        quantity="1.000",
+        expires_on="2026-05-10",
+    )
+
+    overview = client.get(f"/api/households/{household.external_id}/pantry/overview")
+    assert overview.status_code == 200
+    product_payload = overview.json()["products"][0]
+    assert product_payload["lot_count"] == 3
+    assert {lot["expires_on"] for lot in product_payload["stock_lots"] if lot["location_name"] == "Shelf"} == {
+        "2026-05-01",
+        "2026-05-10",
+    }
+    same_expiry_lot = next(
+        lot
+        for lot in product_payload["stock_lots"]
+        if lot["location_name"] == "Shelf" and lot["expires_on"] == "2026-05-01"
+    )
+    no_expiry_lot = next(
+        lot for lot in product_payload["stock_lots"] if lot["location_name"] == "Fridge"
+    )
+    assert same_expiry_lot["quantity"] == "3.000"
+    assert no_expiry_lot["quantity"] == "4.000"
+
+
 def test_shopping_list_pending_merge_return_and_finalize_lifecycle(client, db_session):
     _, household = create_household_with_role(
         db_session,
@@ -905,7 +1026,7 @@ def test_shopping_list_pending_merge_return_and_finalize_lifecycle(client, db_se
     assert first_item.status_code == 201
     first_export = client.post(f"/api/households/{household.external_id}/shopping-list/export")
     assert first_export.status_code == 200
-    assert "[ ] Milk (1.000 bottle)" in first_export.text
+    assert "[ ] Milk (1 bottle)" in first_export.text
 
     second_item = client.post(
         f"/api/households/{household.external_id}/shopping-list/items",
@@ -945,6 +1066,31 @@ def test_shopping_list_pending_merge_return_and_finalize_lifecycle(client, db_se
 
     milk_item = next(item for item in pending_list["items"] if item["label"] == "Milk")
     bread_item = next(item for item in pending_list["items"] if item["label"] == "Bread")
+    room = create_location_group(client, household.external_id, "Kitchen")
+    shelf = create_location(client, household.external_id, room["external_id"], "Shelf")
+    milk_product = create_product(
+        client,
+        household.external_id,
+        name="Milk",
+        default_unit="bottle",
+        aliases=[],
+        barcodes=[],
+    )
+    add_stock_lot(
+        client,
+        household.external_id,
+        product_external_id=milk_product["external_id"],
+        location_external_id=shelf["external_id"],
+        quantity="1.000",
+    )
+    attached_milk = client.post(
+        f"/api/households/{household.external_id}/shopping-list/items/{milk_item['external_id']}/attach-product",
+        json={"product_external_id": milk_product["external_id"]},
+    )
+    assert attached_milk.status_code == 200
+    pending_list = attached_milk.json()["pending_lists"][0]
+    milk_item = next(item for item in pending_list["items"] if item["label"] == "Milk")
+    bread_item = next(item for item in pending_list["items"] if item["label"] == "Bread")
 
     mark_purchased = client.put(
         f"/api/households/{household.external_id}/shopping-list/items/{milk_item['external_id']}",
@@ -966,6 +1112,179 @@ def test_shopping_list_pending_merge_return_and_finalize_lifecycle(client, db_se
     assert len(finalized_payload["pending_lists"]) == 0
     assert finalized_payload["active_list"]["items"][0]["label"] == "Bread"
     assert finalized_payload["history_lists"][0]["lifecycle_state"] == "reconciled"
+
+
+def test_active_shopping_list_item_can_be_removed(client, db_session):
+    _, household = create_household_with_role(
+        db_session,
+        email="shopping-remove@example.com",
+        household_name="Shopping Remove Household",
+        role_code=HOUSEHOLD_ADMIN_ROLE,
+    )
+    login(client, email="shopping-remove@example.com")
+
+    added = client.post(
+        f"/api/households/{household.external_id}/shopping-list/items",
+        json={"label": "Milk", "quantity": "1.000", "unit": "bottle", "source_type": "manual"},
+    )
+    assert added.status_code == 201
+    item_external_id = added.json()["active_list"]["items"][0]["external_id"]
+
+    removed = client.delete(
+        f"/api/households/{household.external_id}/shopping-list/items/{item_external_id}"
+    )
+    assert removed.status_code == 200
+    assert removed.json()["active_list"]["items"] == []
+
+
+def test_reconciliation_writes_purchased_stock_back_into_pantry_and_reuses_location(client, db_session):
+    _, household = create_household_with_role(
+        db_session,
+        email="shopping-writeback@example.com",
+        household_name="Shopping Writeback Household",
+        role_code=HOUSEHOLD_ADMIN_ROLE,
+    )
+    login(client, email="shopping-writeback@example.com")
+
+    room = create_location_group(client, household.external_id, "Kitchen")
+    shelf = create_location(client, household.external_id, room["external_id"], "Shelf")
+    product = create_product(
+        client,
+        household.external_id,
+        name="Juice",
+        default_unit="bottle",
+        aliases=[],
+        barcodes=[],
+    )
+    add_stock_lot(
+        client,
+        household.external_id,
+        product_external_id=product["external_id"],
+        location_external_id=shelf["external_id"],
+        quantity="1.000",
+    )
+
+    added = client.post(
+        f"/api/households/{household.external_id}/shopping-list/items",
+        json={
+            "product_external_id": product["external_id"],
+            "quantity": "5.000",
+            "unit": "bottle",
+            "source_type": "pantry_product",
+        },
+    )
+    assert added.status_code == 201
+    export_response = client.post(f"/api/households/{household.external_id}/shopping-list/export")
+    assert export_response.status_code == 200
+    pending_item = client.get(f"/api/households/{household.external_id}/shopping-list").json()["pending_lists"][0]["items"][0]
+
+    saved = client.put(
+        f"/api/households/{household.external_id}/shopping-list/items/{pending_item['external_id']}",
+        json={"status": "purchased", "quantity": "5.000", "unit": "bottle"},
+    )
+    assert saved.status_code == 200
+
+    finalized = client.post(
+        f"/api/households/{household.external_id}/shopping-list/pending/{saved.json()['pending_lists'][0]['external_id']}/finalize",
+        json={"return_shortfalls_to_active": False},
+    )
+    assert finalized.status_code == 200
+
+    overview = client.get(f"/api/households/{household.external_id}/pantry/overview")
+    product_payload = overview.json()["products"][0]
+    assert product_payload["stock_status"] == "in_stock"
+    assert product_payload["total_quantity"] == "6.000"
+    assert product_payload["stock_lots"][0]["location_name"] == "Shelf"
+
+
+def test_reconciliation_can_return_shortfall_to_active_list(client, db_session):
+    _, household = create_household_with_role(
+        db_session,
+        email="shopping-shortfall@example.com",
+        household_name="Shopping Shortfall Household",
+        role_code=HOUSEHOLD_ADMIN_ROLE,
+    )
+    login(client, email="shopping-shortfall@example.com")
+
+    room = create_location_group(client, household.external_id, "Kitchen")
+    shelf = create_location(client, household.external_id, room["external_id"], "Shelf")
+    product = create_product(
+        client,
+        household.external_id,
+        name="Tea bags",
+        default_unit="box",
+        aliases=[],
+        barcodes=[],
+    )
+    add_stock_lot(
+        client,
+        household.external_id,
+        product_external_id=product["external_id"],
+        location_external_id=shelf["external_id"],
+        quantity="1.000",
+    )
+
+    added = client.post(
+        f"/api/households/{household.external_id}/shopping-list/items",
+        json={
+            "product_external_id": product["external_id"],
+            "quantity": "5.000",
+            "unit": "box",
+            "source_type": "pantry_product",
+        },
+    )
+    assert added.status_code == 201
+    client.post(f"/api/households/{household.external_id}/shopping-list/export")
+    pending_snapshot = client.get(f"/api/households/{household.external_id}/shopping-list").json()
+    pending_list = pending_snapshot["pending_lists"][0]
+    pending_item = pending_list["items"][0]
+
+    client.put(
+        f"/api/households/{household.external_id}/shopping-list/items/{pending_item['external_id']}",
+        json={"status": "purchased", "quantity": "3.000", "unit": "box"},
+    )
+
+    finalized = client.post(
+        f"/api/households/{household.external_id}/shopping-list/pending/{pending_list['external_id']}/finalize",
+        json={"return_shortfalls_to_active": True},
+    )
+    assert finalized.status_code == 200
+    active_items = finalized.json()["active_list"]["items"]
+    assert len(active_items) == 1
+    assert active_items[0]["quantity"] == "2.000"
+    assert active_items[0]["requested_quantity"] == "2.000"
+
+
+def test_reconciliation_blocks_purchased_new_items_without_attached_product(client, db_session):
+    _, household = create_household_with_role(
+        db_session,
+        email="shopping-new-product@example.com",
+        household_name="Shopping New Product Household",
+        role_code=HOUSEHOLD_ADMIN_ROLE,
+    )
+    login(client, email="shopping-new-product@example.com")
+
+    added = client.post(
+        f"/api/households/{household.external_id}/shopping-list/items",
+        json={"label": "Tomato soup", "quantity": "2.000", "unit": "can", "source_type": "manual"},
+    )
+    assert added.status_code == 201
+    client.post(f"/api/households/{household.external_id}/shopping-list/export")
+    pending_snapshot = client.get(f"/api/households/{household.external_id}/shopping-list").json()
+    pending_list = pending_snapshot["pending_lists"][0]
+    pending_item = pending_list["items"][0]
+
+    client.put(
+        f"/api/households/{household.external_id}/shopping-list/items/{pending_item['external_id']}",
+        json={"status": "purchased", "quantity": "2.000", "unit": "can"},
+    )
+
+    finalized = client.post(
+        f"/api/households/{household.external_id}/shopping-list/pending/{pending_list['external_id']}/finalize",
+        json={"return_shortfalls_to_active": False},
+    )
+    assert finalized.status_code == 400
+    assert "Create a Pantry product for Tomato soup" in finalized.json()["detail"]
 
 
 def test_shopping_list_item_can_attach_product_after_manual_trip_entry(client, db_session):

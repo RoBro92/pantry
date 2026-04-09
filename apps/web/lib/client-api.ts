@@ -40,14 +40,18 @@ export async function readApiErrorMessage(
   return formatApiErrorMessage(body, fallback);
 }
 
-async function sendToApi<T>(method: "PATCH" | "POST" | "PUT", path: string, payload: unknown): Promise<T> {
+async function sendToApi<T>(
+  method: "DELETE" | "PATCH" | "POST" | "PUT",
+  path: string,
+  payload?: unknown
+): Promise<T> {
   const response = await fetch(`${appConfig.apiBaseUrl}${path}`, {
     method,
     credentials: "include",
     headers: {
       "content-type": "application/json"
     },
-    body: JSON.stringify(payload)
+    body: payload === undefined ? undefined : JSON.stringify(payload)
   });
 
   if (!response.ok) {
@@ -67,6 +71,10 @@ export async function putToApi<T>(path: string, payload: unknown): Promise<T> {
 
 export async function patchToApi<T>(path: string, payload: unknown): Promise<T> {
   return sendToApi("PATCH", path, payload);
+}
+
+export async function deleteToApi<T>(path: string): Promise<T> {
+  return sendToApi("DELETE", path);
 }
 
 export async function postFormToApi<T>(path: string, payload: FormData): Promise<T> {

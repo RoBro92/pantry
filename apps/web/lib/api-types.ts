@@ -32,6 +32,12 @@ export type AdminUserSummary = {
   is_active: boolean;
   platform_role: string | null;
   membership_count: number;
+  memberships: Array<{
+    household_external_id: string;
+    household_name: string;
+    role: string;
+    is_active: boolean;
+  }>;
 };
 
 export type AdminHouseholdMemberSummary = {
@@ -649,6 +655,10 @@ export type PantryOverview = {
   household_name: string;
   effective_role: string;
   can_administer: boolean;
+  page: number;
+  page_size: number;
+  page_count: number;
+  matched_product_count: number;
   filters: {
     q: string | null;
     location_group_external_id: string | null;
@@ -712,8 +722,13 @@ export type ShoppingListItemSummary = {
   product_external_id: string | null;
   product_name: string | null;
   quantity: string | null;
+  requested_quantity: string | null;
   unit: string | null;
+  requested_unit: string | null;
   note: string | null;
+  pantry_location_external_id: string | null;
+  pantry_location_name: string | null;
+  pantry_location_group_name: string | null;
   source_type: string;
   status: string;
   created_at: string;

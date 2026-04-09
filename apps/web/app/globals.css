@@ -1482,6 +1482,24 @@ code {
   padding-right: 1.1rem;
 }
 
+.pantry-inventory-table tbody + tbody tr:first-child td {
+  border-top-color: var(--border-strong);
+}
+
+.inventory-pagination {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--border);
+}
+
+.inventory-page-size {
+  min-width: 110px;
+}
+
 .enrichment-preview-list,
 .enrichment-card {
   display: grid;
@@ -1545,11 +1563,21 @@ code {
   gap: 1rem;
 }
 
+.pantry-lot-row-summary {
+  display: grid;
+  gap: 0.85rem;
+  min-width: 0;
+}
+
 .pantry-lot-row-heading {
   display: flex;
   flex-wrap: wrap;
   gap: 0.6rem;
   align-items: baseline;
+}
+
+.pantry-lot-inline-grid {
+  grid-template-columns: repeat(2, minmax(110px, max-content));
 }
 
 .pantry-lot-card-summary {
@@ -1591,6 +1619,10 @@ code {
   align-items: center;
 }
 
+.lot-actions-row .compact-button {
+  min-width: 0;
+}
+
 .inline-form {
   display: flex;
   flex-wrap: wrap;
@@ -1616,6 +1648,21 @@ code {
   padding: 0;
   display: grid;
   gap: 0.75rem;
+}
+
+.activity-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.85rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.9rem;
+}
+
+.activity-feed-compact {
+  max-height: 24rem;
+  overflow: auto;
+  padding-right: 0.2rem;
 }
 
 .activity-feed-item {
@@ -1649,6 +1696,12 @@ code {
 .activity-feed-copy span {
   color: var(--muted);
   font-size: 0.92rem;
+}
+
+.activity-history-scroll {
+  max-height: 70vh;
+  overflow: auto;
+  padding-right: 0.2rem;
 }
 
 .scanner-frame {
@@ -1688,6 +1741,14 @@ code {
   gap: 0.85rem;
 }
 
+.shopping-item-list-dense {
+  gap: 0.7rem;
+}
+
+.shopping-item-row {
+  padding: 0.95rem 1rem;
+}
+
 .shopping-item-card.is-muted {
   opacity: 0.82;
 }
@@ -1697,9 +1758,21 @@ code {
   background: rgba(173, 91, 31, 0.08);
 }
 
+.shopping-item-row-main,
+.shopping-row-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.85rem;
+}
+
 .shopping-reconcile-list {
   display: grid;
   gap: 0.85rem;
+}
+
+.shopping-reconcile-list-compact {
+  gap: 0.7rem;
 }
 
 .shopping-reconcile-row {
@@ -1713,6 +1786,16 @@ code {
   background: rgba(255, 255, 255, 0.5);
 }
 
+.shopping-reconcile-row-compact {
+  grid-template-columns:
+    minmax(220px, 1.4fr)
+    repeat(3, minmax(110px, 0.55fr))
+    minmax(180px, 0.9fr)
+    minmax(180px, 1fr)
+    auto;
+  padding: 0.9rem 1rem;
+}
+
 .shopping-reconcile-note {
   min-width: 0;
 }
@@ -1721,6 +1804,21 @@ code {
   display: flex;
   flex-wrap: wrap;
   gap: 0.65rem;
+}
+
+.shopping-add-form-compact {
+  grid-template-columns: minmax(220px, 1.3fr) repeat(2, minmax(120px, 0.45fr)) minmax(180px, 1fr) auto;
+}
+
+.admin-user-membership-grid {
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.admin-users-table th:last-child,
+.admin-users-table td:last-child {
+  width: 220px;
 }
 
 @media (max-width: 980px) {
@@ -1736,6 +1834,7 @@ code {
 
   .pantry-filter-bar,
   .shopping-add-form,
+  .shopping-add-form-compact,
   .pantry-support-grid,
   .inventory-detail-grid,
   .setup-review-layout,
@@ -1847,6 +1946,8 @@ code {
   .pantry-product-card-header,
   .pantry-lot-card-summary,
   .pantry-lot-row-main,
+  .shopping-item-row-main,
+  .shopping-row-heading,
   .activity-feed-item,
   .lot-actions-row,
   .inline-form,
