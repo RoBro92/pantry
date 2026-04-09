@@ -24,6 +24,7 @@ class InstanceSetting(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     encrypted_smtp_password: Mapped[str | None] = mapped_column(String(4096), nullable=True)
     smtp_from_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
     smtp_from_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    smtp_test_recipient_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
     smtp_security: Mapped[str | None] = mapped_column(String(16), nullable=True)
     smtp_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     smtp_last_test_status: Mapped[str] = mapped_column(String(32), nullable=False, default="never")

@@ -1,12 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { AdminHouseholdSummary, AdminUserSummary } from "../lib/api-types";
-import { postToApi } from "../lib/client-api";
+import type {
+  AdminHouseholdSummary,
+  AdminUserSummary,
+  HouseholdBackupRestoreResponse,
+  StagedBackupResponse,
+} from "../lib/api-types";
+import { patchToApi, postFormToApi, postToApi } from "../lib/client-api";
 import { getHouseholdRoleLabel } from "../lib/role-labels";
 import { ModalShell } from "./modal-shell";
+
+const HOUSEHOLD_RESTORE_CONFIRMATION_PHRASE = "RESTORE PANTRY HOUSEHOLD";
 
 type AdminHouseholdManagementPanelProps = {
   households: AdminHouseholdSummary[];
@@ -73,6 +80,16 @@ function isMembershipGuardError(error: unknown) {
   return error instanceof Error && error.message === "Each household must keep at least one household admin.";
 }
 
+function formatBytes(value: number) {
+  if (value < 1024) {
+    return `${value} B`;
+  }
+  if (value < 1024 * 1024) {
+    return `${(value / 1024).toFixed(1)} KB`;
+  }
+  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 export function AdminHouseholdManagementPanel({
   households,
   users,
@@ -81,6 +98,13 @@ export function AdminHouseholdManagementPanel({
   const [householdError, setHouseholdError] = useState<string | null>(null);
   const [householdSuccess, setHouseholdSuccess] = useState<string | null>(null);
   const [householdPending, setHouseholdPending] = useState(false);
+  const [renamePending, setRenamePending] = useState(false);
+  const [renameDraft, setRenameDraft] = useState("");
+  const [restoreUploadPending, setRestoreUploadPending] = useState(false);
+  const [restorePending, setRestorePending] = useState(false);
+  const [stagedRestore, setStagedRestore] = useState<StagedBackupResponse | null>(null);
+  const [restoreTargetName, setRestoreTargetName] = useState("");
+  const [restoreConfirmation, setRestoreConfirmation] = useState("");
   const [membershipError, setMembershipError] = useState<string | null>(null);
   const [membershipSuccess, setMembershipSuccess] = useState<string | null>(null);
   const [membershipPending, setMembershipPending] = useState(false);
@@ -103,13 +127,19 @@ export function AdminHouseholdManagementPanel({
   const isLastHousehold = households.length === 1;
   const adminCount = countHouseholdAdmins(selectedHouseholdSummary);
   const availableUsers = useMemo(() => {
-    const assignedUserIds = new Set(selectedHouseholdSummary?.memberships.map((membership) => membership.user_external_id) ?? []);
+    const assignedUserIds = new Set(
+      selectedHouseholdSummary?.memberships.map((membership) => membership.user_external_id) ?? [],
+    );
     return users.filter((user) => !assignedUserIds.has(user.external_id));
   }, [selectedHouseholdSummary, users]);
   const resolvedSelectedUser = availableUsers.some((user) => user.external_id === selectedUser)
     ? selectedUser
     : (availableUsers[0]?.external_id ?? "");
   const isCreatingMembership = membershipPending && membershipActionPendingId === "create";
+
+  useEffect(() => {
+    setRenameDraft(selectedHouseholdSummary?.name ?? "");
+  }, [selectedHouseholdSummary?.external_id, selectedHouseholdSummary?.name]);
 
   function getMembershipDisplayLabel(membership: AdminHouseholdSummary["memberships"][number]) {
     return membership.display_name ?? membership.email;
@@ -163,12 +193,95 @@ export function AdminHouseholdManagementPanel({
       setSelectedHousehold(created.external_id);
       form.reset();
       router.refresh();
-      setHouseholdPending(false);
     } catch (submissionError) {
       setHouseholdError(
         submissionError instanceof Error ? submissionError.message : "Household creation failed.",
       );
+    } finally {
       setHouseholdPending(false);
+    }
+  }
+
+  async function handleRenameHousehold(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedHouseholdSummary) {
+      return;
+    }
+
+    setHouseholdError(null);
+    setHouseholdSuccess(null);
+    setRenamePending(true);
+    try {
+      const updated = await patchToApi<AdminHouseholdSummary>(
+        `/api/platform-admin/households/${selectedHouseholdSummary.external_id}`,
+        { name: renameDraft },
+      );
+      setHouseholdSuccess(`Renamed household to ${updated.name}.`);
+      setSelectedHousehold(updated.external_id);
+      setRenameDraft(updated.name);
+      router.refresh();
+    } catch (requestError) {
+      setHouseholdError(
+        requestError instanceof Error ? requestError.message : "Household rename failed.",
+      );
+    } finally {
+      setRenamePending(false);
+    }
+  }
+
+  async function handleRestoreUpload(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setHouseholdError(null);
+    setHouseholdSuccess(null);
+    setRestoreUploadPending(true);
+
+    try {
+      const staged = await postFormToApi<StagedBackupResponse>(
+        "/api/platform-admin/households/restore-upload",
+        new FormData(event.currentTarget),
+      );
+      setStagedRestore(staged);
+      setRestoreTargetName(staged.bundle.household_name ?? "");
+      setRestoreConfirmation("");
+      setHouseholdSuccess("Household backup uploaded and staged in quarantine.");
+    } catch (requestError) {
+      setHouseholdError(
+        requestError instanceof Error ? requestError.message : "Household restore upload failed.",
+      );
+    } finally {
+      setRestoreUploadPending(false);
+    }
+  }
+
+  async function handleRestoreHousehold() {
+    if (!stagedRestore) {
+      return;
+    }
+
+    setHouseholdError(null);
+    setHouseholdSuccess(null);
+    setRestorePending(true);
+    try {
+      const restored = await postToApi<HouseholdBackupRestoreResponse>(
+        "/api/platform-admin/households/restore",
+        {
+          stage_id: stagedRestore.stage_id,
+          target_household_name: restoreTargetName,
+          confirmation_phrase: restoreConfirmation,
+        },
+      );
+      setHouseholdSuccess(restored.message);
+      setSelectedHousehold(restored.bundle.household_external_id ?? "");
+      setStagedRestore(null);
+      setRestoreTargetName("");
+      setRestoreConfirmation("");
+      router.refresh();
+    } catch (requestError) {
+      setHouseholdError(
+        requestError instanceof Error ? requestError.message : "Household restore failed.",
+      );
+    } finally {
+      setRestorePending(false);
     }
   }
 
@@ -214,10 +327,7 @@ export function AdminHouseholdManagementPanel({
     return membershipRoleDrafts[membership.membership_external_id] ?? membership.role;
   }
 
-  function handleMembershipRoleDraft(
-    membershipExternalId: string,
-    role: string,
-  ) {
+  function handleMembershipRoleDraft(membershipExternalId: string, role: string) {
     setMembershipRoleDrafts((current) => ({
       ...current,
       [membershipExternalId]: role,
@@ -281,7 +391,9 @@ export function AdminHouseholdManagementPanel({
     }
   }
 
-  async function handleSaveMembershipRole(membership: AdminHouseholdSummary["memberships"][number]) {
+  async function handleSaveMembershipRole(
+    membership: AdminHouseholdSummary["memberships"][number],
+  ) {
     if (!selectedHouseholdSummary) {
       return;
     }
@@ -371,40 +483,112 @@ export function AdminHouseholdManagementPanel({
   return (
     <div className="stack">
       <section className="household-admin-console">
-        <form
-          className="panel household-create-panel"
-          onSubmit={handleCreateHousehold}
-          data-testid="admin-create-household-form"
-        >
+        <article className="panel household-create-panel">
           <p className="eyebrow">Households</p>
-          <h2>Create household</h2>
+          <h2>Create or restore household</h2>
           <p className="section-copy">
-            Add a household, then manage members from the shared workspace beside it.
+            Start a brand new household or restore a Pantry household backup into a brand new
+            household. Restore never merges into an existing household.
           </p>
-          <div className="household-create-form">
-            <label className="field">
-              <span>Household name</span>
-              <input name="name" placeholder="Household" required />
-            </label>
-            <button type="submit" className="primary-button" disabled={householdPending}>
-              {householdPending ? "Creating..." : "Create household"}
-            </button>
+          <div className="content-grid">
+            <form
+              className="stack"
+              onSubmit={handleCreateHousehold}
+              data-testid="admin-create-household-form"
+            >
+              <div className="stack compact-stack">
+                <h3>Create new household</h3>
+                <p className="helper-text">
+                  Use this for a clean household with no restored pantry history.
+                </p>
+              </div>
+              <label className="field">
+                <span>Household name</span>
+                <input name="name" placeholder="Household" required />
+              </label>
+              <button type="submit" className="primary-button" disabled={householdPending}>
+                {householdPending ? "Creating..." : "Create household"}
+              </button>
+            </form>
+
+            <form className="stack" onSubmit={handleRestoreUpload}>
+              <div className="stack compact-stack">
+                <h3>Restore from backup</h3>
+                <p className="helper-text">
+                  Upload a Pantry household backup JSON file. Pantry validates it safely, stages it
+                  in quarantine, and restores it into a new household only.
+                </p>
+              </div>
+              <label className="field">
+                <span>Pantry household backup</span>
+                <input type="file" name="file" accept=".json,application/json" required />
+              </label>
+              <button type="submit" className="ghost-button" disabled={restoreUploadPending}>
+                {restoreUploadPending ? "Uploading..." : "Upload and validate restore"}
+              </button>
+            </form>
           </div>
+
+          {stagedRestore ? (
+            <div className="stack">
+              <div className="warning-callout">
+                <strong>Staged restore bundle</strong>
+                <p>
+                  {stagedRestore.original_filename} · {formatBytes(stagedRestore.size_bytes)} ·
+                  schema {stagedRestore.bundle.schema_revision ?? "unknown"}
+                </p>
+              </div>
+              <label className="field">
+                <span>Restore target household name</span>
+                <input
+                  value={restoreTargetName}
+                  onChange={(event) => setRestoreTargetName(event.target.value)}
+                  placeholder={stagedRestore.bundle.household_name ?? "Restored household"}
+                />
+              </label>
+              <label className="field">
+                <span>Type {HOUSEHOLD_RESTORE_CONFIRMATION_PHRASE} to continue</span>
+                <input
+                  value={restoreConfirmation}
+                  onChange={(event) => setRestoreConfirmation(event.target.value)}
+                  placeholder={HOUSEHOLD_RESTORE_CONFIRMATION_PHRASE}
+                />
+              </label>
+              <ul className="callout-list">
+                {stagedRestore.warnings.map((warning) => (
+                  <li key={warning}>{warning}</li>
+                ))}
+              </ul>
+              <button
+                type="button"
+                className="primary-button"
+                onClick={() => void handleRestoreHousehold()}
+                disabled={
+                  restorePending ||
+                  !stagedRestore.supported_for_restore ||
+                  restoreConfirmation !== HOUSEHOLD_RESTORE_CONFIRMATION_PHRASE ||
+                  !restoreTargetName.trim()
+                }
+              >
+                {restorePending ? "Restoring..." : "Restore into new household"}
+              </button>
+            </div>
+          ) : null}
+
           <div className="tag-row">
             <span className="pill">{households.length} total households</span>
           </div>
           {householdError ? <p className="error-text">{householdError}</p> : null}
           {householdSuccess ? <p className="status-note">{householdSuccess}</p> : null}
-        </form>
+        </article>
 
         <article className="panel household-membership-panel">
           <div className="setup-card-toolbar household-management-toolbar">
             <div className="stack compact-stack">
               <p className="eyebrow">Memberships</p>
-              <h2>Manage memberships</h2>
+              <h2>Manage household</h2>
               <p className="section-copy">
-                Choose a household to review members and add new assignments without leaving the
-                page.
+                Choose a household to rename it, review members, and manage access from one place.
               </p>
             </div>
             <HouseholdSelectField
@@ -417,7 +601,7 @@ export function AdminHouseholdManagementPanel({
           </div>
 
           {households.length === 0 ? (
-            <p className="section-copy">Create a household before managing memberships.</p>
+            <p className="section-copy">Create or restore a household before managing it.</p>
           ) : selectedHouseholdSummary ? (
             <div className="stack">
               <div className="household-summary-grid">
@@ -443,150 +627,160 @@ export function AdminHouseholdManagementPanel({
                 </div>
               </div>
 
-              <div className="household-management-grid">
-                <div className="panel embedded-panel household-members-list-panel">
-                  <div className="stack compact-stack">
-                    <h3>Current members</h3>
-                    <p className="section-copy">
-                      Review everyone in {selectedHouseholdSummary.name} and remove access when
-                      needed.
-                    </p>
-                  </div>
+              <form className="stack" onSubmit={handleRenameHousehold}>
+                <div className="stack compact-stack">
+                  <h3>Rename household</h3>
+                  <p className="helper-text">
+                    Household restore can change the target name before import. This control handles
+                    renames after the household already exists.
+                  </p>
+                </div>
+                <div className="page-actions">
+                  <label className="field">
+                    <span>Name</span>
+                    <input
+                      value={renameDraft}
+                      onChange={(event) => setRenameDraft(event.target.value)}
+                      placeholder="Household name"
+                    />
+                  </label>
+                  <button
+                    type="submit"
+                    className="ghost-button"
+                    disabled={renamePending || renameDraft.trim() === selectedHouseholdSummary.name}
+                  >
+                    {renamePending ? "Saving..." : "Save name"}
+                  </button>
+                </div>
+              </form>
 
-                  {selectedHouseholdSummary.memberships.length === 0 ? (
-                    <p className="section-copy">No members are assigned yet.</p>
-                  ) : (
-                    <div className="household-members-list">
-                      {selectedHouseholdSummary.memberships.map((membership) => (
-                        <div
-                          key={membership.membership_external_id}
-                          className="household-member-row"
-                        >
-                          <div className="household-member-details">
-                            <strong>{membership.display_name ?? membership.email}</strong>
-                            <div className="helper-text">{membership.email}</div>
-                          </div>
-                          <div className="household-member-controls">
-                            <label className="field compact household-role-field">
-                              <span>Role</span>
-                              <select
-                                aria-label={`Role for ${getMembershipDisplayLabel(membership)}`}
-                                value={getMembershipRoleValue(membership)}
-                                onChange={(event) =>
-                                  handleMembershipRoleDraft(
-                                    membership.membership_external_id,
-                                    event.target.value,
-                                  )
-                                }
-                                disabled={membershipPending}
-                              >
-                                <option value="household_admin">
-                                  {getHouseholdRoleLabel("household_admin", { detailed: true })}
-                                </option>
-                                <option value="household_user">
-                                  {getHouseholdRoleLabel("household_user", { detailed: true })}
-                                </option>
-                              </select>
-                            </label>
-                            <button
-                              type="button"
-                              className="ghost-button"
-                              onClick={() => void handleSaveMembershipRole(membership)}
-                              disabled={
-                                membershipPending ||
-                                getMembershipRoleValue(membership) === membership.role
-                              }
-                            >
-                              {membershipPending &&
-                              membershipActionPendingId === membership.membership_external_id
-                                ? "Saving..."
-                                : "Save role"}
-                            </button>
-                            <button
-                              type="button"
-                              className="ghost-button"
-                              onClick={() => requestRemoveMembership(membership)}
-                              disabled={membershipPending}
-                            >
-                              Remove
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+              <div className="panel embedded-panel household-members-list-panel">
+                <div className="stack compact-stack">
+                  <h3>Members and access</h3>
+                  <p className="section-copy">
+                    Add memberships, update roles, and remove access without leaving this view.
+                  </p>
                 </div>
 
-                <form
-                  className="panel embedded-panel household-membership-form-panel"
-                  onSubmit={handleAssignMembership}
-                  data-testid="admin-manage-memberships-form"
-                >
-                  <div className="stack compact-stack">
-                    <h3>Add someone</h3>
-                    <p className="section-copy">
-                      Assign access to this household and choose the role they should start with.
-                    </p>
-                  </div>
-
-                  {users.length === 0 ? (
-                    <p className="section-copy">
-                      Create at least one user first. Membership assignment stays disabled until a
-                      user exists.
-                    </p>
-                  ) : availableUsers.length === 0 ? (
-                    <p className="section-copy">
-                      Every current user is already assigned to this household.
-                    </p>
-                  ) : (
-                    <div className="stack">
-                      <label className="field">
-                        <span>User</span>
-                        <select
-                          name="user_external_id"
-                          value={resolvedSelectedUser}
-                          onChange={(event) => setSelectedUser(event.target.value)}
-                          required
-                        >
-                          <option value="">Select a user</option>
-                          {availableUsers.map((user) => (
-                            <option key={user.external_id} value={user.external_id}>
-                              {user.display_name ?? user.email} ({user.email})
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label className="field">
-                        <span>Role</span>
-                        <select
-                          name="role"
-                          value={selectedRole}
-                          onChange={(event) => setSelectedRole(event.target.value)}
-                          required
-                        >
-                          <option value="household_admin">
-                            {getHouseholdRoleLabel("household_admin")}
-                          </option>
-                          <option value="household_user">
-                            {getHouseholdRoleLabel("household_user")}
-                          </option>
-                        </select>
-                      </label>
-                      <button
-                        type="submit"
-                        className="primary-button"
-                        disabled={membershipPending || availableUsers.length === 0}
-                      >
-                        {membershipPending ? "Saving..." : "Add membership"}
-                      </button>
-                    </div>
-                  )}
-
-                  <p className="helper-text">
-                    Need to remove access or change someone’s role? Do it from the member list so
-                    everything for this household stays in one place.
+                {users.length === 0 ? (
+                  <p className="section-copy">
+                    Create at least one user first. Membership assignment stays disabled until a
+                    user exists.
                   </p>
-                </form>
+                ) : (
+                  <form
+                    className="page-actions"
+                    onSubmit={handleAssignMembership}
+                    data-testid="admin-manage-memberships-form"
+                  >
+                    <label className="field">
+                      <span>User</span>
+                      <select
+                        name="user_external_id"
+                        value={resolvedSelectedUser}
+                        onChange={(event) => setSelectedUser(event.target.value)}
+                        required
+                        disabled={availableUsers.length === 0}
+                      >
+                        <option value="">Select a user</option>
+                        {availableUsers.map((user) => (
+                          <option key={user.external_id} value={user.external_id}>
+                            {user.display_name ?? user.email} ({user.email})
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="field compact household-role-field">
+                      <span>Role</span>
+                      <select
+                        name="role"
+                        value={selectedRole}
+                        onChange={(event) => setSelectedRole(event.target.value)}
+                        required
+                      >
+                        <option value="household_admin">
+                          {getHouseholdRoleLabel("household_admin")}
+                        </option>
+                        <option value="household_user">
+                          {getHouseholdRoleLabel("household_user")}
+                        </option>
+                      </select>
+                    </label>
+                    <button
+                      type="submit"
+                      className="primary-button"
+                      disabled={isCreatingMembership || availableUsers.length === 0}
+                    >
+                      {isCreatingMembership ? "Saving..." : "Add member"}
+                    </button>
+                  </form>
+                )}
+
+                {availableUsers.length === 0 ? (
+                  <p className="helper-text">
+                    Every current user is already assigned to this household.
+                  </p>
+                ) : null}
+
+                {selectedHouseholdSummary.memberships.length === 0 ? (
+                  <p className="section-copy">No members are assigned yet.</p>
+                ) : (
+                  <div className="household-members-list">
+                    {selectedHouseholdSummary.memberships.map((membership) => (
+                      <div key={membership.membership_external_id} className="household-member-row">
+                        <div className="household-member-details">
+                          <strong>{membership.display_name ?? membership.email}</strong>
+                          <div className="helper-text">{membership.email}</div>
+                        </div>
+                        <div className="household-member-controls">
+                          <label className="field compact household-role-field">
+                            <span>Role</span>
+                            <select
+                              aria-label={`Role for ${getMembershipDisplayLabel(membership)}`}
+                              value={getMembershipRoleValue(membership)}
+                              onChange={(event) =>
+                                handleMembershipRoleDraft(
+                                  membership.membership_external_id,
+                                  event.target.value,
+                                )
+                              }
+                              disabled={membershipPending}
+                            >
+                              <option value="household_admin">
+                                {getHouseholdRoleLabel("household_admin", { detailed: true })}
+                              </option>
+                              <option value="household_user">
+                                {getHouseholdRoleLabel("household_user", { detailed: true })}
+                              </option>
+                            </select>
+                          </label>
+                          <button
+                            type="button"
+                            className="ghost-button"
+                            onClick={() => void handleSaveMembershipRole(membership)}
+                            disabled={
+                              membershipPending ||
+                              getMembershipRoleValue(membership) === membership.role
+                            }
+                          >
+                            {membershipPending &&
+                            membershipActionPendingId === membership.membership_external_id
+                              ? "Saving..."
+                              : "Save role"}
+                          </button>
+                          <button
+                            type="button"
+                            className="ghost-button"
+                            onClick={() => requestRemoveMembership(membership)}
+                            disabled={membershipPending}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           ) : (

@@ -1,19 +1,25 @@
 # Test Strategy
 
-Run the smallest validation set that still covers the changed surface area.
+Run the smallest validation set that still covers the files you changed.
 
-For normal code changes, run validation from a branch before opening or merging a pull request.
+## Documentation Changes
+
+For docs only work, validation can stop at:
+
+- checking links and paths
+- checking command names against the repository
+- re-reading the changed docs for stale or unsupported claims
 
 ## Application Changes
 
-Use the local stack when user-visible routing, setup, or runtime wiring changed:
+Use the local stack when runtime wiring or user-visible flows changed:
 
 ```bash
 docker compose up -d --build
 docker compose run --rm api alembic upgrade head
 ```
 
-Targeted checks:
+Common checks:
 
 ```bash
 npm run typecheck:web
@@ -23,20 +29,11 @@ cd apps/api && pytest -q
 npm run test:e2e
 ```
 
-Pull requests should at minimum stay green on the repository validation workflow:
-
-- `API Tests`
-- `Web Checks`
-- `Repo Sanity`
-
-## Setup And Login Changes
-
-When first-run or authentication UX changes, include:
-
-- API tests for setup state and final completion
-- E2E coverage for incomplete-setup redirect, wizard progression, refresh persistence, completion, and post-completion login flow
+Use the smallest relevant subset. End-to-end coverage is most useful when a covered browser flow changed.
 
 ## Finish Cleanly
+
+Shut the stack down when you are done:
 
 ```bash
 docker compose down

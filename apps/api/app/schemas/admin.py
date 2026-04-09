@@ -45,6 +45,10 @@ class CreateAdminHouseholdRequest(BaseModel):
     name: str
 
 
+class UpdateAdminHouseholdRequest(BaseModel):
+    name: str
+
+
 class CreateAdminMembershipRequest(BaseModel):
     user_external_id: str
     role: str

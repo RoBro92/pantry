@@ -6,13 +6,18 @@ services:
     env_file:
       - .env
     environment:
+      ENVIRONMENT: development
+      NODE_ENV: development
       INTERNAL_API_BASE_URL: ${INTERNAL_API_BASE_URL:-http://api:8000}
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}
       NODE_OPTIONS: ${NODE_OPTIONS:---max_old_space_size=2048}
+      WATCHPACK_POLLING: "true"
+      CHOKIDAR_USEPOLLING: "true"
+      CHOKIDAR_INTERVAL: "500"
     working_dir: /workspace
     command: >
       /bin/sh -lc
-      'npm install &&
-      export NEXT_PUBLIC_APP_VERSION=$$(cat /workspace/VERSION) &&
+      'export NEXT_PUBLIC_APP_VERSION=$$(cat /workspace/VERSION) &&
       npm run dev --workspace @pantry/web -- --hostname 0.0.0.0 --port 3000'
     volumes:
       - .:/workspace
@@ -31,13 +36,24 @@ services:
     env_file:
       - .env
     environment:
+      ENVIRONMENT: development
+      DEPLOYMENT_MODE: self_hosted
+      AI_FEATURE_ENABLED: ${AI_FEATURE_ENABLED:-true}
+      APP_VERSION: ${APP_VERSION:-dev}
+      IMPORT_STORAGE_ROOT: ${IMPORT_STORAGE_ROOT:-/workspace/.local/imports}
+      BACKUP_STORAGE_ROOT: ${BACKUP_STORAGE_ROOT:-/workspace/.local/backups}
+      PUBLIC_BROWSER_BASE_URL: ${PUBLIC_BROWSER_BASE_URL:-http://localhost:3000}
+      SESSION_SECRET_KEY: ${SESSION_SECRET_KEY:-change-me-for-development}
       PYTHONPATH: /workspace/apps/api
+      WATCHFILES_FORCE_POLLING: "true"
     working_dir: /workspace/apps/api
     command: >
       /bin/sh -lc
       'export APP_VERSION=$$(cat /workspace/VERSION) &&
       alembic upgrade head &&
-      uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload'
+      uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+      --reload-dir /workspace/apps/api/app
+      --reload-dir /workspace/apps/api/alembic'
     volumes:
       - .:/workspace
     ports:
@@ -55,6 +71,9 @@ services:
     env_file:
       - .env
     environment:
+      ENVIRONMENT: development
+      APP_VERSION: ${APP_VERSION:-dev}
+      IMPORT_STORAGE_ROOT: ${IMPORT_STORAGE_ROOT:-/workspace/.local/imports}
       PYTHONPATH: /workspace/apps/api:/workspace/apps/worker
     working_dir: /workspace/apps/worker
     command: >

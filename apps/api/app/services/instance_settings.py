@@ -22,6 +22,7 @@ SMTP_SECURITY_SSL = "ssl"
 SMTP_SECURITY_STARTTLS = "starttls"
 SMTP_SECURITY_VALUES = {SMTP_SECURITY_NONE, SMTP_SECURITY_SSL, SMTP_SECURITY_STARTTLS}
 PASSWORD_RESET_LINK_PLACEHOLDER = "{{reset_link}}"
+PASSWORD_RESET_TEMPLATE_KEY = "password_reset"
 DEFAULT_PASSWORD_RESET_SUBJECT_TEMPLATE = "Reset your Pantry password"
 DEFAULT_PASSWORD_RESET_BODY_TEMPLATE = (
     "Hello {{user_name}},\n\n"
@@ -130,6 +131,19 @@ class PasswordResetEmailSettingsState:
 
 
 @dataclass(frozen=True)
+class SMTPTemplateSummaryState:
+    key: str
+    label: str
+    description: str
+    is_enabled: bool
+    is_available: bool
+    unavailable_reason: str | None
+    subject: str
+    body_template: str
+    required_placeholders: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class SMTPResolvedConfig:
     host: str | None
     port: int | None
@@ -137,6 +151,7 @@ class SMTPResolvedConfig:
     password: str | None
     from_email: str | None
     from_name: str | None
+    test_recipient_email: str | None
     security: str | None
     is_enabled: bool
     source: str
@@ -149,6 +164,7 @@ class SMTPResolvedConfig:
     stored_has_password: bool
     stored_from_email: str | None
     stored_from_name: str | None
+    stored_test_recipient_email: str | None
     stored_security: str | None
     stored_is_enabled: bool
     config_error: str | None = None
@@ -245,6 +261,7 @@ def _build_smtp_config_from_db(stored: InstanceSetting | None) -> SMTPResolvedCo
         password=password,
         from_email=stored.smtp_from_email if stored else None,
         from_name=stored.smtp_from_name if stored else None,
+        test_recipient_email=stored.smtp_test_recipient_email if stored else None,
         security=stored.smtp_security if stored else None,
         is_enabled=stored.smtp_enabled if stored else False,
         source=CONFIG_SOURCE_DATABASE,
@@ -257,6 +274,7 @@ def _build_smtp_config_from_db(stored: InstanceSetting | None) -> SMTPResolvedCo
         stored_has_password=bool(stored and stored.encrypted_smtp_password),
         stored_from_email=stored.smtp_from_email if stored else None,
         stored_from_name=stored.smtp_from_name if stored else None,
+        stored_test_recipient_email=stored.smtp_test_recipient_email if stored else None,
         stored_security=stored.smtp_security if stored else None,
         stored_is_enabled=stored.smtp_enabled if stored else False,
         config_error=None,
@@ -290,6 +308,7 @@ def resolve_smtp_config(db: Session) -> SMTPResolvedConfig:
                 if app_settings.smtp_from_email
                 else None,
                 from_name=_normalize_optional_text(app_settings.smtp_from_name),
+                test_recipient_email=db_config.stored_test_recipient_email,
                 security=security,
                 is_enabled=True if app_settings.smtp_enabled is None else app_settings.smtp_enabled,
                 source=CONFIG_SOURCE_ENVIRONMENT,
@@ -302,6 +321,7 @@ def resolve_smtp_config(db: Session) -> SMTPResolvedConfig:
                 stored_has_password=db_config.stored_has_password,
                 stored_from_email=db_config.stored_from_email,
                 stored_from_name=db_config.stored_from_name,
+                stored_test_recipient_email=db_config.stored_test_recipient_email,
                 stored_security=db_config.stored_security,
                 stored_is_enabled=db_config.stored_is_enabled,
                 config_error=None,
@@ -314,6 +334,7 @@ def resolve_smtp_config(db: Session) -> SMTPResolvedConfig:
                 password=_normalize_optional_text(app_settings.smtp_password),
                 from_email=_normalize_optional_text(app_settings.smtp_from_email),
                 from_name=_normalize_optional_text(app_settings.smtp_from_name),
+                test_recipient_email=db_config.stored_test_recipient_email,
                 security=_normalize_optional_text(app_settings.smtp_security),
                 is_enabled=False,
                 source=CONFIG_SOURCE_ENVIRONMENT,
@@ -326,6 +347,7 @@ def resolve_smtp_config(db: Session) -> SMTPResolvedConfig:
                 stored_has_password=db_config.stored_has_password,
                 stored_from_email=db_config.stored_from_email,
                 stored_from_name=db_config.stored_from_name,
+                stored_test_recipient_email=db_config.stored_test_recipient_email,
                 stored_security=db_config.stored_security,
                 stored_is_enabled=db_config.stored_is_enabled,
                 config_error=str(exc),
@@ -394,9 +416,31 @@ def resolve_password_reset_email_settings(
     )
 
 
+def list_smtp_templates(
+    db: Session,
+    *,
+    smtp_config: SMTPResolvedConfig | None = None,
+) -> list[SMTPTemplateSummaryState]:
+    password_reset = resolve_password_reset_email_settings(db, smtp_config=smtp_config)
+    return [
+        SMTPTemplateSummaryState(
+            key=PASSWORD_RESET_TEMPLATE_KEY,
+            label="Password reset",
+            description="Send one-time reset links from the sign-in flow.",
+            is_enabled=password_reset.is_enabled,
+            is_available=password_reset.is_available,
+            unavailable_reason=password_reset.unavailable_reason,
+            subject=password_reset.template.subject,
+            body_template=password_reset.template.body_template,
+            required_placeholders=(PASSWORD_RESET_LINK_PLACEHOLDER,),
+        )
+    ]
+
+
 def build_smtp_summary(db: Session) -> dict[str, object]:
     config = resolve_smtp_config(db)
     password_reset = resolve_password_reset_email_settings(db, smtp_config=config)
+    templates = list_smtp_templates(db, smtp_config=config)
     return {
         "effective": {
             "host": config.host,
@@ -424,6 +468,7 @@ def build_smtp_summary(db: Session) -> dict[str, object]:
         "last_test_status": config.last_test_status,
         "last_tested_at": config.last_tested_at,
         "last_test_error": config.last_test_error,
+        "test_recipient_email": config.test_recipient_email,
         "password_reset": {
             "is_enabled": password_reset.is_enabled,
             "is_available": password_reset.is_available,
@@ -433,6 +478,20 @@ def build_smtp_summary(db: Session) -> dict[str, object]:
                 "body_template": password_reset.template.body_template,
             },
         },
+        "templates": [
+            {
+                "key": template.key,
+                "label": template.label,
+                "description": template.description,
+                "is_enabled": template.is_enabled,
+                "is_available": template.is_available,
+                "unavailable_reason": template.unavailable_reason,
+                "subject": template.subject,
+                "body_template": template.body_template,
+                "required_placeholders": list(template.required_placeholders),
+            }
+            for template in templates
+        ],
     }
 
 
@@ -448,21 +507,35 @@ def upsert_smtp_settings(
     from_name: str | None,
     security: str | None,
     is_enabled: bool,
-    password_reset_enabled: bool = False,
-    password_reset_subject_template: str | None = None,
-    password_reset_body_template: str | None = None,
+    test_recipient_email: str | None = None,
 ) -> InstanceSetting:
     settings = get_or_create_instance_settings(db)
+    previous_connection_values = (
+        settings.smtp_host,
+        settings.smtp_port,
+        settings.smtp_username,
+        settings.encrypted_smtp_password,
+        settings.smtp_security,
+    )
     normalized_host = normalize_smtp_host(host)
     normalized_username = _normalize_optional_text(username)
     normalized_password = _normalize_optional_text(password)
     normalized_from_email = _normalize_optional_text(from_email)
     normalized_from_name = _normalize_optional_text(from_name)
-    template_subject = _require_template_subject(password_reset_subject_template)
-    template_body = _require_template_body(password_reset_body_template)
+    normalized_test_recipient_email = _normalize_optional_text(test_recipient_email)
 
     if not normalized_host:
-        if any([normalized_username, normalized_password, normalized_from_email, normalized_from_name, port, security]):
+        if any(
+            [
+                normalized_username,
+                normalized_password,
+                normalized_from_email,
+                normalized_from_name,
+                normalized_test_recipient_email,
+                port,
+                security,
+            ]
+        ):
             raise ValueError("SMTP host is required when saving SMTP configuration.")
         settings.smtp_host = None
         settings.smtp_port = None
@@ -470,9 +543,9 @@ def upsert_smtp_settings(
         settings.encrypted_smtp_password = None
         settings.smtp_from_email = None
         settings.smtp_from_name = None
+        settings.smtp_test_recipient_email = None
         settings.smtp_security = None
         settings.smtp_enabled = False
-        settings.password_reset_enabled = False
     else:
         normalized_security = normalize_smtp_security(security)
         settings.smtp_host = normalized_host
@@ -484,9 +557,13 @@ def upsert_smtp_settings(
             else None
         )
         settings.smtp_from_name = normalized_from_name
+        settings.smtp_test_recipient_email = (
+            _require_valid_email(normalized_test_recipient_email, field_name="SMTP test recipient email")
+            if normalized_test_recipient_email
+            else None
+        )
         settings.smtp_security = normalized_security
         settings.smtp_enabled = is_enabled
-        settings.password_reset_enabled = password_reset_enabled
 
         existing_password = decrypt_secret(settings.encrypted_smtp_password) if settings.encrypted_smtp_password else None
         effective_password = normalized_password or (existing_password if normalized_username else None)
@@ -500,12 +577,17 @@ def upsert_smtp_settings(
         elif normalized_username is None:
             settings.encrypted_smtp_password = None
 
-    settings.password_reset_subject_template = template_subject
-    settings.password_reset_body_template = template_body
-
-    settings.smtp_last_test_status = "never"
-    settings.smtp_last_tested_at = None
-    settings.smtp_last_test_error = None
+    connection_values = (
+        settings.smtp_host,
+        settings.smtp_port,
+        settings.smtp_username,
+        settings.encrypted_smtp_password,
+        settings.smtp_security,
+    )
+    if connection_values != previous_connection_values:
+        settings.smtp_last_test_status = "never"
+        settings.smtp_last_tested_at = None
+        settings.smtp_last_test_error = None
 
     db.add(settings)
     db.flush()
@@ -523,10 +605,65 @@ def upsert_smtp_settings(
             "has_password": bool(settings.encrypted_smtp_password),
             "from_email": settings.smtp_from_email,
             "from_name": settings.smtp_from_name,
+            "test_recipient_email": settings.smtp_test_recipient_email,
             "security": settings.smtp_security,
             "is_enabled": settings.smtp_enabled,
-            "password_reset_enabled": settings.password_reset_enabled,
         },
+    )
+    db.commit()
+    db.refresh(settings)
+    return settings
+
+
+def upsert_password_reset_email_template(
+    db: Session,
+    *,
+    actor: User,
+    is_enabled: bool,
+    subject: str | None,
+    body_template: str | None,
+) -> InstanceSetting:
+    settings = get_or_create_instance_settings(db)
+    settings.password_reset_enabled = is_enabled
+    settings.password_reset_subject_template = _require_template_subject(subject)
+    settings.password_reset_body_template = _require_template_body(body_template)
+    db.add(settings)
+    db.flush()
+    record_audit_event(
+        db,
+        household=None,
+        actor=actor,
+        action="smtp.template.saved",
+        target_type="instance_setting",
+        target_external_id=settings.external_id,
+        event_metadata={
+            "template_key": PASSWORD_RESET_TEMPLATE_KEY,
+            "is_enabled": settings.password_reset_enabled,
+        },
+    )
+    db.commit()
+    db.refresh(settings)
+    return settings
+
+
+def restore_default_password_reset_email_template(
+    db: Session,
+    *,
+    actor: User,
+) -> InstanceSetting:
+    settings = get_or_create_instance_settings(db)
+    settings.password_reset_subject_template = DEFAULT_PASSWORD_RESET_SUBJECT_TEMPLATE
+    settings.password_reset_body_template = DEFAULT_PASSWORD_RESET_BODY_TEMPLATE
+    db.add(settings)
+    db.flush()
+    record_audit_event(
+        db,
+        household=None,
+        actor=actor,
+        action="smtp.template.default_restored",
+        target_type="instance_setting",
+        target_external_id=settings.external_id,
+        event_metadata={"template_key": PASSWORD_RESET_TEMPLATE_KEY},
     )
     db.commit()
     db.refresh(settings)

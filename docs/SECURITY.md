@@ -1,42 +1,36 @@
 # Security
 
-Pantry treats lifecycle and recovery inputs as hostile until proven otherwise.
+Pantry treats uploads, restore bundles, and external data as hostile input until they have been validated.
 
-## Backup Uploads
+## Data And Access Boundaries
 
-- Restore uploads currently accept Pantry backup bundle v1 JSON files only.
-- Uploads are restricted by file extension, JSON parsing, schema checks, and size limits.
-- The default restore upload size limit is `26214400` bytes (25 MiB) via `BACKUP_MAX_UPLOAD_BYTES`.
-- Uploaded restore files are staged under `BACKUP_STORAGE_ROOT` in quarantine before use.
-- Uploaded content is never executed as code.
+- Household scoped access is enforced server side
+- Pantry records remain Pantry owned even when external enrichment is attached
+- Sensitive configuration persisted by the application is intended to be encrypted at rest
+- Secrets, tokens, and passwords should never be committed to the repository
 
-## Restore Safety
+## Backup And Restore Safety
 
-- Restore currently supports full instance bundles only.
-- Restore requires the same schema revision as the running Pantry install, or an older revision Pantry explicitly marks restore-compatible.
-- Restore requires at least one platform admin in the uploaded bundle.
-- Restore remains explicitly destructive and requires operator confirmation in the admin UI.
-
-## Administrative Safeguards
-
-- Household membership changes and household deletion are audit logged.
-- Pantry blocks membership removals that would leave a household without an admin where that safeguard applies.
-- Household deletion requires explicit confirmation of the target household name, plus an extra acknowledgement when deleting the final household.
-
-## Password Reset Safety
-
-- Pantry sends password reset links only after SMTP is configured, a successful SMTP test has been recorded, and password reset email delivery is explicitly enabled.
-- Self-service reset uses a one-time reset link sent to the account email address; this milestone does not email temporary passwords.
-- Username-only accounts cannot use self-service reset and still require an operator-led password reset.
-- Reset links are validated server-side for expiry, reuse, and account eligibility before any password change is accepted.
-
-## Scope
-
-This milestone does not add SaaS backup automation or self-updating behaviour. Recovery remains operator-driven and local-installation focused.
+- Restore accepts Pantry backup bundle JSON files only
+- Uploads are validated before restore is allowed
+- Uploaded restore files are staged under `BACKUP_STORAGE_ROOT`
+- Restore remains an explicit operator action because it can replace live data
+- Household restore creates a new household only and does not merge into an existing one
 
 ## External Data Handling
 
-- Pantry may fetch optional product enrichment data from Open Food Facts for barcode and name-based lookups.
-- Open Food Facts data is community-contributed and treated as advisory metadata, not Pantry's canonical product identity.
-- Pantry validates external URLs and stores only selected, product-facing fields instead of logging or persisting whole upstream payloads.
-- Enrichment must be explicitly confirmed by a user before Pantry links it to a product.
+- Open Food Facts lookup is optional
+- External enrichment is advisory metadata, not Pantry’s canonical product record
+- Pantry stores selected product facing enrichment fields instead of treating upstream payloads as trusted source data
+
+## Operational Safety
+
+- Keep `.env` out of version control
+- Back up PostgreSQL data and import storage before upgrades
+- Review new environment templates during upgrades instead of assuming old values still match
+- Use the bundled health check after installs and updates
+- Self-service password reset should only be enabled after SMTP is configured and tested
+
+## Scope
+
+This repository documents Pantry’s application level safety model. Host hardening, TLS, backup retention, secret management, and patching remain operator responsibilities.

@@ -13,6 +13,12 @@
   "scripts": {
     "compose:up": "docker compose up --build",
     "compose:down": "docker compose down",
+    "compose:dev:up": "docker compose -f compose.yml -f compose.dev.yml up -d --build",
+    "compose:dev:down": "docker compose -f compose.yml -f compose.dev.yml down",
+    "compose:dev:logs": "docker compose -f compose.yml -f compose.dev.yml logs -f web api worker",
+    "dev:stack": "./infra/scripts/dev-stack.sh",
+    "dev:stack:down": "./infra/scripts/dev-stack.sh down",
+    "dev:stack:logs": "./infra/scripts/dev-stack.sh logs",
     "dev:web": "sh -lc 'export NEXT_PUBLIC_APP_VERSION=$(./infra/scripts/read-version.sh); npm run dev --workspace @pantry/web'",
     "build:web": "sh -lc 'export NEXT_PUBLIC_APP_VERSION=$(./infra/scripts/read-version.sh); npm run build --workspace @pantry/web'",
     "typecheck:web": "sh -lc 'export NEXT_PUBLIC_APP_VERSION=$(./infra/scripts/read-version.sh); npm run typecheck --workspace @pantry/web'",

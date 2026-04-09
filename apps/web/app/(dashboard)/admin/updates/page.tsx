@@ -8,10 +8,9 @@ export default async function AdminUpdatesPage() {
     <div className="stack">
       <section className="panel">
         <p className="eyebrow">Updates</p>
-        <h1>Release visibility and manual updates</h1>
+        <h1>Releases and manual updates</h1>
         <p>
-          Review advisory release metadata, acknowledge changelog notes after upgrades, and keep
-          update and recovery actions in operator hands.
+          Review advisory release metadata, acknowledge changelog notes after upgrades.
         </p>
       </section>
       <AdminUpdatesPanel initialReleaseStatus={releaseStatus} />

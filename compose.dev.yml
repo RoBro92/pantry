@@ -1,0 +1,17 @@
+services:
+  web:
+    environment:
+      ENVIRONMENT: development
+      NODE_ENV: development
+      WATCHPACK_POLLING: "true"
+      CHOKIDAR_USEPOLLING: "true"
+      CHOKIDAR_INTERVAL: "500"
+
+  api:
+    environment:
+      ENVIRONMENT: development
+      WATCHFILES_FORCE_POLLING: "true"
+
+  worker:
+    environment:
+      ENVIRONMENT: development

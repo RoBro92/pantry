@@ -1,13 +1,31 @@
 "use client";
 
-import { useState } from "react";
-import type { SMTPConfigResponse, SMTPTestResponse } from "../lib/api-types";
+import { useMemo, useState } from "react";
+import type {
+  SMTPConfigResponse,
+  SMTPTemplateSummary,
+  SMTPTestEmailResponse,
+  SMTPTestResponse,
+} from "../lib/api-types";
 import { getConfigSourceLabel } from "../lib/admin-display";
 import { postToApi, putToApi } from "../lib/client-api";
+import { ModalShell } from "./modal-shell";
 
 type AdminSMTPConfigFormProps = {
   initialConfig: SMTPConfigResponse;
 };
+
+type TemplateModalState = {
+  key: string;
+  label: string;
+  subject: string;
+  bodyTemplate: string;
+  isEnabled: boolean;
+} | null;
+
+function getTemplateStatusClass(template: SMTPTemplateSummary) {
+  return template.is_enabled ? "pill smtp-template-pill is-success" : "pill smtp-template-pill is-danger";
+}
 
 export function AdminSMTPConfigForm({ initialConfig }: AdminSMTPConfigFormProps) {
   const [config, setConfig] = useState(initialConfig);
@@ -17,20 +35,34 @@ export function AdminSMTPConfigForm({ initialConfig }: AdminSMTPConfigFormProps)
   const [password, setPassword] = useState("");
   const [fromEmail, setFromEmail] = useState(initialConfig.stored.from_email ?? "");
   const [fromName, setFromName] = useState(initialConfig.stored.from_name ?? "");
+  const [testRecipientEmail, setTestRecipientEmail] = useState(initialConfig.test_recipient_email ?? "");
   const [security, setSecurity] = useState(initialConfig.stored.security ?? "starttls");
   const [isEnabled, setIsEnabled] = useState(initialConfig.stored.is_enabled);
-  const [passwordResetEnabled, setPasswordResetEnabled] = useState(
-    initialConfig.password_reset.is_enabled
-  );
-  const [passwordResetSubject, setPasswordResetSubject] = useState(
-    initialConfig.password_reset.template.subject
-  );
-  const [passwordResetBody, setPasswordResetBody] = useState(
-    initialConfig.password_reset.template.body_template
-  );
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [templateMessage, setTemplateMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
+  const [isSendingTestEmail, setIsSendingTestEmail] = useState(false);
+  const [templatePending, setTemplatePending] = useState(false);
+  const [templateModal, setTemplateModal] = useState<TemplateModalState>(null);
+
+  const passwordResetTemplate = useMemo(
+    () => config.templates.find((template) => template.key === "password_reset") ?? null,
+    [config.templates],
+  );
+
+  function syncConfig(nextConfig: SMTPConfigResponse) {
+    setConfig(nextConfig);
+    setHost(nextConfig.stored.host ?? "");
+    setPort(nextConfig.stored.port ? String(nextConfig.stored.port) : "");
+    setUsername(nextConfig.stored.username ?? "");
+    setFromEmail(nextConfig.stored.from_email ?? "");
+    setFromName(nextConfig.stored.from_name ?? "");
+    setTestRecipientEmail(nextConfig.test_recipient_email ?? "");
+    setSecurity(nextConfig.stored.security ?? "starttls");
+    setIsEnabled(nextConfig.stored.is_enabled);
+    setPassword("");
+  }
 
   async function handleSave() {
     setIsSaving(true);
@@ -44,24 +76,11 @@ export function AdminSMTPConfigForm({ initialConfig }: AdminSMTPConfigFormProps)
         password: password || null,
         from_email: fromEmail || null,
         from_name: fromName || null,
+        test_recipient_email: testRecipientEmail || null,
         security,
         is_enabled: isEnabled,
-        password_reset_enabled: passwordResetEnabled,
-        password_reset_subject_template: passwordResetSubject,
-        password_reset_body_template: passwordResetBody
       });
-      setConfig(response);
-      setHost(response.stored.host ?? "");
-      setPort(response.stored.port ? String(response.stored.port) : "");
-      setUsername(response.stored.username ?? "");
-      setFromEmail(response.stored.from_email ?? "");
-      setFromName(response.stored.from_name ?? "");
-      setSecurity(response.stored.security ?? "starttls");
-      setIsEnabled(response.stored.is_enabled);
-      setPasswordResetEnabled(response.password_reset.is_enabled);
-      setPasswordResetSubject(response.password_reset.template.subject);
-      setPasswordResetBody(response.password_reset.template.body_template);
-      setPassword("");
+      syncConfig(response);
       setStatusMessage("SMTP configuration saved.");
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : "Save failed.");
@@ -70,13 +89,13 @@ export function AdminSMTPConfigForm({ initialConfig }: AdminSMTPConfigFormProps)
     }
   }
 
-  async function handleTest() {
+  async function handleConnectivityTest() {
     setIsTesting(true);
     setStatusMessage(null);
 
     try {
       const response = await postToApi<SMTPTestResponse>("/api/platform-admin/smtp/test", {});
-      setConfig(response.config);
+      syncConfig(response.config);
       setStatusMessage(response.ok ? "SMTP connectivity test passed." : response.message ?? "SMTP test failed.");
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : "SMTP test failed.");
@@ -85,15 +104,84 @@ export function AdminSMTPConfigForm({ initialConfig }: AdminSMTPConfigFormProps)
     }
   }
 
+  async function handleSendTestEmail() {
+    setIsSendingTestEmail(true);
+    setStatusMessage(null);
+
+    try {
+      const response = await postToApi<SMTPTestEmailResponse>("/api/platform-admin/smtp/test-email", {});
+      syncConfig(response.config);
+      setStatusMessage(`${response.message} Delivered to ${response.delivered_to}.`);
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : "SMTP test email failed.");
+    } finally {
+      setIsSendingTestEmail(false);
+    }
+  }
+
+  async function handleSaveTemplate() {
+    if (!templateModal) {
+      return;
+    }
+
+    setTemplatePending(true);
+    setTemplateMessage(null);
+    try {
+      const response = await putToApi<SMTPConfigResponse>(
+        `/api/platform-admin/smtp/templates/${templateModal.key}`,
+        {
+          is_enabled: templateModal.isEnabled,
+          subject: templateModal.subject,
+          body_template: templateModal.bodyTemplate,
+        },
+      );
+      setConfig(response);
+      setTemplateMessage(`${templateModal.label} template saved.`);
+      setTemplateModal(null);
+    } catch (error) {
+      setTemplateMessage(error instanceof Error ? error.message : "Template save failed.");
+    } finally {
+      setTemplatePending(false);
+    }
+  }
+
+  async function handleRestoreTemplateDefault() {
+    if (!templateModal) {
+      return;
+    }
+
+    setTemplatePending(true);
+    setTemplateMessage(null);
+    try {
+      const response = await postToApi<SMTPConfigResponse>(
+        `/api/platform-admin/smtp/templates/${templateModal.key}/restore-default`,
+        {},
+      );
+      setConfig(response);
+      const updatedTemplate = response.templates.find((template) => template.key === templateModal.key);
+      if (updatedTemplate) {
+        setTemplateModal({
+          key: updatedTemplate.key,
+          label: updatedTemplate.label,
+          subject: updatedTemplate.subject,
+          bodyTemplate: updatedTemplate.body_template,
+          isEnabled: updatedTemplate.is_enabled,
+        });
+      }
+      setTemplateMessage("Default template restored.");
+    } catch (error) {
+      setTemplateMessage(error instanceof Error ? error.message : "Could not restore the default template.");
+    } finally {
+      setTemplatePending(false);
+    }
+  }
+
   return (
     <div className="stack">
       <section className="panel">
         <p className="eyebrow">Instance SMTP</p>
-        <h1>SMTP and password reset email</h1>
-        <p>
-          Configure Pantry’s instance-level outbound email. Passwords are saved encrypted at rest
-          and never returned in plaintext after save.
-        </p>
+        <h1>SMTP</h1>
+        <p>Configure Pantry’s instance level outbound email.</p>
         <p className="section-copy">
           Effective source: <strong>{getConfigSourceLabel(config.effective_source)}</strong>
         </p>
@@ -104,114 +192,148 @@ export function AdminSMTPConfigForm({ initialConfig }: AdminSMTPConfigFormProps)
         ) : null}
         {config.config_error ? <p className="error-text">{config.config_error}</p> : null}
         {statusMessage ? <p className="status-note">{statusMessage}</p> : null}
-        <div className="content-grid">
-          <label className="field">
-            <span>Host</span>
-            <input value={host} onChange={(event) => setHost(event.target.value)} placeholder="smtp.example.com" />
-          </label>
-          <label className="field">
-            <span>Port</span>
-            <input value={port} onChange={(event) => setPort(event.target.value)} placeholder="587" />
-          </label>
-          <label className="field">
-            <span>Security</span>
-            <select value={security} onChange={(event) => setSecurity(event.target.value)}>
-              <option value="starttls">STARTTLS</option>
-              <option value="ssl">SSL/TLS</option>
-              <option value="none">None</option>
-            </select>
-          </label>
-          <label className="field">
-            <span>Username</span>
-            <input value={username} onChange={(event) => setUsername(event.target.value)} />
-          </label>
-          <label className="field">
-            <span>Password</span>
-            <input
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              placeholder={config.stored.has_password ? "Stored. Enter a new password to replace it." : ""}
-            />
-          </label>
-          <label className="field">
-            <span>From email</span>
-            <input value={fromEmail} onChange={(event) => setFromEmail(event.target.value)} placeholder="pantry@example.com" />
-          </label>
-          <label className="field">
-            <span>From name</span>
-            <input value={fromName} onChange={(event) => setFromName(event.target.value)} placeholder="Pantry" />
-          </label>
-        </div>
-        <label className="checkbox-row">
-          <input
-            type="checkbox"
-            checked={isEnabled}
-            onChange={(event) => {
-              setIsEnabled(event.target.checked);
-              if (!event.target.checked) {
-                setPasswordResetEnabled(false);
-              }
-            }}
-          />
-          <span>Enable SMTP for Pantry’s product-facing email flows.</span>
-        </label>
+
         <div className="modal-form-section">
           <div className="stack compact-stack">
-            <h2>Password reset email</h2>
+            <h2>Connection and sender</h2>
             <p className="helper-text">
-              Self-service reset stays hidden until SMTP is enabled, configured, and has passed a
-              connectivity test.
+              Pantry uses one sender alias for password reset emails, SMTP test emails, and future
+              template-driven emails.
             </p>
+          </div>
+          <div className="content-grid">
+            <label className="field">
+              <span>Host</span>
+              <input
+                value={host}
+                onChange={(event) => setHost(event.target.value)}
+                placeholder="smtp.example.com"
+              />
+            </label>
+            <label className="field">
+              <span>Port</span>
+              <input value={port} onChange={(event) => setPort(event.target.value)} placeholder="587" />
+            </label>
+            <label className="field">
+              <span>Security</span>
+              <select value={security} onChange={(event) => setSecurity(event.target.value)}>
+                <option value="starttls">STARTTLS</option>
+                <option value="ssl">SSL/TLS</option>
+                <option value="none">None</option>
+              </select>
+            </label>
+            <label className="field">
+              <span>Username</span>
+              <input value={username} onChange={(event) => setUsername(event.target.value)} />
+            </label>
+            <label className="field">
+              <span>Password</span>
+              <input
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                placeholder={config.stored.has_password ? "Stored. Enter a new password to replace it." : ""}
+              />
+            </label>
+            <label className="field">
+              <span>Sender email</span>
+              <input
+                value={fromEmail}
+                onChange={(event) => setFromEmail(event.target.value)}
+                placeholder="pantry@example.com"
+              />
+            </label>
+            <label className="field">
+              <span>Sender name</span>
+              <input value={fromName} onChange={(event) => setFromName(event.target.value)} placeholder="Pantry" />
+            </label>
+            <label className="field">
+              <span>Test recipient email</span>
+              <input
+                value={testRecipientEmail}
+                onChange={(event) => setTestRecipientEmail(event.target.value)}
+                placeholder="you@example.com"
+              />
+            </label>
           </div>
           <label className="checkbox-row">
             <input
               type="checkbox"
-              checked={passwordResetEnabled}
-              disabled={!isEnabled}
-              onChange={(event) => setPasswordResetEnabled(event.target.checked)}
+              checked={isEnabled}
+              onChange={(event) => setIsEnabled(event.target.checked)}
             />
-            <span>Allow Pantry to send password reset links.</span>
+            <span>Enable SMTP for Pantry.</span>
           </label>
-          <label className="field">
-            <span>Email subject</span>
-            <input
-              value={passwordResetSubject}
-              onChange={(event) => setPasswordResetSubject(event.target.value)}
-            />
-          </label>
-          <label className="field">
-            <span>Body template</span>
-            <textarea
-              rows={8}
-              value={passwordResetBody}
-              onChange={(event) => setPasswordResetBody(event.target.value)}
-            />
-          </label>
-          <p className="helper-text">
-            Include <code>{"{{reset_link}}"}</code> so the email can send a working reset link.
-          </p>
-          {config.password_reset.is_available ? (
-            <p className="status-note">Password reset emails are ready to use.</p>
-          ) : (
-            <p className="helper-text is-error">
-              {config.password_reset.unavailable_reason ??
-                "Password reset emails are not available yet."}
-            </p>
-          )}
+          <div className="page-actions">
+            <button type="button" className="primary-button" disabled={isSaving} onClick={handleSave}>
+              {isSaving ? "Saving..." : "Save SMTP"}
+            </button>
+            <button
+              type="button"
+              className="ghost-button"
+              disabled={isTesting || !config.configured}
+              onClick={handleConnectivityTest}
+            >
+              {isTesting ? "Testing..." : "Run connectivity test"}
+            </button>
+            <button
+              type="button"
+              className="ghost-button"
+              disabled={isSendingTestEmail || !config.configured || !config.test_recipient_email}
+              onClick={handleSendTestEmail}
+            >
+              {isSendingTestEmail ? "Sending..." : "Send test email"}
+            </button>
+          </div>
         </div>
-        <div className="page-actions">
-          <button type="button" className="primary-button" disabled={isSaving} onClick={handleSave}>
-            {isSaving ? "Saving..." : "Save SMTP"}
-          </button>
-          <button
-            type="button"
-            className="ghost-button"
-            disabled={isTesting || !config.configured}
-            onClick={handleTest}
-          >
-            {isTesting ? "Testing..." : "Run connectivity test"}
-          </button>
+      </section>
+
+      <section className="panel">
+        <div className="stack compact-stack">
+          <p className="eyebrow">Templates</p>
+          <h2>Email templates</h2>
+          <p className="section-copy">
+            Manage the current template catalog one row at a time. Disabled templates stay out of
+            user-facing auth flows until SMTP is also configured and tested.
+          </p>
+        </div>
+        {templateMessage ? <p className="status-note">{templateMessage}</p> : null}
+        <div className="stack">
+          {config.templates.map((template) => (
+            <article key={template.key} className="inline-status-card">
+              <div className="setup-card-toolbar">
+                <div className="stack compact-stack">
+                  <h3>{template.label}</h3>
+                  <p className="helper-text">{template.description}</p>
+                </div>
+                <span className={getTemplateStatusClass(template)}>
+                  {template.is_enabled ? "Enabled" : "Disabled"}
+                </span>
+              </div>
+              <p className="helper-text">
+                {template.is_available
+                  ? "Ready for use."
+                  : template.unavailable_reason ?? "Not ready yet."}
+              </p>
+              <div className="page-actions">
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() =>
+                    setTemplateModal({
+                      key: template.key,
+                      label: template.label,
+                      subject: template.subject,
+                      bodyTemplate: template.body_template,
+                      isEnabled: template.is_enabled,
+                    })
+                  }
+                >
+                  Edit template
+                </button>
+              </div>
+            </article>
+          ))}
         </div>
       </section>
 
@@ -248,6 +370,77 @@ export function AdminSMTPConfigForm({ initialConfig }: AdminSMTPConfigFormProps)
           </p>
         </article>
       </section>
+
+      {templateModal && passwordResetTemplate ? (
+        <ModalShell
+          title={templateModal.label}
+          description="Update the template copy, toggle availability, or restore the Pantry default."
+          onClose={() => {
+            if (!templatePending) {
+              setTemplateModal(null);
+            }
+          }}
+        >
+          <div className="stack">
+            <label className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={templateModal.isEnabled}
+                onChange={(event) =>
+                  setTemplateModal((current) =>
+                    current ? { ...current, isEnabled: event.target.checked } : current,
+                  )
+                }
+              />
+              <span>Enable this template.</span>
+            </label>
+            <label className="field">
+              <span>Email subject</span>
+              <input
+                value={templateModal.subject}
+                onChange={(event) =>
+                  setTemplateModal((current) =>
+                    current ? { ...current, subject: event.target.value } : current,
+                  )
+                }
+              />
+            </label>
+            <label className="field">
+              <span>Body template</span>
+              <textarea
+                rows={10}
+                value={templateModal.bodyTemplate}
+                onChange={(event) =>
+                  setTemplateModal((current) =>
+                    current ? { ...current, bodyTemplate: event.target.value } : current,
+                  )
+                }
+              />
+            </label>
+            <p className="helper-text">
+              Required placeholder: <code>{passwordResetTemplate.required_placeholders.join(", ")}</code>
+            </p>
+            <div className="page-actions">
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() => void handleRestoreTemplateDefault()}
+                disabled={templatePending}
+              >
+                Restore default
+              </button>
+              <button
+                type="button"
+                className="primary-button"
+                onClick={() => void handleSaveTemplate()}
+                disabled={templatePending}
+              >
+                {templatePending ? "Saving..." : "Save template"}
+              </button>
+            </div>
+          </div>
+        </ModalShell>
+      ) : null}
     </div>
   );
 }

@@ -145,7 +145,7 @@ export function AdminUpdatesPanel({ initialReleaseStatus }: AdminUpdatesPanelPro
           <p className="eyebrow">Update Strategy</p>
           <h2>Manual Update</h2>
           <p className="section-copy">
-            Operator-controlled only. {releaseStatus.source_strategy}
+            Operator controlled with {releaseStatus.source_strategy}
           </p>
           <ul className="detail-list">
             <li>

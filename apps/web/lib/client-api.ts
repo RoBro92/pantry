@@ -40,7 +40,7 @@ export async function readApiErrorMessage(
   return formatApiErrorMessage(body, fallback);
 }
 
-async function sendToApi<T>(method: "POST" | "PUT", path: string, payload: unknown): Promise<T> {
+async function sendToApi<T>(method: "PATCH" | "POST" | "PUT", path: string, payload: unknown): Promise<T> {
   const response = await fetch(`${appConfig.apiBaseUrl}${path}`, {
     method,
     credentials: "include",
@@ -63,6 +63,10 @@ export async function postToApi<T>(path: string, payload: unknown): Promise<T> {
 
 export async function putToApi<T>(path: string, payload: unknown): Promise<T> {
   return sendToApi("PUT", path, payload);
+}
+
+export async function patchToApi<T>(path: string, payload: unknown): Promise<T> {
+  return sendToApi("PATCH", path, payload);
 }
 
 export async function postFormToApi<T>(path: string, payload: FormData): Promise<T> {

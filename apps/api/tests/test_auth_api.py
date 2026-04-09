@@ -3,7 +3,11 @@ from __future__ import annotations
 import re
 
 from app.domain.roles import HOUSEHOLD_USER_ROLE
-from app.services.instance_settings import record_smtp_test_result, upsert_smtp_settings
+from app.services.instance_settings import (
+    record_smtp_test_result,
+    upsert_password_reset_email_template,
+    upsert_smtp_settings,
+)
 from app.services.auth import (
     authenticate_user,
     create_household,
@@ -150,7 +154,13 @@ def test_password_reset_status_only_becomes_available_after_smtp_is_tested(clien
         from_name="Pantry",
         security="starttls",
         is_enabled=True,
-        password_reset_enabled=True,
+    )
+    upsert_password_reset_email_template(
+        db_session,
+        actor=admin,
+        is_enabled=True,
+        subject=None,
+        body_template=None,
     )
 
     still_unavailable = client.get("/api/auth/password-reset/status")
@@ -193,7 +203,13 @@ def test_password_reset_request_and_confirm_flow(client, db_session, monkeypatch
         from_name="Pantry",
         security="starttls",
         is_enabled=True,
-        password_reset_enabled=True,
+    )
+    upsert_password_reset_email_template(
+        db_session,
+        actor=admin,
+        is_enabled=True,
+        subject=None,
+        body_template=None,
     )
     record_smtp_test_result(db_session, actor=admin, status="passed", error=None)
 
@@ -276,7 +292,13 @@ def test_password_reset_request_stays_generic_for_username_only_accounts(
         from_name="Pantry",
         security="starttls",
         is_enabled=True,
-        password_reset_enabled=True,
+    )
+    upsert_password_reset_email_template(
+        db_session,
+        actor=admin,
+        is_enabled=True,
+        subject=None,
+        body_template=None,
     )
     record_smtp_test_result(db_session, actor=admin, status="passed", error=None)
 

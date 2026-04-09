@@ -74,6 +74,50 @@ def create_managed_household(
     return household
 
 
+def rename_managed_household(
+    db: Session,
+    *,
+    actor: User,
+    household_external_id: str,
+    name: str,
+) -> Household:
+    household = db.scalar(select(Household).where(Household.external_id == household_external_id))
+    if household is None:
+        raise ValueError("Household not found.")
+
+    normalized_name = name.strip()
+    if not normalized_name:
+        raise ValueError("Household name is required.")
+
+    existing = db.scalar(
+        select(Household)
+        .where(func.lower(Household.name) == normalized_name.casefold())
+        .where(Household.id != household.id)
+    )
+    if existing is not None:
+        raise ValueError("A household with that name already exists.")
+
+    previous_name = household.name
+    household.name = normalized_name
+    db.add(household)
+    db.flush()
+    record_audit_event(
+        db,
+        household=household,
+        actor=actor,
+        action="admin.household.renamed",
+        target_type="household",
+        target_external_id=household.external_id,
+        event_metadata={
+            "previous_name": previous_name,
+            "name": household.name,
+        },
+    )
+    db.commit()
+    db.refresh(household)
+    return household
+
+
 def _count_household_admins(db: Session, *, household_id) -> int:
     admin_role = get_role_by_code(db, "household_admin")
     if admin_role is None:

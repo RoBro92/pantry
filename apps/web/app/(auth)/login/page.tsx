@@ -5,6 +5,7 @@ import { getPasswordResetAvailability, getSession, getSetupStatus } from "../../
 type LoginPageProps = {
   searchParams: Promise<{
     next?: string;
+    reset?: string;
   }>;
 };
 
@@ -16,6 +17,8 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   ]);
   const params = await searchParams;
   const nextPath = params.next && params.next.startsWith("/") ? params.next : "/app";
+  const statusMessage =
+    params.reset === "success" ? "Password reset complete. Sign in with your new password." : null;
   if (session) {
     redirect(nextPath);
   }
@@ -33,7 +36,11 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
             Sign in to view your pantry inventory, manage your shopping lists, and more.
           </p>
         </div>
-        <LoginForm nextPath={nextPath} canResetPassword={passwordResetAvailability.is_available} />
+        <LoginForm
+          nextPath={nextPath}
+          canResetPassword={passwordResetAvailability.is_available}
+          statusMessage={statusMessage}
+        />
       </section>
     </main>
   );

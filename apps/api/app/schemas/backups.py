@@ -37,8 +37,21 @@ class BackupRestoreRequest(BaseModel):
     confirmation_phrase: str
 
 
+class HouseholdBackupRestoreRequest(BaseModel):
+    stage_id: str
+    target_household_name: str
+    confirmation_phrase: str
+
+
 class BackupRestoreResponse(BaseModel):
     restored: bool
     requires_reauthentication: bool
     message: str
+    bundle: BackupBundleSummary
+
+
+class HouseholdBackupRestoreResponse(BaseModel):
+    restored: bool
+    message: str
+    warnings: list[str] = Field(default_factory=list)
     bundle: BackupBundleSummary

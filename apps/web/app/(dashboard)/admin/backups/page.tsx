@@ -8,7 +8,7 @@ export default async function AdminBackupsPage() {
     <div className="stack">
       <section className="panel">
         <p className="eyebrow">Backups</p>
-        <h1>Export and recovery foundations</h1>
+        <h1>Backup and Restore</h1>
         <p>
           Export full-instance or household snapshots, then validate restore bundles before any
           operator-triggered recovery action.

@@ -8,16 +8,19 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
-from sqlalchemy import Date, DateTime, Numeric, Uuid, delete, select, text
+from sqlalchemy import Date, DateTime, Numeric, Uuid, delete, func, select, text
 from sqlalchemy.orm import Session
 
+from app.core.security import normalize_email
 from app.core.config import AppSettings, get_settings
 from app.models.base import Base
 from app.models.household import Household
 from app.models.membership import Membership
+from app.models.role import Role
 from app.models.user import User
+from app.models.identifiers import generate_external_id
 from app.services.audit import record_audit_event
 from app.services.import_storage import sanitize_upload_filename
 
@@ -28,6 +31,7 @@ BACKUP_FORMAT = "pantry.backup.bundle"
 BACKUP_FORMAT_VERSION = 1
 ALLOWED_BACKUP_EXTENSIONS = {".json"}
 RESTORE_CONFIRMATION_PHRASE = "RESTORE PANTRY INSTANCE"
+HOUSEHOLD_RESTORE_CONFIRMATION_PHRASE = "RESTORE PANTRY HOUSEHOLD"
 HOUSEHOLD_EXPORT_TABLES = {
     "roles",
     "users",
@@ -36,6 +40,7 @@ HOUSEHOLD_EXPORT_TABLES = {
     "location_groups",
     "locations",
     "products",
+    "product_enrichments",
     "product_aliases",
     "barcodes",
     "stock_lots",
@@ -49,6 +54,29 @@ HOUSEHOLD_EXPORT_TABLES = {
     "import_lines",
     "ai_provider_configs",
     "audit_events",
+}
+HOUSEHOLD_RESTORE_SKIPPED_TABLES = frozenset({"audit_events", "import_source_files"})
+TABLE_EXTERNAL_ID_PREFIXES = {
+    "users": "usr",
+    "households": "hse",
+    "memberships": "mem",
+    "location_groups": "lgr",
+    "locations": "loc",
+    "products": "prd",
+    "product_aliases": "pal",
+    "barcodes": "brc",
+    "stock_lots": "lot",
+    "shopping_lists": "shl",
+    "shopping_list_items": "sli",
+    "recipes": "rcp",
+    "recipe_ingredients": "rci",
+    "recipe_url_imports": "rim",
+    "import_jobs": "imp",
+    "import_source_files": "isf",
+    "import_lines": "iml",
+    "ai_provider_configs": "aic",
+    "audit_events": "evt",
+    "product_enrichments": "pen",
 }
 
 
@@ -72,6 +100,59 @@ class RestoreCompatibility:
 
 
 _SCHEMA_COMPATIBILITY: dict[tuple[str | None, str | None], RestoreCompatibility] = {
+    (
+        "20260409_000014",
+        "20260408_000013",
+    ): RestoreCompatibility(
+        supported=True,
+        allowed_missing_tables=frozenset(),
+        warnings=(),
+    ),
+    (
+        "20260409_000014",
+        "20260408_000012",
+    ): RestoreCompatibility(
+        supported=True,
+        allowed_missing_tables=frozenset({"password_reset_tokens"}),
+        warnings=(
+            "This backup predates password reset token support. Existing reset tokens will restore as empty.",
+        ),
+    ),
+    (
+        "20260409_000014",
+        "20260408_000011",
+    ): RestoreCompatibility(
+        supported=True,
+        allowed_missing_tables=frozenset({"password_reset_tokens"}),
+        warnings=(
+            "This backup predates password reset token support. Existing reset tokens will restore as empty.",
+        ),
+    ),
+    (
+        "20260409_000014",
+        "20260407_000010",
+    ): RestoreCompatibility(
+        supported=True,
+        allowed_missing_tables=frozenset({"shopping_lists", "shopping_list_items", "password_reset_tokens"}),
+        warnings=(
+            "This backup predates shopping list foundations. Shopping list records will restore as empty.",
+            "This backup predates password reset token support. Existing reset tokens will restore as empty.",
+        ),
+    ),
+    (
+        "20260409_000014",
+        "20260407_000009",
+    ): RestoreCompatibility(
+        supported=True,
+        allowed_missing_tables=frozenset(
+            {"product_enrichments", "shopping_lists", "shopping_list_items", "password_reset_tokens"}
+        ),
+        warnings=(
+            "This backup predates product enrichment support. Product enrichment records will restore as empty.",
+            "This backup predates shopping list foundations. Shopping list records will restore as empty.",
+            "This backup predates password reset token support. Existing reset tokens will restore as empty.",
+        ),
+    ),
     (
         "20260408_000013",
         "20260408_000012",
@@ -318,6 +399,54 @@ def _bundle_summary(bundle: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _deserialize_table_rows(bundle: dict[str, Any], *, table_name: str) -> list[dict[str, Any]]:
+    table = Base.metadata.tables[table_name]
+    rows = bundle.get("tables", {}).get(table_name) or []
+    deserialized_rows: list[dict[str, Any]] = []
+    for row in rows:
+        deserialized_rows.append(
+            {
+                column.name: _deserialize_scalar(column, row[column.name])
+                for column in table.columns
+                if column.name in row
+            }
+        )
+    return deserialized_rows
+
+
+def _restore_scope_description(allowed_restore_scopes: set[str]) -> str:
+    if allowed_restore_scopes == {"instance"}:
+        return "Restore currently supports full instance Pantry backup bundles only."
+    if allowed_restore_scopes == {"household"}:
+        return "Restore currently supports Pantry household backup bundles only."
+    if allowed_restore_scopes == {"household", "instance"}:
+        return "Restore supports Pantry full instance and household backup bundles through dedicated flows."
+    scopes = ", ".join(sorted(allowed_restore_scopes))
+    return f"Restore supports Pantry backup bundles for these scopes: {scopes}."
+
+
+def _validate_bundle_layout(
+    *,
+    payload: dict[str, Any],
+    expected_tables: set[str],
+    allowed_missing_tables: frozenset[str],
+) -> None:
+    actual_tables = set((payload.get("tables") or {}).keys())
+    missing_tables = expected_tables - actual_tables
+    unexpected_tables = actual_tables - expected_tables
+    disallowed_missing_tables = missing_tables - allowed_missing_tables
+    if disallowed_missing_tables or unexpected_tables:
+        missing_table_names = sorted(disallowed_missing_tables)
+        unexpected_table_names = sorted(unexpected_tables)
+        details: list[str] = []
+        if missing_table_names:
+            details.append(f"missing tables: {', '.join(missing_table_names)}")
+        if unexpected_table_names:
+            details.append(f"unexpected tables: {', '.join(unexpected_table_names)}")
+        suffix = f" ({'; '.join(details)})" if details else ""
+        raise ValueError(f"Backup table layout does not match the running Pantry schema.{suffix}")
+
+
 def _validate_bundle_payload(payload: dict[str, Any]) -> dict[str, Any]:
     if payload.get("format") != BACKUP_FORMAT:
         raise ValueError("Unsupported backup format. Pantry restore only accepts Pantry backup bundle v1 JSON files.")
@@ -373,21 +502,11 @@ def _validate_restore_bundle(db: Session, bundle: dict[str, Any]) -> None:
             "Backup schema revision does not match the running Pantry schema, and this older revision is not marked restore-compatible."
         )
 
-    expected_tables = {table.name for table in Base.metadata.sorted_tables}
-    actual_tables = set((payload.get("tables") or {}).keys())
-    missing_tables = expected_tables - actual_tables
-    unexpected_tables = actual_tables - expected_tables
-    disallowed_missing_tables = missing_tables - compatibility.allowed_missing_tables
-    if disallowed_missing_tables or unexpected_tables:
-        missing_tables = sorted(disallowed_missing_tables)
-        unexpected_tables = sorted(unexpected_tables)
-        details: list[str] = []
-        if missing_tables:
-            details.append(f"missing tables: {', '.join(missing_tables)}")
-        if unexpected_tables:
-            details.append(f"unexpected tables: {', '.join(unexpected_tables)}")
-        suffix = f" ({'; '.join(details)})" if details else ""
-        raise ValueError(f"Backup table layout does not match the running Pantry schema.{suffix}")
+    _validate_bundle_layout(
+        payload=payload,
+        expected_tables={table.name for table in Base.metadata.sorted_tables},
+        allowed_missing_tables=compatibility.allowed_missing_tables,
+    )
 
     roles_rows = payload["tables"].get("roles") or []
     users_rows = payload["tables"].get("users") or []
@@ -398,6 +517,32 @@ def _validate_restore_bundle(db: Session, bundle: dict[str, Any]) -> None:
     }
     if not any(user.get("platform_role_id") in platform_role_ids for user in users_rows):
         raise ValueError("Backup bundle must contain at least one platform admin user to restore safely.")
+
+
+def _validate_household_restore_bundle(db: Session, bundle: dict[str, Any]) -> tuple[RestoreCompatibility, dict[str, Any]]:
+    payload = _validate_bundle_payload(bundle)
+    if payload["scope"] != "household":
+        raise ValueError("Only Pantry household backup bundles can be restored through this flow.")
+
+    current_revision = _current_schema_revision(db)
+    bundle_revision = payload.get("schema_revision")
+    compatibility = _restore_compatibility(current_revision=current_revision, bundle_revision=bundle_revision)
+    if not compatibility.supported:
+        raise ValueError(
+            "Backup schema revision does not match the running Pantry schema, and this older revision is not marked restore-compatible."
+        )
+
+    _validate_bundle_layout(
+        payload=payload,
+        expected_tables=set(HOUSEHOLD_EXPORT_TABLES),
+        allowed_missing_tables=compatibility.allowed_missing_tables,
+    )
+
+    household_rows = _deserialize_table_rows(payload, table_name="households")
+    if len(household_rows) != 1:
+        raise ValueError("Pantry household restore requires exactly one household record in the backup bundle.")
+
+    return compatibility, household_rows[0]
 
 
 def build_instance_backup_bundle(db: Session) -> dict[str, Any]:
@@ -489,7 +634,7 @@ async def stage_backup_upload(
     bundle = _validate_bundle_payload(payload)
     warnings: list[str] = [
         "Uploaded restore bundles are staged in quarantine and never executed as code.",
-        "Restore currently supports full instance Pantry backup bundles only.",
+        _restore_scope_description(allowed_restore_scopes),
     ]
 
     current_revision = _current_schema_revision(db)
@@ -507,6 +652,13 @@ async def stage_backup_upload(
         )
     else:
         warnings.extend(compatibility.warnings)
+    if bundle["scope"] == "household" and "household" in allowed_restore_scopes:
+        warnings.append(
+            "Household restore creates a brand new household only. Pantry does not merge household backup data into an existing household."
+        )
+        warnings.append(
+            "Historical household audit events and original import upload blobs are not replayed during household restore."
+        )
 
     stage_id = secrets.token_hex(16)
     uploaded_at = _utc_now()
@@ -594,6 +746,423 @@ def restore_instance_backup_bundle(
         raise
 
     return _bundle_summary(bundle)
+
+
+def _new_record_identity(table_name: str) -> tuple[UUID, str]:
+    prefix = TABLE_EXTERNAL_ID_PREFIXES.get(table_name)
+    if prefix is None:
+        raise ValueError(f"No external ID prefix is registered for {table_name}.")
+    return uuid4(), generate_external_id(prefix)
+
+
+def _copy_row_for_household_restore(
+    row: dict[str, Any],
+    *,
+    table_name: str,
+    household_id: UUID,
+) -> dict[str, Any]:
+    copied = dict(row)
+    copied["household_id"] = household_id
+    new_id, new_external_id = _new_record_identity(table_name)
+    copied["id"] = new_id
+    copied["external_id"] = new_external_id
+    return copied
+
+
+def _build_role_id_map(db: Session, *, bundle: dict[str, Any]) -> dict[UUID, UUID]:
+    current_roles = {
+        role.code: role.id
+        for role in db.scalars(select(Role).order_by(Role.code)).all()
+    }
+    role_id_map: dict[UUID, UUID] = {}
+    for row in _deserialize_table_rows(bundle, table_name="roles"):
+        role_code = str(row.get("code") or "").strip()
+        role_id = row.get("id")
+        if not role_code or not isinstance(role_id, UUID):
+            continue
+        current_role_id = current_roles.get(role_code)
+        if current_role_id is None:
+            raise ValueError(f"Backup bundle references unknown role code {role_code}.")
+        role_id_map[role_id] = current_role_id
+    return role_id_map
+
+
+def _restore_household_users(
+    db: Session,
+    *,
+    bundle: dict[str, Any],
+    role_id_map: dict[UUID, UUID],
+) -> tuple[dict[UUID, UUID], dict[str, int]]:
+    user_id_map: dict[UUID, UUID] = {}
+    created_user_count = 0
+    reused_user_count = 0
+    platform_role_stripped_count = 0
+
+    for row in _deserialize_table_rows(bundle, table_name="users"):
+        original_id = row.get("id")
+        raw_email = row.get("email")
+        if not isinstance(original_id, UUID) or not isinstance(raw_email, str):
+            continue
+
+        normalized_email = normalize_email(raw_email)
+        existing_user = db.scalar(select(User).where(User.email == normalized_email))
+        if existing_user is not None:
+            user_id_map[original_id] = existing_user.id
+            reused_user_count += 1
+            continue
+
+        platform_role_id = row.get("platform_role_id")
+        if isinstance(platform_role_id, UUID) and platform_role_id in role_id_map:
+            platform_role_stripped_count += 1
+
+        user = User(
+            email=normalized_email,
+            password_hash=str(row.get("password_hash") or ""),
+            display_name=row.get("display_name") if isinstance(row.get("display_name"), str) else None,
+            is_active=bool(row.get("is_active", True)),
+            platform_role_id=None,
+            last_login_at=row.get("last_login_at"),
+            dietary_preferences=row.get("dietary_preferences"),
+        )
+        if not user.password_hash:
+            raise ValueError(f"Backup user {normalized_email} is missing a password hash.")
+
+        db.add(user)
+        db.flush()
+        user_id_map[original_id] = user.id
+        created_user_count += 1
+
+    return user_id_map, {
+        "created_user_count": created_user_count,
+        "reused_user_count": reused_user_count,
+        "platform_role_stripped_count": platform_role_stripped_count,
+    }
+
+
+def _restore_household_memberships(
+    db: Session,
+    *,
+    bundle: dict[str, Any],
+    target_household: Household,
+    user_id_map: dict[UUID, UUID],
+    role_id_map: dict[UUID, UUID],
+) -> int:
+    created_count = 0
+    for row in _deserialize_table_rows(bundle, table_name="memberships"):
+        user_id = user_id_map.get(row.get("user_id"))
+        role_id = role_id_map.get(row.get("role_id"))
+        if user_id is None or role_id is None:
+            continue
+
+        membership = Membership(
+            user_id=user_id,
+            household_id=target_household.id,
+            role_id=role_id,
+            is_active=bool(row.get("is_active", True)),
+        )
+        db.add(membership)
+        created_count += 1
+
+    db.flush()
+    return created_count
+
+
+def _restore_household_tables(
+    db: Session,
+    *,
+    bundle: dict[str, Any],
+    target_household: Household,
+    user_id_map: dict[UUID, UUID],
+) -> dict[str, int]:
+    table_counts: dict[str, int] = {}
+    id_maps: dict[str, dict[UUID, UUID]] = {
+        "location_groups": {},
+        "locations": {},
+        "products": {},
+        "product_aliases": {},
+        "barcodes": {},
+        "stock_lots": {},
+        "shopping_lists": {},
+        "shopping_list_items": {},
+        "recipes": {},
+        "recipe_ingredients": {},
+        "recipe_url_imports": {},
+        "import_jobs": {},
+        "import_source_files": {},
+        "import_lines": {},
+        "product_enrichments": {},
+        "ai_provider_configs": {},
+    }
+
+    for row in _deserialize_table_rows(bundle, table_name="location_groups"):
+        original_id = row["id"]
+        copied = _copy_row_for_household_restore(row, table_name="location_groups", household_id=target_household.id)
+        id_maps["location_groups"][original_id] = copied["id"]
+        db.execute(Base.metadata.tables["location_groups"].insert(), [copied])
+    table_counts["location_groups"] = len(id_maps["location_groups"])
+
+    for row in _deserialize_table_rows(bundle, table_name="locations"):
+        original_id = row["id"]
+        copied = _copy_row_for_household_restore(row, table_name="locations", household_id=target_household.id)
+        copied["location_group_id"] = id_maps["location_groups"][row["location_group_id"]]
+        id_maps["locations"][original_id] = copied["id"]
+        db.execute(Base.metadata.tables["locations"].insert(), [copied])
+    table_counts["locations"] = len(id_maps["locations"])
+
+    for row in _deserialize_table_rows(bundle, table_name="products"):
+        original_id = row["id"]
+        copied = _copy_row_for_household_restore(row, table_name="products", household_id=target_household.id)
+        id_maps["products"][original_id] = copied["id"]
+        db.execute(Base.metadata.tables["products"].insert(), [copied])
+    table_counts["products"] = len(id_maps["products"])
+
+    for row in _deserialize_table_rows(bundle, table_name="product_aliases"):
+        original_id = row["id"]
+        copied = _copy_row_for_household_restore(row, table_name="product_aliases", household_id=target_household.id)
+        copied["product_id"] = id_maps["products"][row["product_id"]]
+        id_maps["product_aliases"][original_id] = copied["id"]
+        db.execute(Base.metadata.tables["product_aliases"].insert(), [copied])
+    table_counts["product_aliases"] = len(id_maps["product_aliases"])
+
+    for row in _deserialize_table_rows(bundle, table_name="barcodes"):
+        original_id = row["id"]
+        copied = _copy_row_for_household_restore(row, table_name="barcodes", household_id=target_household.id)
+        copied["product_id"] = id_maps["products"][row["product_id"]]
+        id_maps["barcodes"][original_id] = copied["id"]
+        db.execute(Base.metadata.tables["barcodes"].insert(), [copied])
+    table_counts["barcodes"] = len(id_maps["barcodes"])
+
+    for row in _deserialize_table_rows(bundle, table_name="stock_lots"):
+        original_id = row["id"]
+        copied = _copy_row_for_household_restore(row, table_name="stock_lots", household_id=target_household.id)
+        copied["product_id"] = id_maps["products"][row["product_id"]]
+        copied["location_id"] = id_maps["locations"][row["location_id"]]
+        id_maps["stock_lots"][original_id] = copied["id"]
+        db.execute(Base.metadata.tables["stock_lots"].insert(), [copied])
+    table_counts["stock_lots"] = len(id_maps["stock_lots"])
+
+    for row in _deserialize_table_rows(bundle, table_name="shopping_lists"):
+        original_id = row["id"]
+        copied = _copy_row_for_household_restore(row, table_name="shopping_lists", household_id=target_household.id)
+        id_maps["shopping_lists"][original_id] = copied["id"]
+        db.execute(
+            Base.metadata.tables["shopping_lists"].insert(),
+            [{**copied, "merged_into_list_id": None}],
+        )
+    for row in _deserialize_table_rows(bundle, table_name="shopping_lists"):
+        merged_into_list_id = row.get("merged_into_list_id")
+        if not isinstance(merged_into_list_id, UUID):
+            continue
+        db.execute(
+            Base.metadata.tables["shopping_lists"].update().where(
+                Base.metadata.tables["shopping_lists"].c.id == id_maps["shopping_lists"][row["id"]]
+            ).values(merged_into_list_id=id_maps["shopping_lists"][merged_into_list_id])
+        )
+    table_counts["shopping_lists"] = len(id_maps["shopping_lists"])
+
+    for row in _deserialize_table_rows(bundle, table_name="shopping_list_items"):
+        original_id = row["id"]
+        copied = _copy_row_for_household_restore(
+            row,
+            table_name="shopping_list_items",
+            household_id=target_household.id,
+        )
+        copied["shopping_list_id"] = id_maps["shopping_lists"][row["shopping_list_id"]]
+        product_id = row.get("product_id")
+        copied["product_id"] = id_maps["products"].get(product_id) if isinstance(product_id, UUID) else None
+        id_maps["shopping_list_items"][original_id] = copied["id"]
+        db.execute(Base.metadata.tables["shopping_list_items"].insert(), [copied])
+    table_counts["shopping_list_items"] = len(id_maps["shopping_list_items"])
+
+    for row in _deserialize_table_rows(bundle, table_name="recipes"):
+        original_id = row["id"]
+        copied = _copy_row_for_household_restore(row, table_name="recipes", household_id=target_household.id)
+        id_maps["recipes"][original_id] = copied["id"]
+        db.execute(Base.metadata.tables["recipes"].insert(), [copied])
+    table_counts["recipes"] = len(id_maps["recipes"])
+
+    for row in _deserialize_table_rows(bundle, table_name="recipe_ingredients"):
+        original_id = row["id"]
+        copied = _copy_row_for_household_restore(
+            row,
+            table_name="recipe_ingredients",
+            household_id=target_household.id,
+        )
+        copied["recipe_id"] = id_maps["recipes"][row["recipe_id"]]
+        product_id = row.get("product_id")
+        copied["product_id"] = id_maps["products"].get(product_id) if isinstance(product_id, UUID) else None
+        id_maps["recipe_ingredients"][original_id] = copied["id"]
+        db.execute(Base.metadata.tables["recipe_ingredients"].insert(), [copied])
+    table_counts["recipe_ingredients"] = len(id_maps["recipe_ingredients"])
+
+    for row in _deserialize_table_rows(bundle, table_name="recipe_url_imports"):
+        original_id = row["id"]
+        copied = _copy_row_for_household_restore(
+            row,
+            table_name="recipe_url_imports",
+            household_id=target_household.id,
+        )
+        recipe_id = row.get("recipe_id")
+        copied["recipe_id"] = id_maps["recipes"].get(recipe_id) if isinstance(recipe_id, UUID) else None
+        requested_by_user_id = row.get("requested_by_user_id")
+        copied["requested_by_user_id"] = (
+            user_id_map.get(requested_by_user_id) if isinstance(requested_by_user_id, UUID) else None
+        )
+        id_maps["recipe_url_imports"][original_id] = copied["id"]
+        db.execute(Base.metadata.tables["recipe_url_imports"].insert(), [copied])
+    table_counts["recipe_url_imports"] = len(id_maps["recipe_url_imports"])
+
+    for row in _deserialize_table_rows(bundle, table_name="import_jobs"):
+        original_id = row["id"]
+        copied = _copy_row_for_household_restore(row, table_name="import_jobs", household_id=target_household.id)
+        requested_by_user_id = row.get("requested_by_user_id")
+        copied["requested_by_user_id"] = (
+            user_id_map.get(requested_by_user_id) if isinstance(requested_by_user_id, UUID) else None
+        )
+        id_maps["import_jobs"][original_id] = copied["id"]
+        db.execute(Base.metadata.tables["import_jobs"].insert(), [copied])
+    table_counts["import_jobs"] = len(id_maps["import_jobs"])
+
+    for row in _deserialize_table_rows(bundle, table_name="import_lines"):
+        original_id = row["id"]
+        copied = _copy_row_for_household_restore(row, table_name="import_lines", household_id=target_household.id)
+        copied["import_job_id"] = id_maps["import_jobs"][row["import_job_id"]]
+        product_id = row.get("product_id")
+        suggested_product_id = row.get("suggested_product_id")
+        confirmed_stock_lot_id = row.get("confirmed_stock_lot_id")
+        copied["product_id"] = id_maps["products"].get(product_id) if isinstance(product_id, UUID) else None
+        copied["suggested_product_id"] = (
+            id_maps["products"].get(suggested_product_id) if isinstance(suggested_product_id, UUID) else None
+        )
+        copied["confirmed_stock_lot_id"] = (
+            id_maps["stock_lots"].get(confirmed_stock_lot_id)
+            if isinstance(confirmed_stock_lot_id, UUID)
+            else None
+        )
+        id_maps["import_lines"][original_id] = copied["id"]
+        db.execute(Base.metadata.tables["import_lines"].insert(), [copied])
+    table_counts["import_lines"] = len(id_maps["import_lines"])
+
+    for row in _deserialize_table_rows(bundle, table_name="product_enrichments"):
+        original_id = row["id"]
+        copied = _copy_row_for_household_restore(
+            row,
+            table_name="product_enrichments",
+            household_id=target_household.id,
+        )
+        copied["product_id"] = id_maps["products"][row["product_id"]]
+        id_maps["product_enrichments"][original_id] = copied["id"]
+        db.execute(Base.metadata.tables["product_enrichments"].insert(), [copied])
+    table_counts["product_enrichments"] = len(id_maps["product_enrichments"])
+
+    for row in _deserialize_table_rows(bundle, table_name="ai_provider_configs"):
+        original_id = row["id"]
+        copied = _copy_row_for_household_restore(
+            row,
+            table_name="ai_provider_configs",
+            household_id=target_household.id,
+        )
+        if copied.get("scope_type") == "household":
+            copied["scope_key"] = target_household.external_id
+        id_maps["ai_provider_configs"][original_id] = copied["id"]
+        db.execute(Base.metadata.tables["ai_provider_configs"].insert(), [copied])
+    table_counts["ai_provider_configs"] = len(id_maps["ai_provider_configs"])
+
+    return table_counts
+
+
+def restore_household_backup_bundle(
+    db: Session,
+    *,
+    bundle: dict[str, Any],
+    actor: User,
+    target_household_name: str,
+) -> tuple[dict[str, Any], tuple[str, ...]]:
+    compatibility, bundle_household = _validate_household_restore_bundle(db, bundle)
+
+    normalized_name = target_household_name.strip()
+    if not normalized_name:
+        raise ValueError("A restore target household name is required.")
+
+    existing_household = db.scalar(
+        select(Household).where(func.lower(Household.name) == normalized_name.casefold())
+    )
+    if existing_household is not None:
+        raise ValueError(
+            "A household with that restore target name already exists. Rename the restore target or delete the existing household first."
+        )
+
+    try:
+        target_household = Household(
+            name=normalized_name,
+            dietary_preferences=bundle_household.get("dietary_preferences"),
+        )
+        db.add(target_household)
+        db.flush()
+
+        role_id_map = _build_role_id_map(db, bundle=bundle)
+        user_id_map, user_counts = _restore_household_users(db, bundle=bundle, role_id_map=role_id_map)
+        membership_count = _restore_household_memberships(
+            db,
+            bundle=bundle,
+            target_household=target_household,
+            user_id_map=user_id_map,
+            role_id_map=role_id_map,
+        )
+        restored_table_counts = _restore_household_tables(
+            db,
+            bundle=bundle,
+            target_household=target_household,
+            user_id_map=user_id_map,
+        )
+
+        warnings = list(compatibility.warnings)
+        warnings.append(
+            "Household restore always creates a new household. Pantry does not merge or overwrite an existing household through this flow."
+        )
+        warnings.append(
+            "Historical household audit events are not replayed during household restore. Pantry records a new restore audit event instead."
+        )
+        warnings.append(
+            "Uploaded import source files are not replayed during household restore. Import history is restored without original upload blobs."
+        )
+        if user_counts["platform_role_stripped_count"] > 0:
+            warnings.append(
+                "Platform admin privileges from household backup users are not restored through the household restore flow."
+            )
+        if compatibility.allowed_missing_tables:
+            warnings.append(
+                "This backup came from an older Pantry schema. Pantry restored the compatible data it could, but some records may be missing."
+            )
+
+        record_audit_event(
+            db,
+            household=target_household,
+            actor=actor,
+            action="admin.household.restored",
+            target_type="household",
+            target_external_id=target_household.external_id,
+            event_metadata={
+                "target_name": target_household.name,
+                "source_household_external_id": bundle.get("metadata", {}).get("household_external_id"),
+                "source_household_name": bundle.get("metadata", {}).get("household_name"),
+                "bundle_schema_revision": bundle.get("schema_revision"),
+                "created_user_count": user_counts["created_user_count"],
+                "reused_user_count": user_counts["reused_user_count"],
+                "membership_count": membership_count,
+                "restored_tables": restored_table_counts,
+                "warnings": warnings,
+            },
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    restored_bundle_summary = _bundle_summary(bundle)
+    restored_bundle_summary["household_external_id"] = target_household.external_id
+    restored_bundle_summary["household_name"] = target_household.name
+    return restored_bundle_summary, tuple(warnings)
 
 
 def backup_sha256_hex(data: bytes) -> str:
