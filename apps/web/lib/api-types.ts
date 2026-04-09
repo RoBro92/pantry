@@ -604,6 +604,7 @@ export type PantryProductSummary = {
   storage_summary: string;
   nearest_expiry_on: string | null;
   near_expiry_lot_count: number;
+  notes: string | null;
   manual_ingredient_tags: string[];
   aliases: string[];
   barcodes: string[];
@@ -619,6 +620,7 @@ export type PantryCatalogProductSummary = {
   default_unit: string;
   aliases: string[];
   barcodes: string[];
+  notes: string | null;
   manual_ingredient_tags: string[];
   enrichment: ProductEnrichmentSummary | null;
 };

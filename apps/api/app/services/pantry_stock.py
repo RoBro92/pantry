@@ -244,6 +244,7 @@ def create_or_add_pantry_entry(
     location_external_id: str,
     barcode: str | None,
     aliases: list[str],
+    product_notes: str | None,
     manual_ingredient_tags: list[str],
     note: str | None,
     purchased_on: date | None,
@@ -302,6 +303,7 @@ def create_or_add_pantry_entry(
             product=matched_product,
             aliases=aliases,
             barcode=barcode,
+            product_notes=product_notes,
             manual_ingredient_tags=manual_ingredient_tags,
         )
         lot = add_stock_lot(
@@ -373,6 +375,7 @@ def create_or_add_pantry_entry(
         default_unit=unit,
         aliases=aliases,
         barcodes=[barcode] if barcode and barcode.strip() else [],
+        notes=product_notes,
         manual_ingredient_tags=manual_ingredient_tags,
         commit=False,
     )
@@ -547,6 +550,7 @@ def _merge_existing_product_metadata(
     product: Product,
     aliases: list[str],
     barcode: str | None,
+    product_notes: str | None,
     manual_ingredient_tags: list[str],
 ) -> str | None:
     added_aliases = [
@@ -570,7 +574,13 @@ def _merge_existing_product_metadata(
     if manual_ingredients_updated:
         db.add(product)
 
-    if not added_aliases and not added_barcodes and not manual_ingredients_updated:
+    notes_updated = False
+    if product_notes and not product.notes:
+        product.notes = require_text(product_notes, field_name="Product notes")
+        db.add(product)
+        notes_updated = True
+
+    if not added_aliases and not added_barcodes and not manual_ingredients_updated and not notes_updated:
         return None
 
     record_audit_event(
@@ -584,6 +594,7 @@ def _merge_existing_product_metadata(
             "product_name": product.name,
             "aliases_added": added_aliases,
             "barcodes_added": added_barcodes,
+            "notes": product.notes,
             "manual_ingredient_tags": list(product.manual_ingredient_tags or []),
         },
     )
@@ -595,6 +606,8 @@ def _merge_existing_product_metadata(
         parts.append("saved barcode")
     if manual_ingredients_updated:
         parts.append("saved manual ingredients")
+    if notes_updated:
+        parts.append("saved product notes")
     return "; ".join(parts)
 
 

@@ -298,12 +298,14 @@ def create_product(
     default_unit: str,
     aliases: list[str],
     barcodes: list[str],
+    notes: str | None = None,
     manual_ingredient_tags: list[str] | None = None,
     commit: bool = True,
 ) -> Product:
     display_name = require_text(name, field_name="Product name")
     normalized_name = normalize_lookup_name(display_name)
     normalized_unit = normalize_unit(default_unit)
+    normalized_notes = require_text(notes, field_name="Product notes") if notes else None
 
     alias_display_names = dedupe_preserving_order(
         [require_text(alias, field_name="Alias") for alias in aliases if alias.strip()]
@@ -330,6 +332,7 @@ def create_product(
         name=display_name,
         normalized_name=normalized_name,
         default_unit=normalized_unit,
+        notes=normalized_notes,
         manual_ingredient_tags=ingredient_tags or None,
     )
     db.add(product)
@@ -373,6 +376,139 @@ def create_product(
             "default_unit": normalized_unit,
             "aliases": [alias.name for alias in alias_models],
             "barcodes": [barcode.value for barcode in barcode_models],
+            "notes": normalized_notes,
+            "manual_ingredient_tags": ingredient_tags,
+        },
+    )
+    if commit:
+        db.commit()
+        db.refresh(product)
+        return get_product_by_external_id(db, household=household, external_id=product.external_id) or product
+
+    return product
+
+
+def update_product(
+    db: Session,
+    *,
+    household: Household,
+    actor: User,
+    product: Product,
+    name: str,
+    default_unit: str,
+    aliases: list[str],
+    barcodes: list[str],
+    notes: str | None = None,
+    manual_ingredient_tags: list[str] | None = None,
+    commit: bool = True,
+) -> Product:
+    display_name = require_text(name, field_name="Product name")
+    normalized_name = normalize_lookup_name(display_name)
+    normalized_unit = normalize_unit(default_unit)
+    normalized_notes = require_text(notes, field_name="Product notes") if notes else None
+    ingredient_tags = normalize_text_tags(manual_ingredient_tags or [], field_name="Ingredient")
+
+    alias_display_names = dedupe_preserving_order(
+        [require_text(alias, field_name="Alias") for alias in aliases if alias.strip()]
+    )
+    alias_normalized_names = dedupe_preserving_order(
+        [
+            normalized
+            for normalized in [normalize_lookup_name(alias_name) for alias_name in alias_display_names]
+            if normalized != normalized_name
+        ]
+    )
+    barcode_display_values = dedupe_preserving_order([normalize_barcode(value) for value in barcodes if value.strip()])
+
+    existing_name_owner = db.scalar(
+        select(Product)
+        .where(Product.household_id == household.id)
+        .where(Product.normalized_name == normalized_name)
+    )
+    if existing_name_owner is not None and existing_name_owner.id != product.id:
+        raise ValueError(f"{existing_name_owner.name} already exists.")
+
+    alias_conflicts = find_alias_conflicts(
+        db,
+        household=household,
+        aliases=[display_name, *alias_display_names],
+        ignore_product_id=product.id,
+    )
+    if alias_conflicts:
+        raise ValueError(f"{alias_conflicts[0]['product_name']} already uses that name or alias.")
+
+    _validate_barcodes(
+        db,
+        household=household,
+        normalized_barcodes=barcode_display_values,
+        ignore_product_id=product.id,
+    )
+
+    product.name = display_name
+    product.normalized_name = normalized_name
+    product.default_unit = normalized_unit
+    product.notes = normalized_notes
+    product.manual_ingredient_tags = ingredient_tags or None
+
+    next_alias_pairs = {
+        normalize_lookup_name(alias_name): alias_name
+        for alias_name in alias_display_names
+        if normalize_lookup_name(alias_name) != normalized_name
+    }
+    existing_aliases = {alias.normalized_name: alias for alias in list(product.aliases)}
+    for alias_normalized, alias_model in existing_aliases.items():
+        if alias_normalized not in next_alias_pairs:
+            db.delete(alias_model)
+    for alias_normalized, alias_name in next_alias_pairs.items():
+        alias_model = existing_aliases.get(alias_normalized)
+        if alias_model is None:
+            db.add(
+                ProductAlias(
+                    household_id=household.id,
+                    product_id=product.id,
+                    name=alias_name,
+                    normalized_name=alias_normalized,
+                )
+            )
+        else:
+            alias_model.name = alias_name
+            db.add(alias_model)
+
+    next_barcodes = {barcode_value for barcode_value in barcode_display_values}
+    existing_barcodes = {barcode.normalized_value: barcode for barcode in list(product.barcodes)}
+    for barcode_value, barcode_model in existing_barcodes.items():
+        if barcode_value not in next_barcodes:
+            db.delete(barcode_model)
+    for barcode_value in next_barcodes:
+        barcode_model = existing_barcodes.get(barcode_value)
+        if barcode_model is None:
+            db.add(
+                Barcode(
+                    household_id=household.id,
+                    product_id=product.id,
+                    value=barcode_value,
+                    normalized_value=barcode_value,
+                )
+            )
+        else:
+            barcode_model.value = barcode_value
+            barcode_model.normalized_value = barcode_value
+            db.add(barcode_model)
+
+    db.add(product)
+    record_audit_event(
+        db,
+        household=household,
+        actor=actor,
+        action="product.updated",
+        target_type="product",
+        target_external_id=product.external_id,
+        event_metadata={
+            "name": display_name,
+            "default_unit": normalized_unit,
+            "aliases": list(next_alias_pairs.values()),
+            "barcodes": list(next_barcodes),
+            "notes": normalized_notes,
             "manual_ingredient_tags": ingredient_tags,
         },
     )

@@ -29,14 +29,15 @@ type PantryAddEntryDialogProps = {
 
 type FormState = {
   name: string;
-  barcode: string;
+  barcodesInput: string;
   quantity: string;
   unit: string;
   locationExternalId: string;
   aliases: string;
   purchasedOn: string;
   expiresOn: string;
-  note: string;
+  productNotes: string;
+  lotNote: string;
   manualIngredientInput: string;
   manualIngredientTags: string[];
 };
@@ -47,14 +48,15 @@ const UNIT_OPTIONS = ["g", "kg", "oz", "lb", "ml", "l", "count", "pack", "bottle
 
 const EMPTY_FORM: FormState = {
   name: "",
-  barcode: "",
+  barcodesInput: "",
   quantity: "",
   unit: "count",
   locationExternalId: "",
   aliases: "",
   purchasedOn: "",
   expiresOn: "",
-  note: "",
+  productNotes: "",
+  lotNote: "",
   manualIngredientInput: "",
   manualIngredientTags: [],
 };
@@ -72,6 +74,17 @@ function splitAliases(value: string) {
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function splitBarcodes(value: string) {
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function getPrimaryBarcode(value: string) {
+  return splitBarcodes(value)[0] ?? "";
 }
 
 function normalizeTagValue(value: string) {
@@ -153,7 +166,7 @@ export function PantryAddEntryDialog({
 
   async function runDuplicateCheck() {
     const candidateName = form.name.trim();
-    const candidateBarcode = form.barcode.trim();
+    const candidateBarcode = getPrimaryBarcode(form.barcodesInput);
     if (!candidateName && !candidateBarcode) {
       clearDuplicateState();
       return;
@@ -180,7 +193,7 @@ export function PantryAddEntryDialog({
 
   async function findProductDetails(source: "manual" | "blur" = "manual") {
     const candidateName = form.name.trim();
-    const candidateBarcode = form.barcode.trim();
+    const candidateBarcode = getPrimaryBarcode(form.barcodesInput);
     if (!candidateName && !candidateBarcode) {
       return;
     }
@@ -243,12 +256,13 @@ export function PantryAddEntryDialog({
           quantity: form.quantity,
           unit: form.unit,
           location_external_id: form.locationExternalId,
-          barcode: form.barcode.trim() || null,
+          barcode: getPrimaryBarcode(form.barcodesInput) || null,
           aliases: splitAliases(form.aliases),
+          product_notes: form.productNotes.trim() || null,
           manual_ingredient_tags: form.manualIngredientTags,
           purchased_on: form.purchasedOn || null,
           expires_on: form.expiresOn || null,
-          note: form.note.trim() || null,
+          note: form.lotNote.trim() || null,
           existing_product_external_id:
             matchedProduct && duplicateDecision !== "separate"
               ? matchedProduct.external_id
@@ -357,14 +371,14 @@ export function PantryAddEntryDialog({
                 <div className="inline-action-field is-multi-action">
                   <input
                     name="barcode"
-                    value={form.barcode}
+                    value={form.barcodesInput}
                     onChange={(event) => {
                       clearDuplicateState();
                       resetEnrichmentPreview();
-                      setForm((current) => ({ ...current, barcode: event.target.value }));
+                      setForm((current) => ({ ...current, barcodesInput: event.target.value }));
                     }}
                     onBlur={() => {
-                      const trimmedBarcode = form.barcode.trim();
+                      const trimmedBarcode = getPrimaryBarcode(form.barcodesInput);
                       void runDuplicateCheck();
                       if (trimmedBarcode && trimmedBarcode !== lastBarcodeLookupValue) {
                         void findProductDetails("blur");
@@ -375,7 +389,7 @@ export function PantryAddEntryDialog({
                   <button
                     type="button"
                     className="ghost-button compact-button"
-                    disabled={lookupPending || (!form.name.trim() && !form.barcode.trim())}
+                    disabled={lookupPending || (!form.name.trim() && !getPrimaryBarcode(form.barcodesInput))}
                     onClick={() => void findProductDetails("manual")}
                   >
                     {lookupPending ? "Looking up..." : "Look up"}
@@ -391,7 +405,8 @@ export function PantryAddEntryDialog({
                     <summary>?</summary>
                     <p className="helper-text">
                       USB scanners can type directly into this field. Pantry also tries an Open Food
-                      Facts lookup when you leave the field.
+                      Facts lookup when you leave the field. Extra barcodes can be added as
+                      comma-separated values.
                     </p>
                   </details>
                 </div>
@@ -462,7 +477,7 @@ export function PantryAddEntryDialog({
               </label>
 
               <label className="field">
-                <span>Purchased</span>
+                <span>Purchase date</span>
                 <input
                   type="date"
                   name="purchased_on"
@@ -474,7 +489,7 @@ export function PantryAddEntryDialog({
               </label>
 
               <label className="field">
-                <span>Expires</span>
+                <span>Expiry date</span>
                 <input
                   type="date"
                   name="expires_on"
@@ -487,16 +502,29 @@ export function PantryAddEntryDialog({
             </div>
 
             <p className="helper-text">
-              Aliases accept either <code>ingredient,ingredient</code> or <code>ingredient, ingredient</code>.
+              Aliases and extra barcodes accept either <code>value,value</code> or <code>value, value</code>.
             </p>
 
             <label className="field">
-              <span>Note</span>
+              <span>Product notes</span>
+              <textarea
+                name="product_notes"
+                rows={3}
+                value={form.productNotes}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, productNotes: event.target.value }))
+                }
+                placeholder="Storage guidance, substitutions, or household-specific notes"
+              />
+            </label>
+
+            <label className="field">
+              <span>Lot note</span>
               <input
                 name="note"
-                value={form.note}
+                value={form.lotNote}
                 onChange={(event) =>
-                  setForm((current) => ({ ...current, note: event.target.value }))
+                  setForm((current) => ({ ...current, lotNote: event.target.value }))
                 }
                 placeholder="Family pack"
               />
@@ -513,7 +541,7 @@ export function PantryAddEntryDialog({
               onRemoveTag={removeManualIngredient}
               placeholder="Add an ingredient such as Beef"
               inputName="manual_ingredient"
-              helperText="Use commas or spaced commas for aliases. Manual ingredient tags stay alongside any imported enrichment."
+              helperText="Manual ingredient tags stay alongside any imported enrichment."
             />
           </section>
 
@@ -615,7 +643,12 @@ export function PantryAddEntryDialog({
           onDetected={(barcode) => {
             clearDuplicateState();
             resetEnrichmentPreview();
-            setForm((current) => ({ ...current, barcode }));
+            setForm((current) => ({
+              ...current,
+              barcodesInput: current.barcodesInput.trim()
+                ? `${barcode}, ${current.barcodesInput}`
+                : barcode,
+            }));
             setLastBarcodeLookupValue("");
             setIsScannerOpen(false);
           }}

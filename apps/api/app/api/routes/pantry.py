@@ -18,6 +18,7 @@ from app.schemas.pantry import (
     ProductEnrichmentPreviewRequest,
     ProductEnrichmentPreviewResponse,
     CreateProductRequest,
+    UpdateProductRequest,
     LocationGroupSummary,
     LocationSummary,
     MoveStockLotRequest,
@@ -32,6 +33,7 @@ from app.schemas.pantry import (
     UpdateStockLotRequest,
 )
 from app.services.pantry_catalog import create_location, create_location_group, create_product, get_product_by_external_id
+from app.services.pantry_catalog import update_product
 from app.services.location_links import serialize_location_link
 from app.services.pantry_queries import (
     PantryFilterOptions,
@@ -159,6 +161,7 @@ def post_product(
             default_unit=payload.default_unit,
             aliases=payload.aliases,
             barcodes=payload.barcodes,
+            notes=payload.notes,
             manual_ingredient_tags=payload.manual_ingredient_tags,
         )
     except ValueError as exc:
@@ -179,6 +182,52 @@ def post_product(
                 get_product_by_external_id(db, household=access.household, external_id=product.external_id)
                 or product
             )
+        except ProductEnrichmentError:
+            pass
+
+    return serialize_product_summary(product)
+
+
+@router.put("/products/{product_external_id}", response_model=ProductSummary)
+def put_product(
+    product_external_id: str,
+    payload: UpdateProductRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
+    access: HouseholdAccess = Depends(require_household_access(allowed_roles={HOUSEHOLD_ADMIN_ROLE})),
+):
+    product = get_product_by_external_id(db, household=access.household, external_id=product_external_id)
+    if product is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found.")
+
+    try:
+        product = update_product(
+            db,
+            household=access.household,
+            actor=current_user,
+            product=product,
+            name=payload.name,
+            default_unit=payload.default_unit,
+            aliases=payload.aliases,
+            barcodes=payload.barcodes,
+            notes=payload.notes,
+            manual_ingredient_tags=payload.manual_ingredient_tags,
+        )
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
+
+    if payload.confirmed_enrichment is not None:
+        try:
+            apply_confirmed_product_enrichment(
+                db,
+                household=access.household,
+                actor=current_user,
+                product=product,
+                confirmed_enrichment=payload.confirmed_enrichment,
+            )
+            db.commit()
+            db.expire_all()
+            product = get_product_by_external_id(db, household=access.household, external_id=product_external_id) or product
         except ProductEnrichmentError:
             pass
 
@@ -243,6 +292,7 @@ def post_pantry_entry(
             location_external_id=payload.location_external_id,
             barcode=payload.barcode,
             aliases=payload.aliases,
+            product_notes=payload.product_notes,
             manual_ingredient_tags=payload.manual_ingredient_tags,
             note=payload.note,
             purchased_on=payload.purchased_on,

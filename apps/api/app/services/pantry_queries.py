@@ -113,6 +113,8 @@ def _event_summary(event: AuditEvent) -> AuditEventSummary:
         )
     elif action == "product.created":
         summary = f"Created product {metadata['name']}"
+    elif action == "product.updated":
+        summary = f"Updated product {metadata['name']}"
     elif action == "product.metadata_updated":
         summary = f"Updated product details for {metadata['product_name']}"
     elif action == "product.enrichment_synced":
@@ -297,6 +299,7 @@ def _build_product_summary(
         storage_summary=_summarize_names(storage_names, empty_label="No active stock"),
         nearest_expiry_on=min(nearest_expiry_values) if nearest_expiry_values else None,
         near_expiry_lot_count=sum(1 for lot in sorted_lots if _is_near_expiry(lot, days=near_expiry_days)),
+        notes=product.notes,
         manual_ingredient_tags=list(product.manual_ingredient_tags or []),
         aliases=[alias.name for alias in product.aliases],
         barcodes=[barcode.value for barcode in product.barcodes],
@@ -422,6 +425,7 @@ def build_pantry_overview(
                 "default_unit": product.default_unit,
                 "aliases": [alias.name for alias in product.aliases],
                 "barcodes": [barcode.value for barcode in product.barcodes],
+                "notes": product.notes,
                 "manual_ingredient_tags": list(product.manual_ingredient_tags or []),
                 "enrichment": serialize_product_enrichment_summary(product),
             }
