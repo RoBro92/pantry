@@ -7,7 +7,6 @@ services:
     environment:
       NODE_ENV: production
       NEXT_PUBLIC_APP_VERSION: ${PANTRY_VERSION:-0.1.0}
-      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL}
       INTERNAL_API_BASE_URL: ${INTERNAL_API_BASE_URL:-http://api:8000}
     ports:
       - "${WEB_BIND_ADDRESS:-0.0.0.0}:${WEB_PORT:-3000}:3000"

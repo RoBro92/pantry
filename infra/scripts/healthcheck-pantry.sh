@@ -21,7 +21,7 @@ EOF
 }
 
 main() {
-  local env_file web_url api_url web_probe_url api_probe_url
+  local env_file web_url api_url web_probe_url api_probe_url web_api_proxy_url
   local web_bind_address web_port api_bind_address api_port
   local web_status_json api_health_json setup_status_json worker_status_json
   local compose_ps
@@ -72,9 +72,11 @@ main() {
 
   web_probe_url="http://${web_bind_address}:${web_port}"
   api_probe_url="http://${api_bind_address}:${api_port}"
+  web_api_proxy_url="${web_probe_url}/api/health"
 
   log_step "Waiting for Pantry services"
   wait_for_http_ok "${web_probe_url}/" "${TIMEOUT_SECONDS}" || die "Web health check timed out at ${web_probe_url}/"
+  wait_for_http_ok "${web_api_proxy_url}" "${TIMEOUT_SECONDS}" || die "Web API proxy timed out at ${web_api_proxy_url}"
   wait_for_http_ok "${api_probe_url}/api/health" "${TIMEOUT_SECONDS}" || die "API health check timed out at ${api_probe_url}/api/health"
 
   log_step "Inspecting running containers"
@@ -84,7 +86,7 @@ main() {
   log_step "Checking web, API, setup, and worker status"
   web_status_json="$(curl -fsS "${web_probe_url}/" >/dev/null && printf '{"status":"ok"}')"
   api_health_json="$(curl -fsS "${api_probe_url}/api/health")"
-  setup_status_json="$(curl -fsS "${api_probe_url}/api/setup/status")"
+  setup_status_json="$(curl -fsS "${web_probe_url}/api/setup/status")"
   worker_status_json="$(docker_compose_in_dir "${INSTALL_DIR}" exec -T worker python -m worker.main --status)"
 
   python3 - "${api_health_json}" "${setup_status_json}" "${worker_status_json}" "${web_url}" "${api_url}" <<'PY'
@@ -106,6 +108,7 @@ print()
 print("Pantry health summary")
 print(f"  Web: ok ({web_url})")
 print(f"  API: {api_health.get('status')} ({api_url}/api/health)")
+print(f"  Web API proxy: ok ({web_url}/api/health)")
 print(f"  Version: {api_health.get('version')}")
 print(f"  Setup initialized: {setup_status.get('is_initialized')}")
 print(f"  Platform admins: {setup_status.get('platform_admin_count')}")
