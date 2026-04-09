@@ -12,17 +12,18 @@ export function ForgotPasswordForm() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const form = event.currentTarget;
     setError(null);
     setStatusMessage(null);
     setPending(true);
 
-    const formData = new FormData(event.currentTarget);
+    const formData = new FormData(form);
     try {
       const response = await postToApi<PasswordActionResponse>("/api/auth/password-reset/request", {
         email: String(formData.get("email") ?? "")
       });
       setStatusMessage(response.message);
-      event.currentTarget.reset();
+      form.reset();
     } catch (requestError) {
       setError(
         requestError instanceof Error ? requestError.message : "Could not request a password reset."
