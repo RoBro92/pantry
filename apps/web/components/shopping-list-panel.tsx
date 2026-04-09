@@ -14,6 +14,7 @@ import { deleteToApi, postToApi, putToApi, readApiErrorMessage } from "../lib/cl
 import { formatQuantityValue, formatQuantityWithUnit } from "../lib/quantity-format";
 import { ModalShell } from "./modal-shell";
 import { PantryProductDialog } from "./pantry-product-create-dialog";
+import { ShoppingTripFinishDialog } from "./shopping-trip-finish-dialog";
 
 type ShoppingListPanelProps = {
   householdExternalId: string;
@@ -154,6 +155,7 @@ export function ShoppingListPanel({
   const [pendingItemDrafts, setPendingItemDrafts] = useState<Record<string, PendingItemDraft>>({});
   const [productCreationQueue, setProductCreationQueue] = useState<ShoppingListItemSummary[]>([]);
   const [queuedBulkAction, setQueuedBulkAction] = useState<QueuedBulkAction>(null);
+  const [isFinishTripDialogOpen, setIsFinishTripDialogOpen] = useState(false);
 
   useEffect(() => {
     if (
@@ -209,6 +211,13 @@ export function ShoppingListPanel({
     const unresolvedIds = new Set(unresolvedPendingItems.map((item) => item.external_id));
     setExpandedItemIds((current) => current.filter((itemId) => unresolvedIds.has(itemId)));
   }, [unresolvedPendingItems]);
+
+  useEffect(() => {
+    if (selectedPendingList) {
+      return;
+    }
+    setIsFinishTripDialogOpen(false);
+  }, [selectedPendingList]);
 
   function updatePendingDraft(itemExternalId: string, patch: Partial<PendingItemDraft>) {
     setPendingItemDrafts((current) => ({
@@ -470,12 +479,8 @@ export function ShoppingListPanel({
     }
   }
 
-  async function finishSelectedPendingList() {
+  async function finalizeSelectedPendingList(unresolvedAction?: "return_to_active" | "delete") {
     if (!selectedPendingList) {
-      return;
-    }
-    if (unresolvedPendingItems.length > 0) {
-      setError("Reconcile, return, or delete the remaining unresolved items before finishing this trip.");
       return;
     }
 
@@ -484,9 +489,13 @@ export function ShoppingListPanel({
     try {
       await postToApi(
         `/api/households/${householdExternalId}/shopping-list/pending/${selectedPendingList.external_id}/finalize`,
-        { return_shortfalls_to_active: false },
+        {
+          return_shortfalls_to_active: false,
+          unresolved_action: unresolvedAction ?? null,
+        },
       );
       setSelectedItemIds([]);
+      setIsFinishTripDialogOpen(false);
       router.refresh();
     } catch (requestError) {
       setError(
@@ -495,6 +504,17 @@ export function ShoppingListPanel({
     } finally {
       setPending(false);
     }
+  }
+
+  async function finishSelectedPendingList() {
+    if (!selectedPendingList) {
+      return;
+    }
+    if (unresolvedPendingItems.length > 0) {
+      setIsFinishTripDialogOpen(true);
+      return;
+    }
+    await finalizeSelectedPendingList();
   }
 
   async function attachCreatedProduct(productExternalId: string, itemExternalId: string) {
@@ -515,7 +535,10 @@ export function ShoppingListPanel({
       const queuedItemIds = queuedBulkAction.itemIds;
       setQueuedBulkAction(null);
       await postBulkAction(queuedBulkAction.action, queuedItemIds);
+      return;
     }
+
+    router.refresh();
   }
 
   return (
@@ -527,7 +550,7 @@ export function ShoppingListPanel({
               <p className="eyebrow">Shopping List</p>
               <h1>Household shopping</h1>
               <p className="section-copy">
-                Keep the active list compact, then reconcile each trip in bulk with exceptions handled separately.
+                Add items manually or via Pantry to your shopping list, generate a printable list, and reconcile on purchase.
               </p>
             </div>
             <div className="tag-row">
@@ -549,7 +572,7 @@ export function ShoppingListPanel({
               disabled={pending || activeItems.length === 0}
               onClick={() => void handleExport()}
             >
-              {pending ? "Working..." : "Export checklist (.txt)"}
+              {pending ? "Working..." : "Export List (.txt)"}
             </button>
             <button
               type="button"
@@ -708,7 +731,7 @@ export function ShoppingListPanel({
                 <button
                   type="button"
                   className="primary-button"
-                  disabled={pending || unresolvedPendingItems.length > 0}
+                  disabled={pending}
                   onClick={() => void finishSelectedPendingList()}
                 >
                   Finish trip
@@ -757,13 +780,13 @@ export function ShoppingListPanel({
 
             {handledPendingItemCount > 0 ? (
               <p className="helper-text">
-                {handledPendingItemCount} handled item{handledPendingItemCount === 1 ? "" : "s"} are already tucked away from this view. Finish the trip to move it into history.
+                {handledPendingItemCount} handled item{handledPendingItemCount === 1 ? "" : "s"} are already tucked away from this view. Once the remaining items are dealt with, the trip will move into history automatically.
               </p>
             ) : null}
 
             {unresolvedPendingItems.length === 0 ? (
               <div className="empty-state">
-                <p>This trip has no unresolved items left. Finish it to move it into shopping history.</p>
+                <p>This trip has no unresolved items left. It will move into shopping history automatically.</p>
               </div>
             ) : (
               <div className="shopping-reconcile-table">
@@ -1062,6 +1085,18 @@ export function ShoppingListPanel({
             setProductCreationQueue([]);
             setQueuedBulkAction(null);
           }}
+        />
+      ) : null}
+
+      {selectedPendingList && isFinishTripDialogOpen ? (
+        <ShoppingTripFinishDialog
+          tripName={selectedPendingList.name}
+          unresolvedItemCount={unresolvedPendingItems.length}
+          pending={pending}
+          onConfirm={async (action) => {
+            await finalizeSelectedPendingList(action);
+          }}
+          onClose={() => setIsFinishTripDialogOpen(false)}
         />
       ) : null}
     </>

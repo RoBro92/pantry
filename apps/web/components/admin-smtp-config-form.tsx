@@ -177,6 +177,35 @@ export function AdminSMTPConfigForm({ initialConfig }: AdminSMTPConfigFormProps)
     }
   }
 
+  async function handleRestoreTemplateDefaultFromRow(template: SMTPTemplateSummary) {
+    setTemplatePending(true);
+    setTemplateMessage(null);
+    try {
+      const response = await postToApi<SMTPConfigResponse>(
+        `/api/platform-admin/smtp/templates/${template.key}/restore-default`,
+        {},
+      );
+      setConfig(response);
+      if (templateModal?.key === template.key) {
+        const updatedTemplate = response.templates.find((candidate) => candidate.key === template.key);
+        if (updatedTemplate) {
+          setTemplateModal({
+            key: updatedTemplate.key,
+            label: updatedTemplate.label,
+            subject: updatedTemplate.subject,
+            bodyTemplate: updatedTemplate.body_template,
+            isEnabled: updatedTemplate.is_enabled,
+          });
+        }
+      }
+      setTemplateMessage("Default template restored.");
+    } catch (error) {
+      setTemplateMessage(error instanceof Error ? error.message : "Could not restore the default template.");
+    } finally {
+      setTemplatePending(false);
+    }
+  }
+
   async function handleToggleTemplate(template: SMTPTemplateSummary) {
     setTemplateToggleKey(template.key);
     setTemplateMessage(null);
@@ -328,14 +357,18 @@ export function AdminSMTPConfigForm({ initialConfig }: AdminSMTPConfigFormProps)
           </p>
         </div>
         {templateMessage ? <p className="status-note">{templateMessage}</p> : null}
-        <div className="stack">
+        <div className="smtp-template-list">
           {config.templates.map((template) => (
-            <article key={template.key} className="inline-status-card">
-              <div className="setup-card-toolbar">
-                <div className="stack compact-stack">
-                  <h3>{template.label}</h3>
-                  <p className="helper-text">{template.description}</p>
-                </div>
+            <article key={template.key} className="smtp-template-row">
+              <div className="smtp-template-row-main">
+                <strong>{template.label}</strong>
+                {!template.is_available ? (
+                  <span className="helper-text">
+                    {template.unavailable_reason ?? "Not ready yet."}
+                  </span>
+                ) : null}
+              </div>
+              <div className="smtp-template-row-actions">
                 <button
                   type="button"
                   className={getTemplateStatusClass(template)}
@@ -348,16 +381,9 @@ export function AdminSMTPConfigForm({ initialConfig }: AdminSMTPConfigFormProps)
                       ? "Enabled"
                       : "Disabled"}
                 </button>
-              </div>
-              <p className="helper-text">
-                {template.is_available
-                  ? "Ready for use."
-                  : template.unavailable_reason ?? "Not ready yet."}
-              </p>
-              <div className="page-actions">
                 <button
                   type="button"
-                  className="ghost-button"
+                  className="ghost-button compact-button"
                   onClick={() =>
                     setTemplateModal({
                       key: template.key,
@@ -368,7 +394,15 @@ export function AdminSMTPConfigForm({ initialConfig }: AdminSMTPConfigFormProps)
                     })
                   }
                 >
-                  Edit template
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  className="ghost-button compact-button"
+                  onClick={() => void handleRestoreTemplateDefaultFromRow(template)}
+                  disabled={templatePending}
+                >
+                  Restore default
                 </button>
               </div>
             </article>

@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { PantryLocationSummary, PantryProductSummary } from "../lib/api-types";
 import { formatQuantityWithUnit } from "../lib/quantity-format";
 import { PantryLotActions } from "./pantry-lot-actions";
+import { PantryProductDeleteDialog } from "./pantry-product-delete-dialog";
 import { ProductEnrichmentDetails } from "./product-enrichment-details";
 import { ProductEnrichmentLookupDialog } from "./product-enrichment-lookup-dialog";
 import { PantryProductDialog } from "./pantry-product-create-dialog";
@@ -15,6 +16,7 @@ type PantryProductBrowserProps = {
   householdExternalId: string;
   products: PantryProductSummary[];
   locations: PantryLocationSummary[];
+  canAdminister: boolean;
   page: number;
   pageSize: number;
   pageCount: number;
@@ -56,6 +58,7 @@ export function PantryProductBrowser({
   householdExternalId,
   products,
   locations,
+  canAdminister,
   page,
   pageSize,
   pageCount,
@@ -70,6 +73,7 @@ export function PantryProductBrowser({
   const [stockLotEditorProduct, setStockLotEditorProduct] = useState<PantryProductSummary | null>(null);
   const [lookupDialogProduct, setLookupDialogProduct] = useState<PantryProductSummary | null>(null);
   const [productEditorProduct, setProductEditorProduct] = useState<PantryProductSummary | null>(null);
+  const [deleteProduct, setDeleteProduct] = useState<PantryProductSummary | null>(null);
 
   useEffect(() => {
     if (expandedProductId === null || products.some((product) => product.product_external_id === expandedProductId)) {
@@ -208,14 +212,16 @@ export function PantryProductBrowser({
           ) : null}
 
           <div className="page-actions inventory-actions">
-            <button
-              type="button"
-              className="ghost-button"
-              onClick={() => setProductEditorProduct(product)}
-            >
-              Edit product
-            </button>
-            {!product.enrichment ? (
+            {canAdminister ? (
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() => setProductEditorProduct(product)}
+              >
+                Edit product
+              </button>
+            ) : null}
+            {canAdminister && !product.enrichment ? (
               <button
                 type="button"
                 className="ghost-button"
@@ -232,13 +238,15 @@ export function PantryProductBrowser({
             >
               {product.is_in_shopping_list ? "Already on shopping list" : "Add to shopping list"}
             </button>
-            <button
-              type="button"
-              className="primary-button"
-              onClick={() => setStockLotEditorProduct(product)}
-            >
-              Add another lot
-            </button>
+            {canAdminister ? (
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() => setDeleteProduct(product)}
+              >
+                Delete product
+              </button>
+            ) : null}
           </div>
 
           {product.enrichment ? (
@@ -260,6 +268,13 @@ export function PantryProductBrowser({
                   : "No active stock lots remain for this product."}
               </p>
             </div>
+            <button
+              type="button"
+              className="primary-button compact-button"
+              onClick={() => setStockLotEditorProduct(product)}
+            >
+              Add lot
+            </button>
           </div>
 
           {product.stock_lots.length === 0 ? (
@@ -385,13 +400,15 @@ export function PantryProductBrowser({
                     <td className="pantry-status-cell">{renderStatusPills(product)}</td>
                     <td>
                       <div className="inventory-row-actions">
-                        <button
-                          type="button"
-                          className="ghost-button compact-button"
-                          onClick={() => setProductEditorProduct(product)}
-                        >
-                          Edit
-                        </button>
+                        {canAdminister ? (
+                          <button
+                            type="button"
+                            className="ghost-button compact-button"
+                            onClick={() => setProductEditorProduct(product)}
+                          >
+                            Edit
+                          </button>
+                        ) : null}
                         <button
                           type="button"
                           className="ghost-button compact-button"
@@ -476,6 +493,19 @@ export function PantryProductBrowser({
             manualIngredientTags: productEditorProduct.manual_ingredient_tags,
           }}
           onClose={() => setProductEditorProduct(null)}
+        />
+      ) : null}
+
+      {deleteProduct ? (
+        <PantryProductDeleteDialog
+          householdExternalId={householdExternalId}
+          product={deleteProduct}
+          onDeleted={() => {
+            setExpandedProductId((current) =>
+              current === deleteProduct.product_external_id ? null : current,
+            );
+          }}
+          onClose={() => setDeleteProduct(null)}
         />
       ) : null}
     </>

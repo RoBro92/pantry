@@ -51,6 +51,7 @@ export default async function HouseholdPantryPage({
         householdExternalId={overview.household_external_id}
         products={overview.products}
         locations={overview.locations}
+        canAdminister={overview.can_administer}
         page={overview.page}
         pageSize={overview.page_size}
         pageCount={overview.page_count}

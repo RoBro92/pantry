@@ -80,10 +80,10 @@ export function StockLotEditorDialog({
 
   return (
     <ModalShell
-      title={mode === "create" ? "Add another lot" : "Edit stock lot"}
+      title={mode === "create" ? "Add lot" : "Edit stock lot"}
       description={
         mode === "create"
-          ? `Add another lot for ${initialValues.productName}.`
+          ? `Add a new lot for ${initialValues.productName}.`
           : `Update this ${initialValues.productName} lot.`
       }
       onClose={onClose}

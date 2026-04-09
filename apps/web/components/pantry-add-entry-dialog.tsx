@@ -12,6 +12,7 @@ import type {
 import { postToApi } from "../lib/client-api";
 import { BarcodeScannerDialog } from "./barcode-scanner-dialog";
 import { ModalShell } from "./modal-shell";
+import { PantryBarcodeField } from "./pantry-barcode-field";
 import { ProductEnrichmentPreview } from "./product-enrichment-preview";
 import { TextTagInput } from "./text-tag-input";
 
@@ -366,51 +367,27 @@ export function PantryAddEntryDialog({
                 />
               </label>
 
-              <label className="field">
-                <span>Barcode</span>
-                <div className="inline-action-field is-multi-action">
-                  <input
-                    name="barcode"
-                    value={form.barcodesInput}
-                    onChange={(event) => {
-                      clearDuplicateState();
-                      resetEnrichmentPreview();
-                      setForm((current) => ({ ...current, barcodesInput: event.target.value }));
-                    }}
-                    onBlur={() => {
-                      const trimmedBarcode = getPrimaryBarcode(form.barcodesInput);
-                      void runDuplicateCheck();
-                      if (trimmedBarcode && trimmedBarcode !== lastBarcodeLookupValue) {
-                        void findProductDetails("blur");
-                      }
-                    }}
-                    placeholder="5000111046244"
-                  />
-                  <button
-                    type="button"
-                    className="ghost-button compact-button"
-                    disabled={lookupPending || (!form.name.trim() && !getPrimaryBarcode(form.barcodesInput))}
-                    onClick={() => void findProductDetails("manual")}
-                  >
-                    {lookupPending ? "Looking up..." : "Look up"}
-                  </button>
-                  <button
-                    type="button"
-                    className="ghost-button compact-button"
-                    onClick={() => setIsScannerOpen(true)}
-                  >
-                    Scan
-                  </button>
-                  <details className="inline-help-details">
-                    <summary>?</summary>
-                    <p className="helper-text">
-                      USB scanners can type directly into this field. Pantry also tries an Open Food
-                      Facts lookup when you leave the field. Extra barcodes can be added as
-                      comma-separated values.
-                    </p>
-                  </details>
-                </div>
-              </label>
+              <PantryBarcodeField
+                inputName="barcode"
+                value={form.barcodesInput}
+                onChange={(value) => {
+                  clearDuplicateState();
+                  resetEnrichmentPreview();
+                  setForm((current) => ({ ...current, barcodesInput: value }));
+                }}
+                onBlur={() => {
+                  const trimmedBarcode = getPrimaryBarcode(form.barcodesInput);
+                  void runDuplicateCheck();
+                  if (trimmedBarcode && trimmedBarcode !== lastBarcodeLookupValue) {
+                    void findProductDetails("blur");
+                  }
+                }}
+                onLookup={() => void findProductDetails("manual")}
+                onScan={() => setIsScannerOpen(true)}
+                lookupPending={lookupPending}
+                lookupDisabled={!form.name.trim() && !getPrimaryBarcode(form.barcodesInput)}
+                helperText="USB scanners can type directly into this field. Pantry also tries an Open Food Facts lookup when you leave the field. Extra barcodes can be added as comma-separated values."
+              />
 
               <label className="field">
                 <span>Quantity</span>

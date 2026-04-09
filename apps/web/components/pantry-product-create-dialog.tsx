@@ -9,6 +9,7 @@ import type {
 import { postToApi, putToApi } from "../lib/client-api";
 import { BarcodeScannerDialog } from "./barcode-scanner-dialog";
 import { ModalShell } from "./modal-shell";
+import { PantryBarcodeField } from "./pantry-barcode-field";
 import { ProductEnrichmentPreview } from "./product-enrichment-preview";
 import { TextTagInput } from "./text-tag-input";
 
@@ -256,7 +257,7 @@ export function PantryProductDialog({
                   Product identity stays separate from stock-lot quantity, location, and expiry.
                 </p>
               </div>
-              <span className="pill">{mode === "create" ? "New product" : "Edit product"}</span>
+              {mode === "create" ? <span className="pill">New product</span> : null}
             </div>
 
             <div className="content-grid pantry-add-grid">
@@ -287,48 +288,25 @@ export function PantryProductDialog({
                 />
               </label>
 
-              <label className="field">
-                <span>Barcode</span>
-                <div className="inline-action-field is-multi-action">
-                  <input
-                    name="barcodes"
-                    value={form.barcodesInput}
-                    onChange={(event) => {
-                      resetEnrichmentPreview();
-                      setForm((current) => ({ ...current, barcodesInput: event.target.value }));
-                    }}
-                    onBlur={() => {
-                      const primaryBarcodeValue = primaryBarcode(form.barcodesInput);
-                      if (primaryBarcodeValue && primaryBarcodeValue !== lastBarcodeLookupValue) {
-                        void findProductDetails("blur");
-                      }
-                    }}
-                    placeholder="5000111046244"
-                  />
-                  <button
-                    type="button"
-                    className="ghost-button compact-button"
-                    disabled={lookupPending || (!form.name.trim() && !primaryBarcode(form.barcodesInput))}
-                    onClick={() => void findProductDetails("manual")}
-                  >
-                    {lookupPending ? "Looking up..." : "Look up"}
-                  </button>
-                  <button
-                    type="button"
-                    className="ghost-button compact-button"
-                    onClick={() => setIsScannerOpen(true)}
-                  >
-                    Scan
-                  </button>
-                  <details className="inline-help-details">
-                    <summary>?</summary>
-                    <p className="helper-text">
-                      Use the first barcode for Open Food Facts lookup. Extra barcodes can be added
-                      as comma-separated values.
-                    </p>
-                  </details>
-                </div>
-              </label>
+              <PantryBarcodeField
+                inputName="barcodes"
+                value={form.barcodesInput}
+                onChange={(value) => {
+                  resetEnrichmentPreview();
+                  setForm((current) => ({ ...current, barcodesInput: value }));
+                }}
+                onBlur={() => {
+                  const primaryBarcodeValue = primaryBarcode(form.barcodesInput);
+                  if (primaryBarcodeValue && primaryBarcodeValue !== lastBarcodeLookupValue) {
+                    void findProductDetails("blur");
+                  }
+                }}
+                onLookup={() => void findProductDetails("manual")}
+                onScan={() => setIsScannerOpen(true)}
+                lookupPending={lookupPending}
+                lookupDisabled={!form.name.trim() && !primaryBarcode(form.barcodesInput)}
+                helperText="Use the first barcode for Open Food Facts lookup. Extra barcodes can be added as comma-separated values."
+              />
 
               <label className="field">
                 <span>Aliases</span>

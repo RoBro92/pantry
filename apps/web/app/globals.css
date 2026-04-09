@@ -892,6 +892,45 @@ button.smtp-template-pill {
   appearance: none;
 }
 
+.smtp-template-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.smtp-template-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.9rem 1rem;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.56);
+}
+
+.smtp-template-row-main {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  min-width: 0;
+}
+
+.smtp-template-row-main strong {
+  font-size: 0.98rem;
+}
+
+.smtp-template-row-main .helper-text {
+  margin: 0;
+}
+
+.smtp-template-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .token-input-row {
   display: grid;
   gap: 0.75rem;
@@ -1282,40 +1321,37 @@ button.smtp-template-pill {
   font-size: 1.25rem;
 }
 
-.inline-action-field {
+.barcode-field {
   display: grid;
-  gap: 0.75rem;
+  gap: 0.6rem;
+}
+
+.barcode-input-row {
+  display: grid;
+  gap: 0.6rem;
   grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
 }
 
-.inline-action-field.is-multi-action {
-  grid-template-columns: minmax(0, 1fr) repeat(2, auto) auto;
-  align-items: start;
+.barcode-field-footer {
+  display: grid;
+  gap: 0.55rem;
+  justify-items: start;
 }
 
-.inline-help-details {
-  align-self: center;
+.barcode-field-footer .helper-text {
+  margin: 0;
 }
 
-.inline-help-details summary {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 2.45rem;
-  min-height: 2.45rem;
-  border-radius: 18px;
-  border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.42);
-  cursor: pointer;
-  list-style: none;
+.barcode-scan-button {
+  width: 3rem;
+  min-width: 3rem;
+  padding-inline: 0;
 }
 
-.inline-help-details[open] {
-  grid-column: 1 / -1;
-}
-
-.inline-help-details[open] summary {
-  margin-bottom: 0.6rem;
+.barcode-scan-button svg {
+  width: 1.2rem;
+  height: 1.2rem;
 }
 
 .inline-status-card {
@@ -2293,8 +2329,27 @@ button.smtp-template-pill {
     width: 100%;
   }
 
-  .inline-action-field.is-multi-action {
+  .smtp-template-row,
+  .smtp-template-row-main,
+  .smtp-template-row-actions,
+  .barcode-input-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .smtp-template-row {
+    display: grid;
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .barcode-input-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .barcode-scan-button {
+    width: 100%;
+    min-width: 0;
   }
 
   .activity-feed-item {
