@@ -92,13 +92,6 @@ class DevelopmentSeedManifest:
 
 DEMO_USERS: tuple[DemoUserSeed, ...] = (
     DemoUserSeed(
-        login="robin",
-        password="weymouth",
-        display_name="Robin",
-        is_platform_admin=True,
-        household_role_code=HOUSEHOLD_ADMIN_ROLE,
-    ),
-    DemoUserSeed(
         login="demoadmin",
         password="demopass",
         display_name="Demo Admin",

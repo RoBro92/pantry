@@ -53,26 +53,24 @@ def test_demo_development_mode_seeds_expected_fixture_state(db_session):
     assert manifest.mode == DEV_MODE_DEMO
     assert manifest.entry_path == "/login"
     assert manifest.setup_complete is True
-    assert sorted(manifest.users) == ["demoadmin", "demouser", "robin"]
+    assert sorted(manifest.users) == ["demoadmin", "demouser"]
     assert manifest.users["demoadmin"]["password"] == "demopass"
     assert manifest.users["demouser"]["password"] == "demopass"
-    assert manifest.users["robin"]["password"] == "weymouth"
     assert manifest.household_name == "demohouse"
     assert is_setup_complete(db_session) is True
 
-    assert authenticate_user(db_session, "robin", "weymouth") is not None
     assert authenticate_user(db_session, "demoadmin", "demopass") is not None
     assert authenticate_user(db_session, "demouser", "demopass") is not None
 
     users = db_session.scalars(select(User).order_by(User.email)).all()
-    assert [user.email for user in users] == ["demoadmin", "demouser", "robin"]
+    assert [user.email for user in users] == ["demoadmin", "demouser"]
 
     household = db_session.scalar(select(Household))
     assert household is not None
     assert household.name == "demohouse"
 
     memberships = db_session.scalars(select(Membership)).all()
-    assert len(memberships) == 3
+    assert len(memberships) == 2
 
     rooms = db_session.scalars(select(LocationGroup).order_by(LocationGroup.name)).all()
     assert [room.name for room in rooms] == ["Garage", "Kitchen"]
