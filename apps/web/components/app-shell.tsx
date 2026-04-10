@@ -43,7 +43,7 @@ export function AppShell({ session, releaseStatus, children }: AppShellProps) {
                   Recipes
                 </Link>
                 <Link href={`/app/households/${membership.household_external_id}/ai`}>
-                  AI Suggestions
+                  Meal Suggestions
                 </Link>
               </div>
             ))}

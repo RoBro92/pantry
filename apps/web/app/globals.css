@@ -1226,6 +1226,135 @@ button.smtp-template-pill {
   width: min(920px, 100%);
 }
 
+.field-label {
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.inline-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.meal-planner-panel,
+.meal-detail-panel,
+.meal-detail-subpanel,
+.meal-complete-item,
+.recipe-card {
+  background: rgba(255, 255, 255, 0.54);
+}
+
+.meal-planner-grid,
+.meal-complete-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+}
+
+.member-pill-grid,
+.meal-shortlist-grid,
+.meal-ingredient-list,
+.meal-complete-list {
+  display: grid;
+  gap: 1rem;
+}
+
+.member-pill-grid {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.member-pill {
+  display: grid;
+  gap: 0.35rem;
+  width: 100%;
+  padding: 1rem 1.05rem;
+  text-align: left;
+  border-radius: 22px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.42);
+  color: var(--text);
+  transition: transform 120ms ease, border-color 120ms ease, background-color 120ms ease;
+}
+
+.member-pill:hover {
+  transform: translateY(-1px);
+}
+
+.member-pill strong {
+  font-family: var(--font-display);
+  font-size: 1rem;
+}
+
+.member-pill span {
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.member-pill.is-selected,
+.recipe-card.is-selected {
+  border-color: rgba(173, 91, 31, 0.34);
+  background: rgba(173, 91, 31, 0.1);
+}
+
+.meal-shortlist-grid {
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.recipe-card,
+.meal-ingredient-card,
+.meal-complete-item {
+  padding: 1.1rem 1.15rem;
+  border-radius: 24px;
+  border: 1px solid var(--border);
+}
+
+.recipe-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.recipe-card-header h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+}
+
+.recipe-card-header p {
+  margin: 0.2rem 0 0;
+  color: var(--muted);
+}
+
+.meal-detail-grid {
+  align-items: start;
+}
+
+.meal-detail-subpanel {
+  border-radius: 24px;
+  border: 1px solid var(--border);
+}
+
+.meal-detail-actions {
+  align-items: flex-end;
+}
+
+.meal-complete-panel {
+  width: min(820px, 100%);
+}
+
+.numbered-detail-list {
+  list-style: decimal;
+  padding-left: 1.2rem;
+}
+
+.numbered-detail-list li {
+  align-items: flex-start;
+  justify-content: flex-start;
+}
+
 .release-notes-panel {
   pointer-events: auto;
 }

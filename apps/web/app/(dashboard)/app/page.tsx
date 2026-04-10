@@ -88,7 +88,7 @@ export default async function SessionPage() {
                     href={`/app/households/${membership.household_external_id}/ai`}
                     className="secondary-link"
                   >
-                    Open AI
+                    Meal suggestions
                   </Link>
                 </div>
               </article>

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import type {
   AIFeatureStatus,
+  AIMealPlannerResponse,
   AIProviderConfigResponse,
   AdminHouseholdSummary,
   AdminOverview,
@@ -189,6 +190,12 @@ export async function getHouseholdAIStatus(
   householdExternalId: string
 ): Promise<AIFeatureStatus> {
   return apiGet<AIFeatureStatus>(`/api/households/${householdExternalId}/ai/status`);
+}
+
+export async function getAIMealPlanner(
+  householdExternalId: string
+): Promise<AIMealPlannerResponse> {
+  return apiGet<AIMealPlannerResponse>(`/api/households/${householdExternalId}/ai/meal-planner`);
 }
 
 export async function getLocationAccess(
