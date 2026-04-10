@@ -11,6 +11,14 @@ import type {
   SetupWizardUserSummary,
   SessionResponse
 } from "../lib/api-types";
+import {
+  AI_PROVIDER_API_KEY_REQUIRED,
+  AI_PROVIDER_DEFAULT_MODEL_PLACEHOLDERS,
+  AI_PROVIDER_OPTIONS,
+  type AIProviderType,
+  getDefaultBaseUrl,
+  normalizeAIProviderType,
+} from "../lib/ai-provider-config";
 import { getHouseholdRoleLabel, type HouseholdRole } from "../lib/role-labels";
 import { postFormToApi, postToApi, putToApi } from "../lib/client-api";
 import { SetupProgress } from "./setup-progress";
@@ -79,6 +87,10 @@ function createStageId() {
     return crypto.randomUUID();
   }
   return `stage-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function getSetupAIProviderType(providerType: string | null | undefined): AIProviderType {
+  return normalizeAIProviderType(providerType) ?? "ollama";
 }
 
 function createEmptyRoom(stageId = createStageId()): SetupWizardRoomSummary {
@@ -1701,22 +1713,35 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
               <span>Provider type</span>
               <select
                 name="setup_ai_provider_type"
-                value={wizard.ai_config.provider_type ?? "ollama"}
-                onChange={(event) =>
-                  setWizard((current) => ({
-                    ...current,
-                    skipped_optional_steps: current.skipped_optional_steps.filter(
-                      (step) => step !== "ai"
-                    ),
-                    ai_config: {
-                      ...current.ai_config,
-                      provider_type: event.target.value as "ollama" | "openai_compatible"
-                    }
-                  }))
-                }
+                value={getSetupAIProviderType(wizard.ai_config.provider_type)}
+                onChange={(event) => {
+                  const nextProviderType = event.target.value as AIProviderType;
+                  setWizard((current) => {
+                    const previousProviderType = getSetupAIProviderType(current.ai_config.provider_type);
+                    const previousDefaultBaseUrl = getDefaultBaseUrl(previousProviderType);
+                    const nextBaseUrl =
+                      !current.ai_config.base_url || current.ai_config.base_url === previousDefaultBaseUrl
+                        ? getDefaultBaseUrl(nextProviderType)
+                        : current.ai_config.base_url;
+                    return {
+                      ...current,
+                      skipped_optional_steps: current.skipped_optional_steps.filter(
+                        (step) => step !== "ai"
+                      ),
+                      ai_config: {
+                        ...current.ai_config,
+                        provider_type: nextProviderType,
+                        base_url: nextBaseUrl
+                      }
+                    };
+                  });
+                }}
               >
-                <option value="ollama">Ollama</option>
-                <option value="openai_compatible">OpenAI-compatible</option>
+                {AI_PROVIDER_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
               </select>
             </label>
             <label className="field">
@@ -1739,7 +1764,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                     ai_config: { ...current.ai_config, base_url: event.target.value }
                   }))
                 }
-                placeholder="http://host.docker.internal:11434"
+                placeholder={getDefaultBaseUrl(getSetupAIProviderType(wizard.ai_config.provider_type))}
               />
             </label>
             <label className="field">
@@ -1761,7 +1786,11 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                     ai_config: { ...current.ai_config, default_model: event.target.value }
                   }))
                 }
-                placeholder="llama3.2"
+                placeholder={
+                  AI_PROVIDER_DEFAULT_MODEL_PLACEHOLDERS[
+                    getSetupAIProviderType(wizard.ai_config.provider_type)
+                  ]
+                }
               />
             </label>
             <label className="field">
@@ -1778,7 +1807,11 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                 placeholder={
                   wizard.ai_config.has_api_key
                     ? "Saved. Enter a new key to replace it."
-                    : "Optional for Ollama"
+                    : AI_PROVIDER_API_KEY_REQUIRED[
+                          getSetupAIProviderType(wizard.ai_config.provider_type)
+                        ]
+                      ? "Required for this provider"
+                      : "Not required for Ollama"
                 }
               />
             </label>

@@ -1,4 +1,5 @@
 import type { ReleaseCheckResponse } from "./api-types";
+import { AI_PROVIDER_LABELS, normalizeAIProviderType } from "./ai-provider-config";
 
 const CONFIG_SOURCE_LABELS: Record<string, string> = {
   deployment_default: "Default",
@@ -20,11 +21,6 @@ const DEPLOYMENT_MODE_LABELS: Record<string, string> = {
   self_hosted: "Self-hosted",
   demo: "Demo",
   saas: "SaaS"
-};
-
-const AI_PROVIDER_LABELS: Record<string, string> = {
-  ollama: "Ollama",
-  openai_compatible: "OpenAI-compatible"
 };
 
 export function formatAdminDateTime(value: string | null) {
@@ -89,8 +85,9 @@ export function getDeploymentModeLabel(mode: string) {
 }
 
 export function getAIProviderLabel(provider: string | null | undefined) {
-  if (!provider) {
+  const normalizedProvider = normalizeAIProviderType(provider);
+  if (!normalizedProvider) {
     return "None";
   }
-  return AI_PROVIDER_LABELS[provider] ?? provider;
+  return AI_PROVIDER_LABELS[normalizedProvider];
 }

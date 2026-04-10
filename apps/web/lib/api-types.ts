@@ -1,3 +1,5 @@
+import type { AIProviderType } from "./ai-provider-config";
+
 export type SessionMembership = {
   external_id: string;
   household_external_id: string;
@@ -142,7 +144,7 @@ export type SetupWizardDietaryUserSummary = {
 };
 
 export type SetupWizardAIConfigSummary = {
-  provider_type: "ollama" | "openai_compatible" | null;
+  provider_type: AIProviderType | null;
   base_url: string | null;
   default_model: string | null;
   is_enabled: boolean;
@@ -201,7 +203,7 @@ export type PublicBaseURLSummary = {
 export type AIProviderConfigSummary = {
   external_id: string;
   scope_type: string;
-  provider_type: "ollama" | "openai_compatible";
+  provider_type: AIProviderType;
   base_url: string;
   default_model: string;
   is_enabled: boolean;

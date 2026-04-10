@@ -750,15 +750,51 @@ test("ai flow covers unconfigured and configured-but-unavailable states", async 
     email: manifest.admin_email,
     password: manifest.password
   });
+  await dismissAdminWhatsNewIfVisible(page);
 
   await page.goto("/admin/ai");
+  const providerType = page.getByLabel("Provider type");
+  await expect(page.getByRole("button", { name: "Save configuration" })).toHaveCount(0);
+  await expect(providerType.locator("option")).toHaveText(["OpenAI", "Claude", "Gemini", "Ollama"]);
+  await expect(page.getByLabel("Base URL")).toHaveValue("http://localhost:11434");
+
+  await providerType.selectOption({ label: "OpenAI" });
+  await expect(page.getByLabel("Base URL")).toHaveValue("https://api.openai.com/v1");
+  await expect(page.getByRole("button", { name: "Run health check" })).toBeDisabled();
+
+  await page.getByRole("button", { name: "Choose model" }).click();
+  await expect(page.getByRole("button", { name: "Back" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Close" })).toHaveCount(0);
+  await page.getByLabel("Model name").fill("gpt-4o-mini");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByLabel("Default model")).toHaveValue("gpt-4o-mini");
+  await expect(page.getByRole("button", { name: "Run health check" })).toBeDisabled();
+
+  await page.getByLabel("API key").fill("test-openai-key");
+  await page.keyboard.press("Tab");
+  await expect(page.getByRole("button", { name: "Run health check" })).toBeEnabled();
+
+  await providerType.selectOption({ label: "Ollama" });
+  await expect(page.getByLabel("Base URL")).toHaveValue("http://localhost:11434");
+
+  await page.getByRole("button", { name: "Choose model" }).click();
+  await page.getByLabel("Model name").fill("llama3.2");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByText("Model saved.")).toBeVisible();
+
   await page.getByLabel("Base URL").fill("http://api:9");
-  await page.getByLabel("Default model").fill("llama3.2");
-  await page.getByRole("button", { name: "Save configuration" }).click();
-  await expect(page.getByText("Provider configuration saved.")).toBeVisible();
+  await page.keyboard.press("Tab");
+  await expect(page.getByRole("button", { name: "Run health check" })).toBeEnabled();
 
   await page.getByRole("button", { name: "Run health check" }).click();
   await expect(page.getByText("Health check failed.")).toBeVisible();
+
+  await page.goto("/admin");
+  await page.goto("/admin/ai");
+  await expect(providerType).toHaveValue("ollama");
+  await expect(page.getByLabel("Base URL")).toHaveValue("http://api:9");
+  await expect(page.getByRole("button", { name: "Save configuration" })).toHaveCount(0);
 
   await page.getByRole("button", { name: "Logout" }).click();
   await loginThroughApi(page, {

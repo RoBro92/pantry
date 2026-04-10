@@ -5,9 +5,12 @@ from dataclasses import replace
 from datetime import datetime, timezone
 from decimal import Decimal
 
+import pytest
 from sqlalchemy import delete, func, select
 
 from app.core.config import get_settings
+from app.domain.ai import AI_HEALTH_HEALTHY
+from app.models.ai_provider_config import AIProviderConfig
 from app.models.household import Household
 from app.models.import_job import ImportJob
 from app.models.instance_setting import InstanceSetting
@@ -23,6 +26,7 @@ from app.services.instance_settings import (
     upsert_public_base_url,
     upsert_smtp_settings,
 )
+from app.services.ai_providers import AIProviderHealth
 from app.services.pantry_catalog import create_location, create_location_group, create_product
 from app.services.pantry_normalization import normalize_lookup_name
 from app.services.pantry_stock import add_stock_lot
@@ -37,6 +41,161 @@ PASSWORD = "correct horse battery"
 def login(client, *, email: str, password: str = PASSWORD) -> None:
     response = client.post("/api/auth/login", json={"email": email, "password": password})
     assert response.status_code == 200
+
+
+@pytest.mark.parametrize(
+    ("provider_type", "base_url", "default_model", "api_key"),
+    [
+        ("openai", "https://api.openai.com/v1", "gpt-4o-mini", "openai-secret"),
+        ("claude", "https://api.anthropic.com", "claude-3-5-haiku-latest", "claude-secret"),
+        ("gemini", "https://generativelanguage.googleapis.com", "gemini-2.0-flash", "gemini-secret"),
+        ("ollama", "http://localhost:11434", "llama3.2", None),
+    ],
+)
+def test_platform_admin_ai_provider_config_saves_supported_providers(
+    client, db_session, provider_type, base_url, default_model, api_key
+):
+    create_platform_admin(
+        db_session,
+        email="ai-admin@example.com",
+        password=PASSWORD,
+        display_name="AI Admin",
+    )
+    login(client, email="ai-admin@example.com")
+
+    response = client.put(
+        "/api/platform-admin/ai/provider-config",
+        json={
+            "provider_type": provider_type,
+            "base_url": base_url,
+            "default_model": default_model,
+            "api_key": api_key,
+            "is_enabled": True,
+        },
+    )
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["config"]["provider_type"] == provider_type
+    assert payload["config"]["base_url"] == base_url
+    assert payload["config"]["default_model"] == default_model
+    assert payload["config"]["has_api_key"] is bool(api_key)
+
+    stored = db_session.scalar(select(AIProviderConfig))
+    assert stored is not None
+    assert stored.provider_type == provider_type
+    assert stored.base_url == base_url
+    assert stored.default_model == default_model
+    assert bool(stored.encrypted_api_key) is bool(api_key)
+
+
+@pytest.mark.parametrize(
+    ("provider_type", "base_url", "default_model", "api_key"),
+    [
+        ("openai", "https://api.openai.com/v1", "gpt-4o-mini", "openai-secret"),
+        ("claude", "https://api.anthropic.com", "claude-3-5-haiku-latest", "claude-secret"),
+        ("gemini", "https://generativelanguage.googleapis.com", "gemini-2.0-flash", "gemini-secret"),
+        ("ollama", "http://localhost:11434", "llama3.2", None),
+    ],
+)
+def test_platform_admin_ai_health_check_supports_all_built_in_providers(
+    client, db_session, monkeypatch, provider_type, base_url, default_model, api_key
+):
+    create_platform_admin(
+        db_session,
+        email="ai-health@example.com",
+        password=PASSWORD,
+        display_name="AI Health Admin",
+    )
+    login(client, email="ai-health@example.com")
+
+    save_response = client.put(
+        "/api/platform-admin/ai/provider-config",
+        json={
+            "provider_type": provider_type,
+            "base_url": base_url,
+            "default_model": default_model,
+            "api_key": api_key,
+            "is_enabled": True,
+        },
+    )
+    assert save_response.status_code == 200
+
+    seen: dict[str, str] = {}
+
+    class StubProviderAdapter:
+        def __init__(self, runtime_config):
+            seen["provider_type"] = runtime_config.provider_type
+
+        def check_health(self):
+            return AIProviderHealth(
+                is_healthy=True,
+                status=AI_HEALTH_HEALTHY,
+                message=None,
+                models=[default_model],
+                capabilities={"supports_model_listing": True, "supports_structured_output": True},
+            )
+
+    monkeypatch.setattr("app.services.ai_config.build_ai_provider_adapter", StubProviderAdapter)
+
+    response = client.post("/api/platform-admin/ai/provider-config/health-check", json={})
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert seen["provider_type"] == provider_type
+    assert payload["config"]["provider_type"] == provider_type
+    assert payload["health"]["is_healthy"] is True
+    assert payload["health"]["models"] == [default_model]
+
+
+def test_platform_admin_ai_provider_config_normalizes_legacy_openai_compatible_records(
+    client, db_session, monkeypatch
+):
+    create_platform_admin(
+        db_session,
+        email="ai-legacy@example.com",
+        password=PASSWORD,
+        display_name="AI Legacy Admin",
+    )
+    db_session.add(
+        AIProviderConfig(
+            scope_type="instance",
+            scope_key="instance",
+            provider_type="openai_compatible",
+            base_url="https://api.openai.com/v1",
+            default_model="gpt-4o-mini",
+            encrypted_api_key=None,
+            is_enabled=True,
+        )
+    )
+    db_session.commit()
+    login(client, email="ai-legacy@example.com")
+
+    response = client.get("/api/platform-admin/ai/provider-config")
+    assert response.status_code == 200
+    assert response.json()["config"]["provider_type"] == "openai"
+
+    seen: dict[str, str] = {}
+
+    class StubProviderAdapter:
+        def __init__(self, runtime_config):
+            seen["provider_type"] = runtime_config.provider_type
+
+        def check_health(self):
+            return AIProviderHealth(
+                is_healthy=True,
+                status=AI_HEALTH_HEALTHY,
+                message=None,
+                models=["gpt-4o-mini"],
+                capabilities={"supports_model_listing": True, "supports_structured_output": True},
+            )
+
+    monkeypatch.setattr("app.services.ai_config.build_ai_provider_adapter", StubProviderAdapter)
+
+    health_response = client.post("/api/platform-admin/ai/provider-config/health-check", json={})
+    assert health_response.status_code == 200
+    assert seen["provider_type"] == "openai"
+    assert health_response.json()["config"]["provider_type"] == "openai"
 
 
 def test_platform_admin_diagnostics_report_uses_measured_data(client, db_session, monkeypatch):

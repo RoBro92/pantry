@@ -8,7 +8,15 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.security import hash_password, normalize_email
-from app.domain.ai import AI_HEALTH_UNKNOWN, AI_PROVIDER_OLLAMA, AI_PROVIDER_OPENAI_COMPATIBLE, AI_PROVIDER_TYPES, AI_SCOPE_INSTANCE, AI_SCOPE_KEY_INSTANCE
+from app.domain.ai import (
+    AI_HEALTH_UNKNOWN,
+    AI_PROVIDER_API_KEY_REQUIRED,
+    AI_PROVIDER_OLLAMA,
+    AI_PROVIDER_TYPES,
+    AI_SCOPE_INSTANCE,
+    AI_SCOPE_KEY_INSTANCE,
+    canonical_provider_type,
+)
 from app.domain.roles import HOUSEHOLD_ADMIN_ROLE, HOUSEHOLD_USER_ROLE, PLATFORM_ADMIN_ROLE
 from app.models.ai_provider_config import AIProviderConfig
 from app.models.household import Household
@@ -535,7 +543,7 @@ def get_setup_wizard_state(db: Session) -> SetupWizardStateResponse:
             for stage_user_id, preferences in (dietary.get("user_preferences") or {}).items()
         ],
         ai_config=StagedSetupAIConfigSummary(
-            provider_type=ai.get("provider_type"),
+            provider_type=canonical_provider_type(ai.get("provider_type")),
             base_url=_normalize_optional_text(str(ai.get("base_url") or "")),
             default_model=_normalize_optional_text(str(ai.get("default_model") or "")),
             is_enabled=bool(ai.get("is_enabled")),
@@ -754,12 +762,13 @@ def update_setup_dietary(db: Session, payload: SetupDietaryUpdateRequest) -> Set
 def update_setup_ai(db: Session, payload: SetupAIConfigUpdateRequest) -> SetupWizardStateResponse:
     state = _get_or_create_setup_state(db)
     merged = _merged_payload(state.payload)
+    provider_type = canonical_provider_type(payload.provider_type)
 
-    if not payload.is_enabled and not any([payload.provider_type, payload.base_url, payload.default_model, payload.api_key]):
+    if not payload.is_enabled and not any([provider_type, payload.base_url, payload.default_model, payload.api_key]):
         merged["ai"] = {"provider_type": None, "base_url": "", "default_model": "", "is_enabled": False}
         state.encrypted_ai_api_key = None
     else:
-        if payload.provider_type not in AI_PROVIDER_TYPES:
+        if provider_type not in AI_PROVIDER_TYPES:
             raise ValueError("Unsupported AI provider type.")
         if not payload.base_url:
             raise ValueError("Provider base URL is required.")
@@ -767,11 +776,11 @@ def update_setup_ai(db: Session, payload: SetupAIConfigUpdateRequest) -> SetupWi
             raise ValueError("Default model is required.")
 
         api_key = _normalize_optional_text(payload.api_key)
-        if payload.provider_type == AI_PROVIDER_OPENAI_COMPATIBLE and not (api_key or state.encrypted_ai_api_key):
-            raise ValueError("An API key is required for OpenAI-compatible providers.")
+        if AI_PROVIDER_API_KEY_REQUIRED[provider_type] and not (api_key or state.encrypted_ai_api_key):
+            raise ValueError(f"An API key is required for {provider_type} providers.")
 
         merged["ai"] = {
-            "provider_type": payload.provider_type,
+            "provider_type": provider_type,
             "base_url": _normalize_base_url(payload.base_url),
             "default_model": payload.default_model.strip(),
             "is_enabled": payload.is_enabled,
@@ -1006,18 +1015,21 @@ def finalize_setup(db: Session) -> User:
 
         ai_payload = payload["ai"]
         if ai_payload.get("is_enabled") and ai_payload.get("provider_type") and ai_payload.get("base_url") and ai_payload.get("default_model"):
+            provider_type = canonical_provider_type(str(ai_payload["provider_type"]))
+            if provider_type is None:
+                raise ValueError("Unsupported AI provider type.")
             config = get_instance_provider_config(db)
             if config is None:
                 config = AIProviderConfig(
                     scope_type=AI_SCOPE_INSTANCE,
                     scope_key=AI_SCOPE_KEY_INSTANCE,
-                    provider_type=str(ai_payload["provider_type"]),
+                    provider_type=provider_type,
                     base_url=str(ai_payload["base_url"]),
                     default_model=str(ai_payload["default_model"]),
                     is_enabled=True,
                 )
                 db.add(config)
-            config.provider_type = str(ai_payload["provider_type"])
+            config.provider_type = provider_type
             config.base_url = str(ai_payload["base_url"])
             config.default_model = str(ai_payload["default_model"])
             config.encrypted_api_key = state.encrypted_ai_api_key

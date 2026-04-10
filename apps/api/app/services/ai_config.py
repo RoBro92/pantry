@@ -11,12 +11,13 @@ from app.core.config import get_settings
 from app.domain.ai import (
     AI_HEALTH_UNHEALTHY,
     AI_HEALTH_UNKNOWN,
+    AI_PROVIDER_API_KEY_REQUIRED,
     AI_PROVIDER_OLLAMA,
-    AI_PROVIDER_OPENAI_COMPATIBLE,
     AI_PROVIDER_TYPES,
     AI_SCOPE_HOUSEHOLD,
     AI_SCOPE_INSTANCE,
     AI_SCOPE_KEY_INSTANCE,
+    canonical_provider_type,
 )
 from app.models.ai_provider_config import AIProviderConfig
 from app.models.household import Household
@@ -88,10 +89,13 @@ def resolve_provider_config(
         return None
 
     api_key = decrypt_secret(config.encrypted_api_key) if config.encrypted_api_key else None
+    provider_type = canonical_provider_type(config.provider_type)
+    if provider_type is None:
+        return None
     return ResolvedAIProviderConfig(
         record=config,
         runtime=AIProviderRuntimeConfig(
-            provider_type=config.provider_type,
+            provider_type=provider_type,
             base_url=config.base_url,
             default_model=config.default_model,
             api_key=api_key,
@@ -113,6 +117,7 @@ def upsert_instance_provider_config(
     api_key: str | None,
     is_enabled: bool,
 ) -> AIProviderConfig:
+    provider_type = canonical_provider_type(provider_type)
     if provider_type not in AI_PROVIDER_TYPES:
         raise ValueError("Unsupported AI provider type.")
 
@@ -122,10 +127,10 @@ def upsert_instance_provider_config(
         raise ValueError("Default model is required.")
 
     normalized_api_key = api_key.strip() if api_key else None
-    if provider_type == AI_PROVIDER_OPENAI_COMPATIBLE and not normalized_api_key:
+    if AI_PROVIDER_API_KEY_REQUIRED[provider_type] and not normalized_api_key:
         existing = get_instance_provider_config(db)
         if existing is None or existing.encrypted_api_key is None:
-            raise ValueError("An API key is required for openai_compatible providers.")
+            raise ValueError(f"An API key is required for {provider_type} providers.")
 
     config = get_instance_provider_config(db)
     created = config is None
@@ -183,10 +188,15 @@ def refresh_provider_health(
     *,
     config: AIProviderConfig,
 ) -> AIProviderHealth:
+    provider_type = canonical_provider_type(config.provider_type)
+    if provider_type is None:
+        raise ValueError("Unsupported AI provider type.")
+
+    config.provider_type = provider_type
     api_key = decrypt_secret(config.encrypted_api_key) if config.encrypted_api_key else None
     adapter = build_ai_provider_adapter(
         AIProviderRuntimeConfig(
-            provider_type=config.provider_type,
+            provider_type=provider_type,
             base_url=config.base_url,
             default_model=config.default_model,
             api_key=api_key,
@@ -228,7 +238,7 @@ def serialize_provider_config(config: AIProviderConfig | None) -> dict[str, obje
     return {
         "external_id": config.external_id,
         "scope_type": config.scope_type,
-        "provider_type": config.provider_type,
+        "provider_type": canonical_provider_type(config.provider_type),
         "base_url": config.base_url,
         "default_model": config.default_model,
         "is_enabled": config.is_enabled,

@@ -7,6 +7,7 @@ type ModalShellProps = {
   description?: string;
   onClose: () => void;
   closeOnBackdropClick?: boolean;
+  showCloseButton?: boolean;
   panelClassName?: string;
   children: ReactNode;
 };
@@ -16,6 +17,7 @@ export function ModalShell({
   description,
   onClose,
   closeOnBackdropClick = true,
+  showCloseButton = true,
   panelClassName,
   children,
 }: ModalShellProps) {
@@ -41,9 +43,11 @@ export function ModalShell({
             <h2>{title}</h2>
             {description ? <p className="section-copy">{description}</p> : null}
           </div>
-          <button type="button" className="ghost-button modal-close-button" onClick={onClose}>
-            Close
-          </button>
+          {showCloseButton ? (
+            <button type="button" className="ghost-button modal-close-button" onClick={onClose}>
+              Close
+            </button>
+          ) : null}
         </div>
         {children}
       </section>
