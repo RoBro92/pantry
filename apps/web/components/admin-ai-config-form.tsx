@@ -221,6 +221,7 @@ export function AdminAIConfigForm({
     setBaseUrl(nextBaseUrl);
     setDefaultModel(nextDefaultModel);
     setDraftModelSelection(nextDefaultModel);
+    setApiKey("");
     setStatusMessage(null);
     setErrorMessage(null);
 
@@ -269,6 +270,7 @@ export function AdminAIConfigForm({
       syncLocalState: true
     });
     if (saved) {
+      await runAutoHealthCheck();
       setIsModelPickerOpen(false);
     }
   }
@@ -278,6 +280,8 @@ export function AdminAIConfigForm({
     defaultModel.trim().length > 0 &&
     (!providerRequiresApiKey || Boolean(config?.has_api_key));
   const savedProviderType = normalizeAIProviderType(config?.provider_type) ?? null;
+  const hasStoredApiKeyForSelectedProvider =
+    savedProviderType === providerType && Boolean(config?.has_api_key);
   const hasUnsavedChanges =
     savedProviderType !== providerType ||
     (config?.base_url ?? "") !== baseUrl ||
@@ -291,6 +295,11 @@ export function AdminAIConfigForm({
     Boolean(config) &&
     minimumFieldsPresent &&
     !hasUnsavedChanges;
+  const effectiveHealthStatus = health?.status ?? config?.health_status ?? "unknown";
+  const effectiveHealthMessage =
+    health?.message ??
+    config?.health_error ??
+    (effectiveHealthStatus === "unknown" ? "No health check has been recorded yet." : "No issues reported.");
 
   return (
     <div className="stack" data-testid="admin-ai-config-page">
@@ -307,11 +316,11 @@ export function AdminAIConfigForm({
         {isSaving ? <p className="status-note">Saving changes...</p> : null}
         {statusMessage ? <p className="status-note">{statusMessage}</p> : null}
         {errorMessage ? <p className="error-text">{errorMessage}</p> : null}
-        <div className="content-grid">
-          <label className="field">
+        <div className="content-grid ai-provider-top-grid">
+          <label className="field ai-provider-top-field">
             <span>Provider type</span>
             <select
-              className="ai-provider-field-control"
+              className="ai-provider-field-control ai-provider-select"
               value={providerType}
               onChange={(event) => void handleProviderChange(event.target.value as AIProviderType)}
             >
@@ -322,26 +331,32 @@ export function AdminAIConfigForm({
               ))}
             </select>
           </label>
-          <label className="field">
+          <label className="field ai-provider-top-field">
             <span>Base URL</span>
-            <input
-              className="ai-provider-field-control"
-              value={baseUrl}
-              onChange={(event) => setBaseUrl(event.target.value)}
-              onBlur={() => void handleBaseUrlBlur()}
-            />
+            <div className="ai-provider-readonly-value" aria-label="Base URL">
+              {baseUrl}
+            </div>
           </label>
-          <label className="field">
+          <label className="field ai-provider-top-field">
             <span>Default model</span>
-            <input
-              className="ai-provider-field-control"
-              value={defaultModel}
-              readOnly
-              aria-readonly="true"
-              placeholder={getDefaultModel(providerType)}
-            />
+            <div className="ai-provider-readonly-value" aria-label="Default model">
+              {defaultModel || getDefaultModel(providerType)}
+            </div>
+            <div className="ai-provider-model-action">
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() => {
+                  setModelQuery(defaultModel);
+                  setDraftModelSelection(defaultModel);
+                  setIsModelPickerOpen(true);
+                }}
+              >
+                Choose model
+              </button>
+            </div>
           </label>
-          <label className="field">
+          <label className="field ai-provider-top-field">
             <span>API key</span>
             <input
               className="ai-provider-field-control"
@@ -350,7 +365,7 @@ export function AdminAIConfigForm({
               onChange={(event) => setApiKey(event.target.value)}
               onBlur={() => void handleApiKeyBlur()}
               placeholder={
-                config?.has_api_key
+                hasStoredApiKeyForSelectedProvider
                   ? "Stored. Enter a new key to replace it."
                   : providerRequiresApiKey
                     ? `${AI_PROVIDER_LABELS[providerType]} requires an API key`
@@ -358,19 +373,6 @@ export function AdminAIConfigForm({
               }
             />
           </label>
-        </div>
-        <div className="page-actions" style={{ justifyContent: "flex-start" }}>
-          <button
-            type="button"
-            className="ghost-button"
-            onClick={() => {
-              setModelQuery(defaultModel);
-              setDraftModelSelection(defaultModel);
-              setIsModelPickerOpen(true);
-            }}
-          >
-            Choose model
-          </button>
         </div>
         <div className="stack" style={{ gap: "0.75rem", marginTop: "1rem" }}>
           <label className="checkbox-row" style={{ margin: 0 }}>
@@ -412,8 +414,8 @@ export function AdminAIConfigForm({
         </article>
         <article className="status-card">
           <p className="eyebrow">Health</p>
-          <h2>{health?.status ?? config?.health_status ?? "unknown"}</h2>
-          <p>{health?.message ?? config?.health_error ?? "No health check has been recorded yet."}</p>
+          <h2>{effectiveHealthStatus}</h2>
+          <p>{effectiveHealthMessage}</p>
         </article>
         <article className="status-card">
           <p className="eyebrow">Models</p>
@@ -421,19 +423,6 @@ export function AdminAIConfigForm({
           <p>Run health check to refresh the searchable model list for this provider.</p>
         </article>
       </section>
-
-      {health && health.models.length > 0 ? (
-        <section className="panel">
-          <p className="eyebrow">Discovered Models</p>
-          <div className="tag-row">
-            {health.models.map((model) => (
-              <span key={model} className="tag">
-                {model}
-              </span>
-            ))}
-          </div>
-        </section>
-      ) : null}
 
       {isModelPickerOpen ? (
         <ModalShell
