@@ -75,7 +75,10 @@ def post_provider_health_check(
     if config is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No AI provider is configured.")
 
-    health = refresh_provider_health(db, config=config)
+    try:
+        health = refresh_provider_health(db, config=config)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return AIProviderHealthResponse(
         feature_enabled=get_ai_feature_enabled(),
         config=AIProviderConfigSummary.model_validate(serialize_provider_config(config)),

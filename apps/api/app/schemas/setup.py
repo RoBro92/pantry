@@ -60,7 +60,7 @@ class StagedSetupDietaryUserSummary(BaseModel):
 
 
 class StagedSetupAIConfigSummary(BaseModel):
-    provider_type: Literal["ollama", "openai_compatible"] | None = None
+    provider_type: Literal["openai", "claude", "ollama", "custom"] | None = None
     base_url: str | None = None
     default_model: str | None = None
     is_enabled: bool = False
@@ -159,7 +159,7 @@ class SetupDietaryUpdateRequest(BaseModel):
 
 
 class SetupAIConfigUpdateRequest(BaseModel):
-    provider_type: Literal["ollama", "openai_compatible"] | None = None
+    provider_type: Literal["openai", "claude", "ollama", "custom"] | None = None
     base_url: str | None = None
     default_model: str | None = None
     api_key: str | None = None
@@ -178,6 +178,22 @@ class SetupSMTPConfigUpdateRequest(BaseModel):
     is_enabled: bool = False
     password_reset_enabled: bool = False
     mark_skipped: bool = False
+
+
+class SetupSMTPTestRequest(BaseModel):
+    host: str | None = None
+    port: int | None = None
+    username: str | None = None
+    password: str | None = None
+    from_email: str | None = None
+    from_name: str | None = None
+    security: str | None = None
+
+
+class SetupSMTPTestResponse(BaseModel):
+    ok: bool
+    status: str
+    message: str | None = None
 
 
 class LoginCompatibilityRequest(BaseModel):

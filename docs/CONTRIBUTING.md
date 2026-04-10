@@ -28,8 +28,9 @@ Pantry provides a repo-root wrapper for local branch work:
 
 - `fresh` resets the local environment to the first run setup flow
 - `demo` resets the local environment and seeds stable demo data
+- each `./pantry start --fresh` or `./pantry start --demo` run replaces the full local web, api, and worker stack before seeding the selected mode
 - switch modes without a rebuild with `./pantry reset --fresh` or `./pantry reset --demo`
-- stop the stack with `./pantry stop`
+- stop and remove the full local stack with `./pantry stop`
 - follow logs with `./pantry logs`
 - check the current stack with `./pantry status`
 - rebuild images only when Dockerfiles or dependencies changed with `./pantry rebuild`

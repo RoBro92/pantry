@@ -34,26 +34,26 @@ def _open_smtp_client(*, host: str, port: int, security: str, timeout: int):
     return smtp_client
 
 
-def run_smtp_connectivity_test(db_session) -> SMTPTestResult:
-    settings = get_settings()
-    config = resolve_smtp_config(db_session)
-    if config.config_error:
-        raise ValueError(config.config_error)
-    if not config.is_configured or not config.host or config.port is None or not config.security:
-        raise ValueError("SMTP is not configured well enough to test.")
-
-    timeout = settings.smtp_timeout_seconds
+def test_smtp_connection(
+    *,
+    host: str,
+    port: int,
+    username: str | None,
+    password: str | None,
+    security: str,
+) -> SMTPTestResult:
+    timeout = get_settings().smtp_timeout_seconds
     smtp_client: smtplib.SMTP | smtplib.SMTP_SSL | None = None
     try:
         smtp_client = _open_smtp_client(
-            host=config.host,
-            port=config.port,
-            security=config.security,
+            host=host,
+            port=port,
+            security=security,
             timeout=timeout,
         )
 
-        if config.username and config.password:
-            smtp_client.login(config.username, config.password)
+        if username and password:
+            smtp_client.login(username, password)
 
         code, response = smtp_client.noop()
         message = response.decode("utf-8", errors="ignore") if isinstance(response, bytes) else str(response)
@@ -70,6 +70,22 @@ def run_smtp_connectivity_test(db_session) -> SMTPTestResult:
                 smtp_client.quit()
             except OSError:
                 pass
+
+
+def run_smtp_connectivity_test(db_session) -> SMTPTestResult:
+    config = resolve_smtp_config(db_session)
+    if config.config_error:
+        raise ValueError(config.config_error)
+    if not config.is_configured or not config.host or config.port is None or not config.security:
+        raise ValueError("SMTP is not configured well enough to test.")
+
+    return test_smtp_connection(
+        host=config.host,
+        port=config.port,
+        username=config.username,
+        password=config.password,
+        security=config.security,
+    )
 
 
 def send_email(

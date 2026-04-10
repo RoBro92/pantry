@@ -14,8 +14,11 @@ from app.services.ai_providers.base import (
     StructuredCompletionResult,
 )
 
+ANTHROPIC_VERSION = "2023-06-01"
+STRUCTURED_OUTPUT_TOOL_NAME = "pantry_structured_output"
 
-class OpenAICompatibleProviderAdapter:
+
+class ClaudeProviderAdapter:
     def __init__(self, config: AIProviderRuntimeConfig):
         self._config = config
 
@@ -26,14 +29,17 @@ class OpenAICompatibleProviderAdapter:
         return urljoin(f"{base}/", path.lstrip("/"))
 
     def _headers(self) -> dict[str, str]:
-        headers = {"content-type": "application/json"}
+        headers = {
+            "anthropic-version": ANTHROPIC_VERSION,
+            "content-type": "application/json",
+        }
         if self._config.api_key:
-            headers["authorization"] = f"Bearer {self._config.api_key}"
+            headers["x-api-key"] = self._config.api_key
         return headers
 
     def list_models(self) -> list[str]:
         with httpx.Client(timeout=self._config.timeout_seconds, headers=self._headers()) as client:
-            response = client.get(self._url("/models"))
+            response = client.get(self._url("/models"), params={"limit": 1000})
             response.raise_for_status()
             payload = response.json()
         return sorted(
@@ -55,7 +61,7 @@ class OpenAICompatibleProviderAdapter:
                 capabilities={
                     "supports_model_listing": True,
                     "supports_structured_output": True,
-                    "supports_manual_model_entry": True,
+                    "structured_output_mode": "tool_use",
                 },
             )
         except Exception as exc:
@@ -67,7 +73,7 @@ class OpenAICompatibleProviderAdapter:
                 capabilities={
                     "supports_model_listing": True,
                     "supports_structured_output": True,
-                    "supports_manual_model_entry": True,
+                    "structured_output_mode": "tool_use",
                 },
             )
 
@@ -77,40 +83,45 @@ class OpenAICompatibleProviderAdapter:
     ) -> StructuredCompletionResult:
         payload: dict[str, Any] = {
             "model": request.model,
+            "max_tokens": 1200,
+            "system": request.system_prompt,
             "messages": [
-                {"role": "system", "content": request.system_prompt},
-                {"role": "user", "content": json.dumps(request.user_payload)},
+                {
+                    "role": "user",
+                    "content": json.dumps(request.user_payload),
+                }
             ],
             "temperature": request.temperature,
-            "response_format": {
-                "type": "json_schema",
-                "json_schema": {
-                    "name": "pantry_ai_response",
-                    "strict": True,
-                    "schema": request.output_schema,
-                },
+            "tools": [
+                {
+                    "name": STRUCTURED_OUTPUT_TOOL_NAME,
+                    "description": "Return the Pantry AI response in the expected structured format.",
+                    "input_schema": request.output_schema,
+                }
+            ],
+            "tool_choice": {
+                "type": "tool",
+                "name": STRUCTURED_OUTPUT_TOOL_NAME,
             },
         }
 
         with httpx.Client(timeout=self._config.timeout_seconds, headers=self._headers()) as client:
-            response = client.post(self._url("/chat/completions"), json=payload)
+            response = client.post(self._url("/messages"), json=payload)
             response.raise_for_status()
             body = response.json()
 
-        choice = (body.get("choices") or [{}])[0]
-        message = choice.get("message") or {}
-        output_text = message.get("content", "")
-        if isinstance(output_text, list):
-            output_text = "".join(
-                str(part.get("text", ""))
-                for part in output_text
-                if isinstance(part, dict) and part.get("type") == "text"
-            )
-        if not output_text:
-            raise ValueError("Provider returned an empty response.")
+        for block in body.get("content", []):
+            if (
+                isinstance(block, dict)
+                and block.get("type") == "tool_use"
+                and block.get("name") == STRUCTURED_OUTPUT_TOOL_NAME
+                and isinstance(block.get("input"), dict)
+            ):
+                parsed_output = block["input"]
+                return StructuredCompletionResult(
+                    output_text=json.dumps(parsed_output),
+                    parsed_output=parsed_output,
+                    provider_request_id=body.get("id"),
+                )
 
-        return StructuredCompletionResult(
-            output_text=output_text,
-            parsed_output=json.loads(output_text),
-            provider_request_id=body.get("id"),
-        )
+        raise ValueError("Claude did not return the structured response tool payload.")

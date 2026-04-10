@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 
 class AIProviderConfigUpsertRequest(BaseModel):
-    provider_type: Literal["ollama", "openai_compatible"]
+    provider_type: Literal["openai", "claude", "ollama", "custom"]
     base_url: str
     default_model: str
     api_key: str | None = None
@@ -17,7 +18,7 @@ class AIProviderConfigUpsertRequest(BaseModel):
 class AIProviderConfigSummary(BaseModel):
     external_id: str
     scope_type: str
-    provider_type: str
+    provider_type: Literal["openai", "claude", "ollama", "custom"]
     base_url: str
     default_model: str
     is_enabled: bool
@@ -113,5 +114,179 @@ class AIProviderSuggestionItem(BaseModel):
 
 class AIProviderSuggestionOutput(BaseModel):
     suggestions: list[AIProviderSuggestionItem] = Field(default_factory=list)
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class AIHouseholdMemberSummary(BaseModel):
+    user_external_id: str
+    display_name: str
+    dietary_preferences: list[str] = Field(default_factory=list)
+
+
+class AIMealPlannerPantrySummary(BaseModel):
+    pantry_product_count: int
+    active_lot_count: int
+    near_expiry_lot_count: int
+    near_expiry_product_names: list[str] = Field(default_factory=list)
+    local_recipe_count: int
+
+
+class AIMealPlannerResponse(BaseModel):
+    household_external_id: str
+    household_name: str
+    feature: AIFeatureStatusSummary
+    household_dietary_preferences: list[str] = Field(default_factory=list)
+    members: list[AIHouseholdMemberSummary] = Field(default_factory=list)
+    pantry_summary: AIMealPlannerPantrySummary
+
+
+class AIMealSuggestionRequest(BaseModel):
+    people_count: int = Field(ge=1, le=12)
+    selected_user_external_ids: list[str] = Field(default_factory=list)
+    meal_type: Literal["breakfast", "lunch", "dinner"]
+    extra_portion_count: int = Field(default=0, ge=0, le=12)
+    max_total_minutes: int | None = Field(default=None, ge=5, le=360)
+    prioritize_near_expiry: bool = False
+    allow_extra_ingredients: bool = True
+    pantry_only: bool = False
+    temporary_include_preferences: list[str] = Field(default_factory=list)
+    temporary_exclude_preferences: list[str] = Field(default_factory=list)
+    removed_preference_pills: list[str] = Field(default_factory=list)
+
+
+class AIMealSuggestionContextSnapshot(BaseModel):
+    pantry_product_count: int
+    active_lot_count: int
+    near_expiry_lot_count: int
+    selected_user_count: int
+    effective_preference_count: int
+    candidate_recipe_count: int
+    pantry_only: bool
+
+
+class AIMealSuggestionSourceMetadata(BaseModel):
+    kind: Literal["ai_generated", "household_recipe_reference", "external_recipe_reference"]
+    label: str
+    recipe_external_id: str | None = None
+    recipe_title: str | None = None
+    recipe_url: str | None = None
+    provider_name: str | None = None
+
+
+class AIMealSuggestionIngredient(BaseModel):
+    id: str
+    name: str
+    quantity: Decimal
+    unit: str
+    note: str | None = None
+    pantry_product_external_id: str | None = None
+    pantry_product_name: str | None = None
+    pantry_match_source: str | None = None
+    availability_status: Literal["available", "partial", "missing", "unmatched", "unit_mismatch"]
+    pantry_available_quantity: Decimal = Decimal("0.000")
+    covered_quantity: Decimal = Decimal("0.000")
+    missing_quantity: Decimal = Decimal("0.000")
+    uses_near_expiry_item: bool = False
+    is_extra_ingredient: bool = False
+    can_consume_from_pantry: bool = False
+
+
+class AIMealSuggestion(BaseModel):
+    id: str
+    title: str
+    short_summary: str
+    why_it_matches: str
+    total_time_minutes: int | None = None
+    pantry_ingredients_available: list[str] = Field(default_factory=list)
+    extra_ingredients_needed: list[str] = Field(default_factory=list)
+    dietary_fit_summary: str
+    near_expiry_note: str | None = None
+    source: AIMealSuggestionSourceMetadata
+    ingredients: list[AIMealSuggestionIngredient] = Field(default_factory=list)
+    steps: list[str] = Field(default_factory=list)
+
+
+class AIMealSuggestionResponse(BaseModel):
+    household_external_id: str
+    feature: AIFeatureStatusSummary
+    request: AIMealSuggestionRequest
+    context_snapshot: AIMealSuggestionContextSnapshot
+    suggestions: list[AIMealSuggestion] = Field(default_factory=list)
+    generated_at: datetime
+
+
+class CompleteAIMealSuggestionIngredientRequest(BaseModel):
+    ingredient_id: str
+    name: str
+    quantity: Decimal
+    unit: str
+    pantry_product_external_id: str | None = None
+    consume_quantity: Decimal = Field(default=Decimal("0.000"), ge=0)
+
+
+class CompleteAIMealSuggestionRequest(BaseModel):
+    suggestion_id: str
+    suggestion_title: str
+    ingredients: list[CompleteAIMealSuggestionIngredientRequest] = Field(default_factory=list)
+
+
+class CompletedAIMealSuggestionIngredient(BaseModel):
+    ingredient_id: str
+    name: str
+    unit: str
+    requested_quantity: Decimal
+    consumed_quantity: Decimal
+    pantry_product_external_id: str | None = None
+    pantry_product_name: str | None = None
+    status: Literal["consumed", "partially_consumed", "skipped", "missing"]
+    note: str | None = None
+
+
+class CompleteAIMealSuggestionResponse(BaseModel):
+    completed: bool
+    suggestion_id: str
+    suggestion_title: str
+    consumed_ingredients: list[CompletedAIMealSuggestionIngredient] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class AIProviderMealSuggestionIngredient(BaseModel):
+    name: str
+    quantity: Decimal
+    unit: str
+    note: str | None = None
+    pantry_product_external_id: str | None = None
+    is_extra_ingredient: bool = False
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class AIProviderMealSuggestionSource(BaseModel):
+    kind: Literal["ai_generated", "household_recipe_reference", "external_recipe_reference"]
+    label: str
+    recipe_external_id: str | None = None
+    recipe_title: str | None = None
+    recipe_url: str | None = None
+    provider_name: str | None = None
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class AIProviderMealSuggestionItem(BaseModel):
+    title: str
+    short_summary: str
+    why_it_matches: str
+    total_time_minutes: int | None = Field(default=None, ge=1, le=360)
+    dietary_fit_summary: str
+    source: AIProviderMealSuggestionSource
+    ingredients: list[AIProviderMealSuggestionIngredient] = Field(default_factory=list)
+    steps: list[str] = Field(default_factory=list, min_length=1, max_length=10)
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class AIProviderMealSuggestionOutput(BaseModel):
+    suggestions: list[AIProviderMealSuggestionItem] = Field(default_factory=list)
 
     model_config = ConfigDict(extra="forbid")

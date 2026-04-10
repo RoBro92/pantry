@@ -64,7 +64,9 @@ Modes:
 
 Notes:
   - Uses .env.local by default, falls back to .env if present, and bootstraps .env.local from .env.example when needed.
-  - Start/reset do not force rebuilds. Use rebuild after Dockerfile or dependency changes.
+  - Start replaces the whole local dev stack so web, api, and worker all come up fresh together.
+  - Reset re-seeds the running stack without forcing container replacement.
+  - Use rebuild after Dockerfile or dependency changes.
   - Docker Desktop file polling is enabled automatically on macOS and Windows-like shells.
 
 This helper does not change the production or self-hosted install flow in infra/compose/pantry.yml.
@@ -92,6 +94,12 @@ bootstrap_mode() {
 }
 
 start_stack() {
+  compose down --remove-orphans
+  compose up -d --remove-orphans --force-recreate
+  wait_for_api
+}
+
+ensure_stack_running() {
   compose up -d --remove-orphans
   wait_for_api
 }
@@ -118,8 +126,7 @@ run_mode() {
   if [[ "${action}" == "start" ]]; then
     start_stack
   else
-    compose up -d --remove-orphans
-    wait_for_api
+    ensure_stack_running
   fi
 
   local manifest
@@ -151,7 +158,8 @@ main() {
       compose ps
       ;;
     rebuild)
-      compose up -d --build --remove-orphans
+      compose down --remove-orphans
+      compose up -d --build --remove-orphans --force-recreate
       wait_for_api
       ;;
     help)

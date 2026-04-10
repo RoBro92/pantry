@@ -3,6 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { type FormEvent, type ReactNode, useRef, useState } from "react";
 import type {
+  SetupSMTPTestResponse,
   SetupStatusResponse,
   SetupWizardAssignmentSummary,
   SetupWizardDietaryUserSummary,
@@ -11,6 +12,12 @@ import type {
   SetupWizardUserSummary,
   SessionResponse
 } from "../lib/api-types";
+import {
+  AI_PROVIDER_DEFINITIONS,
+  getDefaultAIBaseUrl,
+  providerRequiresApiKey,
+  type AIProviderType
+} from "../lib/ai-provider-config";
 import { getHouseholdRoleLabel, type HouseholdRole } from "../lib/role-labels";
 import { postFormToApi, postToApi, putToApi } from "../lib/client-api";
 import { SetupProgress } from "./setup-progress";
@@ -479,6 +486,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
   const [error, setError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isTestingSMTP, setIsTestingSMTP] = useState(false);
   const saveCounterRef = useRef(0);
   const latestAppliedSaveIdRef = useRef(0);
 
@@ -719,6 +727,35 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
       if (saved) {
         moveToStep(nextStep(currentStep, stepOrder));
       }
+    }
+  }
+
+  async function handleSMTPTest() {
+    setIsTestingSMTP(true);
+    setError(null);
+    setStatusMessage(null);
+
+    try {
+      const response = await postToApi<SetupSMTPTestResponse>("/api/setup/wizard/smtp/test", {
+        host: wizard.smtp_config.host,
+        port: wizard.smtp_config.port,
+        username: wizard.smtp_config.username,
+        password: smtpPassword || null,
+        from_email: wizard.smtp_config.from_email,
+        from_name: wizard.smtp_config.from_name,
+        security: wizard.smtp_config.security,
+      });
+      setStatusMessage(
+        response.ok
+          ? "SMTP connection test passed."
+          : response.message ?? "SMTP connection test failed."
+      );
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error ? requestError.message : "SMTP connection test failed."
+      );
+    } finally {
+      setIsTestingSMTP(false);
     }
   }
 
@@ -1701,8 +1738,9 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
               <span>Provider type</span>
               <select
                 name="setup_ai_provider_type"
-                value={wizard.ai_config.provider_type ?? "ollama"}
-                onChange={(event) =>
+                value={wizard.ai_config.provider_type ?? "openai"}
+                onChange={(event) => {
+                  const nextProviderType = event.target.value as AIProviderType;
                   setWizard((current) => ({
                     ...current,
                     skipped_optional_steps: current.skipped_optional_steps.filter(
@@ -1710,13 +1748,20 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                     ),
                     ai_config: {
                       ...current.ai_config,
-                      provider_type: event.target.value as "ollama" | "openai_compatible"
+                      provider_type: nextProviderType,
+                      base_url:
+                        getDefaultAIBaseUrl(nextProviderType) ?? current.ai_config.base_url ?? "",
+                      default_model: current.ai_config.provider_type === nextProviderType
+                        ? current.ai_config.default_model
+                        : "",
                     }
-                  }))
-                }
+                  }));
+                }}
               >
+                <option value="openai">OpenAI</option>
+                <option value="claude">Claude</option>
                 <option value="ollama">Ollama</option>
-                <option value="openai_compatible">OpenAI-compatible</option>
+                <option value="custom">Custom</option>
               </select>
             </label>
             <label className="field">
@@ -1739,7 +1784,11 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                     ai_config: { ...current.ai_config, base_url: event.target.value }
                   }))
                 }
-                placeholder="http://host.docker.internal:11434"
+                placeholder={
+                  wizard.ai_config.provider_type
+                    ? (getDefaultAIBaseUrl(wizard.ai_config.provider_type) ?? "https://provider.example.com/v1")
+                    : "https://api.openai.com/v1"
+                }
               />
             </label>
             <label className="field">
@@ -1761,7 +1810,11 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                     ai_config: { ...current.ai_config, default_model: event.target.value }
                   }))
                 }
-                placeholder="llama3.2"
+                placeholder={
+                  wizard.ai_config.provider_type
+                    ? AI_PROVIDER_DEFINITIONS[wizard.ai_config.provider_type].modelPlaceholder
+                    : "Choose a model after connection"
+                }
               />
             </label>
             <label className="field">
@@ -1778,7 +1831,9 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                 placeholder={
                   wizard.ai_config.has_api_key
                     ? "Saved. Enter a new key to replace it."
-                    : "Optional for Ollama"
+                    : wizard.ai_config.provider_type && providerRequiresApiKey(wizard.ai_config.provider_type)
+                      ? "Required for this provider"
+                      : "Optional for this provider"
                 }
               />
             </label>
@@ -1997,6 +2052,16 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                 <option value="none">None</option>
               </select>
             </label>
+          </div>
+          <div className="page-actions">
+            <button
+              type="button"
+              className="ghost-button"
+              disabled={isTestingSMTP}
+              onClick={() => void handleSMTPTest()}
+            >
+              {isTestingSMTP ? "Testing..." : "Test SMTP connection"}
+            </button>
           </div>
         </section>
       );

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, timedelta
+from decimal import Decimal
 
 from sqlalchemy import select
 
@@ -8,6 +9,7 @@ from app.domain.ai import AI_PROVIDER_OLLAMA
 from app.domain.roles import HOUSEHOLD_ADMIN_ROLE
 from app.models.audit_event import AuditEvent
 from app.models.product import Product
+from app.models.stock_lot import StockLot
 from app.schemas.pantry import ConfirmedProductEnrichmentRequest
 from app.schemas.ai import AISuggestionRequest
 from app.services.ai_config import upsert_instance_provider_config
@@ -394,6 +396,86 @@ def test_household_ai_suggestions_use_provider_adapter_and_record_audit(
     assert "ai.suggestion.completed" in audit_actions
 
 
+def test_household_ai_suggestions_support_claude_provider_configs(
+    client,
+    db_session,
+    monkeypatch,
+):
+    member, household = create_member_household(
+        db_session,
+        email="claude-member@example.com",
+        household_name="Claude Suggestion Household",
+    )
+    admin = create_platform_admin(
+        db_session,
+        email="claude-admin@example.com",
+        password=PASSWORD,
+        display_name="Claude Admin",
+    )
+    upsert_instance_provider_config(
+        db_session,
+        actor=admin,
+        provider_type="claude",
+        base_url="https://api.anthropic.com",
+        default_model="claude-sonnet-4-20250514",
+        api_key="claude-test-secret",
+        is_enabled=True,
+    )
+
+    captured_provider_types: list[str] = []
+
+    class StubClaudeSuggestionAdapter(StubAIProviderAdapter):
+        def generate_structured_output(self, request) -> StructuredCompletionResult:
+            assert request.model == "claude-sonnet-4-20250514"
+            assert request.user_payload["request"]["kind"] == "meal_suggestions"
+            return StructuredCompletionResult(
+                output_text='{"suggestions":[{"title":"Use the pasta","summary":"Cook pasta soon.","rationale":"It is already in the pantry.","pantry_product_names":["Pasta"],"expiring_product_names":["Tomatoes"],"missing_product_names":[],"extra_ingredient_names":["Lemon"],"substitution_ideas":["Swap basil for parsley"],"caution":"Check expiry dates before cooking."}]}',
+                parsed_output={
+                    "suggestions": [
+                        {
+                            "title": "Use the pasta",
+                            "summary": "Cook pasta soon.",
+                            "rationale": "It is already in the pantry.",
+                            "pantry_product_names": ["Pasta"],
+                            "expiring_product_names": ["Tomatoes"],
+                            "missing_product_names": [],
+                            "extra_ingredient_names": ["Lemon"],
+                            "substitution_ideas": ["Swap basil for parsley"],
+                            "caution": "Check expiry dates before cooking.",
+                        }
+                    ]
+                },
+                provider_request_id="claude_req_123",
+            )
+
+    def build_stub_adapter(config):
+        captured_provider_types.append(config.provider_type)
+        return StubClaudeSuggestionAdapter()
+
+    monkeypatch.setattr(
+        "app.services.ai_config.build_ai_provider_adapter",
+        build_stub_adapter,
+    )
+    monkeypatch.setattr(
+        "app.services.ai_suggestions.build_ai_provider_adapter",
+        build_stub_adapter,
+    )
+
+    login(client, email="claude-member@example.com")
+
+    status_response = client.get(f"/api/households/{household.external_id}/ai/status")
+    assert status_response.status_code == 200
+    assert status_response.json()["provider_type"] == "claude"
+
+    suggestion_response = client.post(
+        f"/api/households/{household.external_id}/ai/suggestions",
+        json={"kind": "meal_suggestions", "limit": 2},
+    )
+    assert suggestion_response.status_code == 200
+    assert suggestion_response.json()["feature"]["provider_type"] == "claude"
+    assert "claude" in captured_provider_types
+
+
 def test_household_ai_generation_failures_degrade_cleanly_and_update_status(
     client,
     db_session,
@@ -476,3 +558,332 @@ def test_household_ai_feature_flag_can_disable_household_access(client, db_sessi
     )
     assert suggestion_response.status_code == 403
     assert "disabled" in suggestion_response.json()["detail"].lower()
+
+
+def test_ai_meal_planner_returns_household_members_and_existing_preferences(client, db_session):
+    member, household = create_member_household(
+        db_session,
+        email="meal-planner@example.com",
+        household_name="Meal Planner Household",
+    )
+    second_user = create_user(
+        db_session,
+        email="meal-planner-second@example.com",
+        password=PASSWORD,
+        display_name="Second Planner",
+    )
+    create_membership(
+        db_session,
+        user=second_user,
+        household=household,
+        role_code=HOUSEHOLD_ADMIN_ROLE,
+    )
+    household.dietary_preferences = ["Vegetarian", "Gluten-free"]
+    member.dietary_preferences = ["Nut allergy"]
+    second_user.dietary_preferences = ["Dairy-free"]
+    db_session.add_all([household, member, second_user])
+    db_session.commit()
+
+    login(client, email="meal-planner@example.com")
+
+    response = client.get(f"/api/households/{household.external_id}/ai/meal-planner")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["household_dietary_preferences"] == ["Vegetarian", "Gluten-free"]
+    member_map = {
+        item["display_name"]: item["dietary_preferences"]
+        for item in payload["members"]
+    }
+    assert member_map["Meal-Planner"] == ["Nut allergy"]
+    assert member_map["Second Planner"] == ["Dairy-free"]
+
+
+def test_ai_meal_suggestions_support_pantry_only_and_pantry_plus_extras_modes(
+    client,
+    db_session,
+    monkeypatch,
+):
+    member, household = create_member_household(
+        db_session,
+        email="meal-suggestions@example.com",
+        household_name="Meal Suggestions Household",
+    )
+    second_user = create_user(
+        db_session,
+        email="meal-suggestions-second@example.com",
+        password=PASSWORD,
+        display_name="Second Diner",
+    )
+    create_membership(
+        db_session,
+        user=second_user,
+        household=household,
+        role_code=HOUSEHOLD_ADMIN_ROLE,
+    )
+    household.dietary_preferences = ["Vegetarian"]
+    member.dietary_preferences = ["Nut allergy"]
+    second_user.dietary_preferences = ["Gluten-free"]
+    db_session.add_all([household, member, second_user])
+    db_session.commit()
+    login(client, email="meal-suggestions@example.com")
+
+    pantry_group = create_location_group(client, household.external_id, "Pantry")
+    shelf = create_location(client, household.external_id, pantry_group["external_id"], "Shelf")
+    pasta = create_product(
+        client,
+        household.external_id,
+        name="Pasta",
+        default_unit="count",
+        aliases=[],
+        barcodes=[],
+    )
+    tomatoes = create_product(
+        client,
+        household.external_id,
+        name="Tomatoes",
+        default_unit="can",
+        aliases=[],
+        barcodes=[],
+    )
+
+    add_stock_lot(
+        client,
+        household.external_id,
+        product_external_id=pasta["external_id"],
+        location_external_id=shelf["external_id"],
+        quantity="2.000",
+    )
+    add_stock_lot(
+        client,
+        household.external_id,
+        product_external_id=tomatoes["external_id"],
+        location_external_id=shelf["external_id"],
+        quantity="1.000",
+    )
+
+    recipe_response = client.post(
+        f"/api/households/{household.external_id}/recipes",
+        json={
+            "title": "Simple Pasta",
+            "notes": "Pantry staple.",
+            "ingredients": [
+                {"name": "Pasta", "quantity": "1.000", "unit": "count"},
+                {"name": "Tomatoes", "quantity": "1.000", "unit": "can"},
+            ],
+        },
+    )
+    assert recipe_response.status_code == 201
+    recipe_external_id = recipe_response.json()["recipe"]["external_id"]
+
+    admin = create_platform_admin(
+        db_session,
+        email="meal-suggestions-admin@example.com",
+        password=PASSWORD,
+        display_name="Meal Suggestions Admin",
+    )
+    upsert_instance_provider_config(
+        db_session,
+        actor=admin,
+        provider_type=AI_PROVIDER_OLLAMA,
+        base_url="http://ollama.local:11434",
+        default_model="llama3.2",
+        api_key=None,
+        is_enabled=True,
+    )
+
+    captured_payloads: list[dict] = []
+
+    class StubMealSuggestionAdapter(StubAIProviderAdapter):
+        def generate_structured_output(self, request) -> StructuredCompletionResult:
+            captured_payloads.append(request.user_payload)
+            pantry_only = bool(request.user_payload["request"]["pantry_only"])
+            parsed_output = {
+                "suggestions": [
+                    {
+                        "title": "Simple Pasta Bowl" if pantry_only else "Pasta with Lemon",
+                        "short_summary": "Pantry-first dinner.",
+                        "why_it_matches": "Uses the core pantry staples already on hand.",
+                        "total_time_minutes": 25,
+                        "dietary_fit_summary": "Matches the selected dietary preferences.",
+                        "source": {
+                            "kind": "household_recipe_reference" if pantry_only else "ai_generated",
+                            "label": "Household recipe reference" if pantry_only else "AI-generated",
+                            "recipe_external_id": recipe_external_id if pantry_only else None,
+                            "recipe_title": "Simple Pasta" if pantry_only else None,
+                            "recipe_url": None,
+                            "provider_name": None,
+                        },
+                        "ingredients": [
+                            {
+                                "name": "Pasta",
+                                "quantity": "1.000",
+                                "unit": "count",
+                                "pantry_product_external_id": pasta["external_id"],
+                                "is_extra_ingredient": False,
+                            },
+                            {
+                                "name": "Tomatoes",
+                                "quantity": "1.000",
+                                "unit": "can",
+                                "pantry_product_external_id": tomatoes["external_id"],
+                                "is_extra_ingredient": False,
+                            },
+                            *(
+                                []
+                                if pantry_only
+                                else [
+                                    {
+                                        "name": "Lemon",
+                                        "quantity": "1.000",
+                                        "unit": "count",
+                                        "pantry_product_external_id": pasta["external_id"],
+                                        "is_extra_ingredient": True,
+                                    }
+                                ]
+                            ),
+                        ],
+                        "steps": [
+                            "Cook the pasta.",
+                            "Warm the tomatoes and combine everything.",
+                        ],
+                    }
+                ]
+            }
+            return StructuredCompletionResult(
+                output_text=str(parsed_output),
+                parsed_output=parsed_output,
+                provider_request_id="meal_req_123",
+            )
+
+    monkeypatch.setattr(
+        "app.services.ai_config.build_ai_provider_adapter",
+        lambda config: StubMealSuggestionAdapter(),
+    )
+    monkeypatch.setattr(
+        "app.services.ai_meal_suggestions.build_ai_provider_adapter",
+        lambda config: StubMealSuggestionAdapter(),
+    )
+
+    login(client, email="meal-suggestions@example.com")
+
+    pantry_only_response = client.post(
+        f"/api/households/{household.external_id}/ai/meal-suggestions",
+        json={
+            "people_count": 2,
+            "selected_user_external_ids": [member.external_id, second_user.external_id],
+            "meal_type": "dinner",
+            "extra_portion_count": 1,
+            "max_total_minutes": 30,
+            "prioritize_near_expiry": True,
+            "allow_extra_ingredients": False,
+            "pantry_only": True,
+            "temporary_include_preferences": ["High-protein"],
+            "temporary_exclude_preferences": ["Mushrooms"],
+            "removed_preference_pills": ["Vegetarian"],
+        },
+    )
+    assert pantry_only_response.status_code == 200
+    pantry_only_payload = pantry_only_response.json()
+    assert pantry_only_payload["context_snapshot"]["selected_user_count"] == 2
+    assert pantry_only_payload["context_snapshot"]["pantry_only"] is True
+    assert pantry_only_payload["suggestions"][0]["pantry_ingredients_available"] == ["Pasta", "Tomatoes"]
+    assert pantry_only_payload["suggestions"][0]["extra_ingredients_needed"] == []
+    assert pantry_only_payload["suggestions"][0]["source"]["recipe_external_id"] == recipe_external_id
+    assert pantry_only_payload["suggestions"][0]["ingredients"][0]["availability_status"] == "available"
+
+    extras_response = client.post(
+        f"/api/households/{household.external_id}/ai/meal-suggestions",
+        json={
+            "people_count": 2,
+            "selected_user_external_ids": [member.external_id],
+            "meal_type": "dinner",
+            "extra_portion_count": 0,
+            "max_total_minutes": 30,
+            "prioritize_near_expiry": False,
+            "allow_extra_ingredients": True,
+            "pantry_only": False,
+            "temporary_include_preferences": [],
+            "temporary_exclude_preferences": [],
+            "removed_preference_pills": [],
+        },
+    )
+    assert extras_response.status_code == 200
+    extras_payload = extras_response.json()
+    assert extras_payload["context_snapshot"]["pantry_only"] is False
+    assert extras_payload["suggestions"][0]["extra_ingredients_needed"] == ["Lemon"]
+    assert extras_payload["suggestions"][0]["ingredients"][2]["availability_status"] == "unmatched"
+    assert "Vegetarian" in captured_payloads[0]["context"]["dietary_preferences"]["base_preferences"]
+    assert "High-protein" in captured_payloads[0]["context"]["dietary_preferences"]["active_preferences"]
+    assert "Mushrooms" in captured_payloads[0]["context"]["dietary_preferences"]["excluded_preferences"]
+    assert captured_payloads[0]["context"]["recipe_candidates"][0]["recipe_external_id"] == recipe_external_id
+    assert captured_payloads[1]["request"]["pantry_only"] is False
+
+
+def test_complete_ai_meal_suggestion_deducts_stock_across_multiple_lots(client, db_session):
+    _, household = create_member_household(
+        db_session,
+        email="meal-complete@example.com",
+        household_name="Meal Complete Household",
+    )
+    login(client, email="meal-complete@example.com")
+
+    pantry_group = create_location_group(client, household.external_id, "Kitchen")
+    shelf = create_location(client, household.external_id, pantry_group["external_id"], "Shelf")
+    pasta = create_product(
+        client,
+        household.external_id,
+        name="Pasta",
+        default_unit="count",
+        aliases=[],
+        barcodes=[],
+    )
+
+    add_stock_lot(
+        client,
+        household.external_id,
+        product_external_id=pasta["external_id"],
+        location_external_id=shelf["external_id"],
+        quantity="1.000",
+        expires_on=(date.today() + timedelta(days=2)).isoformat(),
+    )
+    add_stock_lot(
+        client,
+        household.external_id,
+        product_external_id=pasta["external_id"],
+        location_external_id=shelf["external_id"],
+        quantity="1.000",
+        expires_on=(date.today() + timedelta(days=5)).isoformat(),
+    )
+
+    response = client.post(
+        f"/api/households/{household.external_id}/ai/meal-suggestions/complete",
+        json={
+            "suggestion_id": "meal-suggestion-1",
+            "suggestion_title": "Simple Pasta Bowl",
+            "ingredients": [
+                {
+                    "ingredient_id": "meal-suggestion-1-ingredient-1",
+                    "name": "Pasta",
+                    "quantity": "1.500",
+                    "unit": "count",
+                    "pantry_product_external_id": pasta["external_id"],
+                    "consume_quantity": "1.500",
+                }
+            ],
+        },
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["completed"] is True
+    assert payload["consumed_ingredients"][0]["status"] == "consumed"
+    assert Decimal(payload["consumed_ingredients"][0]["consumed_quantity"]) == Decimal("1.500")
+
+    lots = db_session.scalars(
+        select(StockLot)
+        .where(StockLot.household_id == household.id)
+        .order_by(StockLot.created_at.asc())
+    ).all()
+    assert len(lots) == 2
+    assert lots[0].quantity == Decimal("0.000")
+    assert lots[0].depleted_at is not None
+    assert lots[1].quantity == Decimal("0.500")

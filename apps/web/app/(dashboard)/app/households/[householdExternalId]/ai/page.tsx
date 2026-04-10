@@ -1,7 +1,6 @@
-import { HouseholdAISuggestions } from "../../../../../../components/household-ai-suggestions";
+import { HouseholdAIMealPlanner } from "../../../../../../components/household-ai-meal-planner";
 import {
-  getHouseholdAIStatus,
-  getRecipeList,
+  getAIMealPlanner,
   requireSession
 } from "../../../../../../lib/server-auth";
 
@@ -14,18 +13,13 @@ type HouseholdAIPageProps = {
 export default async function HouseholdAIPage({ params }: HouseholdAIPageProps) {
   const session = await requireSession();
   const { householdExternalId } = await params;
-  const [status, recipeList] = await Promise.all([
-    getHouseholdAIStatus(householdExternalId),
-    getRecipeList(householdExternalId)
-  ]);
+  const planner = await getAIMealPlanner(householdExternalId);
 
   return (
-    <HouseholdAISuggestions
+    <HouseholdAIMealPlanner
       householdExternalId={householdExternalId}
-      householdName={recipeList.household_name}
-      initialStatus={status}
+      initialPlanner={planner}
       isPlatformAdmin={session.user.platform_role === "platform_admin"}
-      recipes={recipeList.recipes}
     />
   );
 }

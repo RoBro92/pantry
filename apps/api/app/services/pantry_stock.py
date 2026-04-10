@@ -653,6 +653,7 @@ def remove_stock_from_lot(
     actor: User,
     lot_external_id: str,
     quantity: Decimal,
+    commit: bool = True,
 ) -> StockLot:
     lot = get_stock_lot_by_external_id(db, household=household, external_id=lot_external_id)
     if lot is None or lot.depleted_at is not None:
@@ -683,9 +684,11 @@ def remove_stock_from_lot(
             "remaining_quantity": str(lot.quantity),
         },
     )
-    db.commit()
-    db.refresh(lot)
-    return get_stock_lot_by_external_id(db, household=household, external_id=lot.external_id) or lot
+    if commit:
+        db.commit()
+        db.refresh(lot)
+        return get_stock_lot_by_external_id(db, household=household, external_id=lot.external_id) or lot
+    return lot
 
 
 def update_stock_lot(

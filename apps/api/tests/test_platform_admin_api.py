@@ -8,6 +8,7 @@ from decimal import Decimal
 from sqlalchemy import delete, func, select
 
 from app.core.config import get_settings
+from app.models.ai_provider_config import AIProviderConfig
 from app.models.household import Household
 from app.models.import_job import ImportJob
 from app.models.instance_setting import InstanceSetting
@@ -227,6 +228,102 @@ def test_platform_admin_smtp_save_and_test_redacts_password(client, db_session, 
     test_payload = test_response.json()
     assert test_payload["ok"] is True
     assert test_payload["config"]["last_test_status"] == "passed"
+
+
+def test_platform_admin_ai_provider_save_and_reload_redacts_api_key(client, db_session):
+    create_platform_admin(
+        db_session,
+        email="ai-config-admin@example.com",
+        password=PASSWORD,
+        display_name="AI Config Admin",
+    )
+    login(client, email="ai-config-admin@example.com")
+
+    save_response = client.put(
+        "/api/platform-admin/ai/provider-config",
+        json={
+            "provider_type": "openai",
+            "base_url": "https://api.openai.com/v1",
+            "default_model": "",
+            "api_key": "sk-test-secret",
+            "is_enabled": True,
+        },
+    )
+    assert save_response.status_code == 200
+    save_payload = save_response.json()
+    assert save_payload["config"]["provider_type"] == "openai"
+    assert save_payload["config"]["base_url"] == "https://api.openai.com/v1"
+    assert save_payload["config"]["default_model"] == ""
+    assert save_payload["config"]["has_api_key"] is True
+    assert "api_key" not in save_payload["config"]
+
+    stored = db_session.scalar(select(AIProviderConfig).where(AIProviderConfig.scope_key == "instance"))
+    assert stored is not None
+    assert stored.encrypted_api_key is not None
+    assert stored.encrypted_api_key != "sk-test-secret"
+
+    reload_response = client.get("/api/platform-admin/ai/provider-config")
+    assert reload_response.status_code == 200
+    reload_payload = reload_response.json()
+    assert reload_payload["config"]["provider_type"] == "openai"
+    assert reload_payload["config"]["base_url"] == "https://api.openai.com/v1"
+    assert reload_payload["config"]["default_model"] == ""
+    assert reload_payload["config"]["is_enabled"] is True
+    assert reload_payload["config"]["has_api_key"] is True
+    assert "api_key" not in reload_payload["config"]
+
+
+def test_platform_admin_ai_health_check_supports_claude_provider(client, db_session, monkeypatch):
+    create_platform_admin(
+        db_session,
+        email="claude-config-admin@example.com",
+        password=PASSWORD,
+        display_name="Claude Config Admin",
+    )
+    login(client, email="claude-config-admin@example.com")
+
+    save_response = client.put(
+        "/api/platform-admin/ai/provider-config",
+        json={
+            "provider_type": "claude",
+            "base_url": "https://api.anthropic.com",
+            "default_model": "",
+            "api_key": "claude-test-secret",
+            "is_enabled": True,
+        },
+    )
+    assert save_response.status_code == 200
+
+    class StubClaudeHealthAdapter:
+        def check_health(self):
+            from app.services.ai_providers import AIProviderHealth
+
+            return AIProviderHealth(
+                is_healthy=True,
+                status="healthy",
+                message=None,
+                models=["claude-sonnet-4-20250514", "claude-3-5-haiku-20241022"],
+                capabilities={
+                    "supports_model_listing": True,
+                    "supports_structured_output": True,
+                    "structured_output_mode": "tool_use",
+                },
+            )
+
+    monkeypatch.setattr(
+        "app.services.ai_config.build_ai_provider_adapter",
+        lambda config: StubClaudeHealthAdapter(),
+    )
+
+    response = client.post("/api/platform-admin/ai/provider-config/health-check", json={})
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["config"]["provider_type"] == "claude"
+    assert payload["health"]["is_healthy"] is True
+    assert payload["health"]["models"] == [
+        "claude-sonnet-4-20250514",
+        "claude-3-5-haiku-20241022",
+    ]
 
 
 def test_platform_admin_smtp_validation_rejects_url_like_hosts(client, db_session):
