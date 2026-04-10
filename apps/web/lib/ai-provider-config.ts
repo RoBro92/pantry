@@ -21,7 +21,7 @@ export const AI_PROVIDER_DEFAULT_BASE_URLS: Record<AIProviderType, string> = {
   ollama: "http://localhost:11434"
 };
 
-export const AI_PROVIDER_DEFAULT_MODEL_PLACEHOLDERS: Record<AIProviderType, string> = {
+export const AI_PROVIDER_DEFAULT_MODELS: Record<AIProviderType, string> = {
   openai: "gpt-4o-mini",
   claude: "claude-3-5-haiku-latest",
   gemini: "gemini-2.0-flash",
@@ -37,6 +37,10 @@ export const AI_PROVIDER_API_KEY_REQUIRED: Record<AIProviderType, boolean> = {
 
 export function getDefaultBaseUrl(providerType: AIProviderType) {
   return AI_PROVIDER_DEFAULT_BASE_URLS[providerType];
+}
+
+export function getDefaultModel(providerType: AIProviderType) {
+  return AI_PROVIDER_DEFAULT_MODELS[providerType];
 }
 
 export function normalizeAIProviderType(providerType: string | null | undefined): AIProviderType | null {

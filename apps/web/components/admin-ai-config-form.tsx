@@ -8,11 +8,11 @@ import type {
 } from "../lib/api-types";
 import {
   AI_PROVIDER_API_KEY_REQUIRED,
-  AI_PROVIDER_DEFAULT_MODEL_PLACEHOLDERS,
   AI_PROVIDER_LABELS,
   AI_PROVIDER_OPTIONS,
   type AIProviderType,
   getDefaultBaseUrl,
+  getDefaultModel,
   normalizeAIProviderType
 } from "../lib/ai-provider-config";
 import { postToApi, putToApi } from "../lib/client-api";
@@ -39,7 +39,7 @@ function buildDraft(config: AIProviderConfigSummary | null): ProviderDraft {
   return {
     providerType,
     baseUrl: config?.base_url ?? getDefaultBaseUrl(providerType),
-    defaultModel: config?.default_model ?? "",
+    defaultModel: config?.default_model ?? getDefaultModel(providerType),
     isEnabled: config?.is_enabled ?? true
   };
 }
@@ -69,7 +69,6 @@ export function AdminAIConfigForm({
   const [isModelPickerOpen, setIsModelPickerOpen] = useState(false);
   const [modelQuery, setModelQuery] = useState("");
   const [draftModelSelection, setDraftModelSelection] = useState(initialDraft.defaultModel);
-  const [baseUrlEditedInSession, setBaseUrlEditedInSession] = useState(false);
   const latestIssuedSaveIdRef = useRef(0);
   const latestAppliedSaveIdRef = useRef(0);
 
@@ -203,15 +202,25 @@ export function AdminAIConfigForm({
     }
   }
 
+  async function runAutoHealthCheck() {
+    if (!featureEnabled || isCheckingHealth) {
+      return;
+    }
+    await handleHealthCheck();
+  }
+
   async function handleProviderChange(nextProviderType: AIProviderType) {
-    const nextBaseUrl = baseUrlEditedInSession ? baseUrl : getDefaultBaseUrl(nextProviderType);
+    const nextBaseUrl = getDefaultBaseUrl(nextProviderType);
+    const nextDefaultModel = getDefaultModel(nextProviderType);
     const nextDraft = buildCurrentDraft({
       providerType: nextProviderType,
-      baseUrl: nextBaseUrl
+      baseUrl: nextBaseUrl,
+      defaultModel: nextDefaultModel
     });
     setProviderType(nextProviderType);
     setBaseUrl(nextBaseUrl);
-    setDraftModelSelection(defaultModel);
+    setDefaultModel(nextDefaultModel);
+    setDraftModelSelection(nextDefaultModel);
     setStatusMessage(null);
     setErrorMessage(null);
 
@@ -232,7 +241,6 @@ export function AdminAIConfigForm({
   }
 
   async function handleBaseUrlBlur() {
-    setBaseUrlEditedInSession(baseUrl !== getDefaultBaseUrl(providerType));
     await saveDraft(buildCurrentDraft(), { syncLocalState: true });
   }
 
@@ -240,7 +248,10 @@ export function AdminAIConfigForm({
     if (!resolveApiKeyForSave()) {
       return;
     }
-    await saveDraft(buildCurrentDraft(), { syncLocalState: true });
+    const saved = await saveDraft(buildCurrentDraft(), { syncLocalState: true });
+    if (saved) {
+      await runAutoHealthCheck();
+    }
   }
 
   async function handleSaveModelSelection() {
@@ -285,7 +296,7 @@ export function AdminAIConfigForm({
     <div className="stack" data-testid="admin-ai-config-page">
       <section className="panel">
         <p className="eyebrow">Instance AI Provider</p>
-        <h1>Provider Configuration</h1>
+        <h1>Provider Setup</h1>
         <p>
           The self hosted installation uses provider details configured here. Changes save
           automatically, secrets are not shown after save, and secrets are never written to logs.
@@ -300,6 +311,7 @@ export function AdminAIConfigForm({
           <label className="field">
             <span>Provider type</span>
             <select
+              className="ai-provider-field-control"
               value={providerType}
               onChange={(event) => void handleProviderChange(event.target.value as AIProviderType)}
             >
@@ -313,41 +325,26 @@ export function AdminAIConfigForm({
           <label className="field">
             <span>Base URL</span>
             <input
+              className="ai-provider-field-control"
               value={baseUrl}
-              onChange={(event) => {
-                setBaseUrl(event.target.value);
-                setBaseUrlEditedInSession(true);
-              }}
+              onChange={(event) => setBaseUrl(event.target.value)}
               onBlur={() => void handleBaseUrlBlur()}
             />
-            <p className="status-note">
-              {baseUrlEditedInSession
-                ? "Custom base URL kept for this session. Switching providers will not overwrite it."
-                : "Base URL follows the selected provider until you edit it manually."}
-            </p>
           </label>
           <label className="field">
             <span>Default model</span>
             <input
+              className="ai-provider-field-control"
               value={defaultModel}
               readOnly
-              placeholder={AI_PROVIDER_DEFAULT_MODEL_PLACEHOLDERS[providerType]}
+              aria-readonly="true"
+              placeholder={getDefaultModel(providerType)}
             />
-            <button
-              type="button"
-              className="ghost-button"
-              onClick={() => {
-                setModelQuery(defaultModel);
-                setDraftModelSelection(defaultModel);
-                setIsModelPickerOpen(true);
-              }}
-            >
-              Choose model
-            </button>
           </label>
           <label className="field">
             <span>API key</span>
             <input
+              className="ai-provider-field-control"
               type="password"
               value={apiKey}
               onChange={(event) => setApiKey(event.target.value)}
@@ -362,27 +359,42 @@ export function AdminAIConfigForm({
             />
           </label>
         </div>
-        <label className="checkbox-row">
-          <input
-            type="checkbox"
-            checked={isEnabled}
-            onChange={(event) => void handleEnabledChange(event.target.checked)}
-          />
-          <span>Enable this provider for household AI requests.</span>
-        </label>
-        <div className="page-actions">
+        <div className="page-actions" style={{ justifyContent: "flex-start" }}>
           <button
             type="button"
             className="ghost-button"
-            disabled={!canRunHealthCheck}
-            onClick={() => void handleHealthCheck()}
+            onClick={() => {
+              setModelQuery(defaultModel);
+              setDraftModelSelection(defaultModel);
+              setIsModelPickerOpen(true);
+            }}
           >
-            {isCheckingHealth ? "Checking..." : "Run health check"}
+            Choose model
           </button>
+        </div>
+        <div className="stack" style={{ gap: "0.75rem", marginTop: "1rem" }}>
+          <label className="checkbox-row" style={{ margin: 0 }}>
+            <input
+              type="checkbox"
+              checked={isEnabled}
+              onChange={(event) => void handleEnabledChange(event.target.checked)}
+            />
+            <span>Enable this provider for household AI requests.</span>
+          </label>
+          <div className="page-actions" style={{ justifyContent: "flex-start" }}>
+            <button
+              type="button"
+              className="ghost-button"
+              disabled={!canRunHealthCheck}
+              onClick={() => void handleHealthCheck()}
+            >
+              {isCheckingHealth ? "Checking..." : "Run health check"}
+            </button>
+          </div>
         </div>
         {!minimumFieldsPresent ? (
           <p className="status-note">
-            Add a base URL, choose a model, and {providerRequiresApiKey ? "save an API key" : "finish autosaving"} before running the health check.
+            Add a base URL and {providerRequiresApiKey ? "save an API key" : "finish autosaving"} before running the health check.
           </p>
         ) : hasUnsavedChanges ? (
           <p className="status-note">
@@ -441,7 +453,7 @@ export function AdminAIConfigForm({
                   setDraftModelSelection(event.target.value);
                   setModelQuery(event.target.value);
                 }}
-                placeholder={AI_PROVIDER_DEFAULT_MODEL_PLACEHOLDERS[providerType]}
+                placeholder={getDefaultModel(providerType)}
                 autoFocus
               />
             </label>

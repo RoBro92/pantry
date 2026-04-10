@@ -298,6 +298,12 @@ code {
   box-shadow: 0 0 0 4px rgba(173, 91, 31, 0.12);
 }
 
+.ai-provider-field-control {
+  min-height: 3.25rem;
+  height: 3.25rem;
+  border-radius: 16px;
+}
+
 .checkbox-row {
   display: flex;
   align-items: center;

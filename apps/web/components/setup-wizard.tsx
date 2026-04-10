@@ -13,10 +13,10 @@ import type {
 } from "../lib/api-types";
 import {
   AI_PROVIDER_API_KEY_REQUIRED,
-  AI_PROVIDER_DEFAULT_MODEL_PLACEHOLDERS,
   AI_PROVIDER_OPTIONS,
   type AIProviderType,
   getDefaultBaseUrl,
+  getDefaultModel,
   normalizeAIProviderType,
 } from "../lib/ai-provider-config";
 import { getHouseholdRoleLabel, type HouseholdRole } from "../lib/role-labels";
@@ -1787,9 +1787,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                   }))
                 }
                 placeholder={
-                  AI_PROVIDER_DEFAULT_MODEL_PLACEHOLDERS[
-                    getSetupAIProviderType(wizard.ai_config.provider_type)
-                  ]
+                  getDefaultModel(getSetupAIProviderType(wizard.ai_config.provider_type))
                 }
               />
             </label>
