@@ -15,6 +15,7 @@ from app.models.password_reset_token import PasswordResetToken
 from app.models.product import Product
 from app.models.product_alias import ProductAlias
 from app.models.product_enrichment import ProductEnrichment
+from app.models.product_intelligence import ProductIntelligence
 from app.models.recipe import Recipe
 from app.models.recipe_ingredient import RecipeIngredient
 from app.models.recipe_url_import import RecipeURLImport
@@ -44,6 +45,7 @@ __all__ = [
     "Product",
     "ProductAlias",
     "ProductEnrichment",
+    "ProductIntelligence",
     "Recipe",
     "RecipeIngredient",
     "RecipeURLImport",

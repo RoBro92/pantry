@@ -27,7 +27,10 @@ from app.schemas.pantry import (
 )
 from app.services.location_links import serialize_location_link
 from app.services.pantry_normalization import normalize_barcode, normalize_lookup_name
-from app.services.pantry_serialization import serialize_product_enrichment_summary
+from app.services.pantry_serialization import (
+    serialize_product_enrichment_summary,
+    serialize_product_intelligence_summary,
+)
 from app.services.shopping_lists import list_open_shopping_product_ids
 from app.services.tenancy import HouseholdAccess
 
@@ -119,6 +122,10 @@ def _event_summary(event: AuditEvent) -> AuditEventSummary:
         summary = f"Updated product details for {metadata['product_name']}"
     elif action == "product.enrichment_synced":
         summary = f"Linked Open Food Facts details to {metadata['product_name']}"
+    elif action == "product.intelligence.classified":
+        summary = f"Updated AI product intelligence for {metadata['product_name']}"
+    elif action == "product.intelligence.run.completed":
+        summary = f"Ran AI product classification for {metadata['classified_count']} product(s)"
     elif action == "location.created":
         summary = f"Created location {metadata['location_group_name']} / {metadata['name']}"
     elif action == "location_group.created":
@@ -182,7 +189,12 @@ def _load_reference_lists(
     products = db.scalars(
         select(Product)
         .where(Product.household_id == household_id)
-        .options(selectinload(Product.aliases), selectinload(Product.barcodes), selectinload(Product.enrichments))
+        .options(
+            selectinload(Product.aliases),
+            selectinload(Product.barcodes),
+            selectinload(Product.enrichments),
+            selectinload(Product.intelligence_records),
+        )
         .order_by(Product.name)
     ).all()
     return location_groups, locations, products
@@ -198,6 +210,7 @@ def _load_active_lots(db: Session, *, household_id) -> list[StockLot]:
             selectinload(StockLot.product).selectinload(Product.aliases),
             selectinload(StockLot.product).selectinload(Product.barcodes),
             selectinload(StockLot.product).selectinload(Product.enrichments),
+            selectinload(StockLot.product).selectinload(Product.intelligence_records),
             selectinload(StockLot.location).selectinload(Location.location_group),
         )
         .order_by(StockLot.expires_on, StockLot.created_at)
@@ -305,6 +318,7 @@ def _build_product_summary(
         barcodes=[barcode.value for barcode in product.barcodes],
         is_in_shopping_list=product.id in open_shopping_product_ids,
         enrichment=serialize_product_enrichment_summary(product),
+        intelligence=serialize_product_intelligence_summary(product),
         locations=_product_location_summaries(sorted_lots),
         stock_lots=[_stock_lot_summary(lot, near_expiry_days=near_expiry_days) for lot in sorted_lots],
     )
@@ -428,6 +442,7 @@ def build_pantry_overview(
                 "notes": product.notes,
                 "manual_ingredient_tags": list(product.manual_ingredient_tags or []),
                 "enrichment": serialize_product_enrichment_summary(product),
+                "intelligence": serialize_product_intelligence_summary(product),
             }
             for product in products
         ],

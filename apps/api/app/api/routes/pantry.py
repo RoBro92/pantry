@@ -28,6 +28,9 @@ from app.schemas.pantry import (
     PantryEntryMutationResponse,
     PantryDuplicateCheckRequest,
     PantryDuplicateCheckResponse,
+    ProductIntelligenceRunRequest,
+    ProductIntelligenceRunResponse,
+    ProductIntelligenceStatusResponse,
     ProductSummary,
     RemoveStockRequest,
     StockMutationResponse,
@@ -62,6 +65,10 @@ from app.services.product_enrichment import (
     apply_confirmed_product_enrichment,
     preview_product_enrichment,
     serialize_product_summary,
+)
+from app.services.product_intelligence import (
+    build_product_intelligence_status,
+    run_product_intelligence_classification,
 )
 from app.services.tenancy import HouseholdAccess
 
@@ -108,6 +115,37 @@ def get_near_expiry(
         access=access,
         days=days,
     )
+
+
+@router.get("/product-intelligence/status", response_model=ProductIntelligenceStatusResponse)
+def get_product_intelligence_status(
+    db: Session = Depends(get_db_session),
+    access: HouseholdAccess = Depends(require_household_access(allowed_roles={HOUSEHOLD_ADMIN_ROLE})),
+):
+    return build_product_intelligence_status(db, household=access.household)
+
+
+@router.post("/product-intelligence/classify", response_model=ProductIntelligenceRunResponse)
+def post_product_intelligence_classification(
+    payload: ProductIntelligenceRunRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
+    access: HouseholdAccess = Depends(require_household_access(allowed_roles={HOUSEHOLD_ADMIN_ROLE})),
+):
+    try:
+        return run_product_intelligence_classification(
+            db,
+            household=access.household,
+            actor=current_user,
+            request=payload,
+        )
+    except ValueError as exc:
+        message = str(exc)
+        if "provider" in message.lower() or "ai " in message.lower() or "disabled" in message.lower():
+            status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+        else:
+            status_code = status.HTTP_400_BAD_REQUEST
+        raise HTTPException(status_code=status_code, detail=message) from exc
 
 
 @router.post("/location-groups", response_model=LocationGroupSummary, status_code=status.HTTP_201_CREATED)
