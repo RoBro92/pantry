@@ -10,6 +10,7 @@ Quick reference for the public repository layout.
 - `packages/shared-types/`: shared TypeScript types and constants
 - `apps/api/app/services/development_seed.py`: public contributor seed and fresh/demo bootstrap data
 - `apps/api/app/services/ai_*.py` and `apps/api/app/services/ai_providers/`: AI provider config, context assembly, prompt building, and provider adapters
+- `apps/web/components/admin-ai-config-form.tsx` and `apps/web/components/setup-wizard.tsx`: admin AI/provider setup UX and first-run setup flows, including SMTP connectivity testing
 
 ## Deployment And Release Files
 

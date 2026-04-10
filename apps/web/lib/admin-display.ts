@@ -23,8 +23,11 @@ const DEPLOYMENT_MODE_LABELS: Record<string, string> = {
 };
 
 const AI_PROVIDER_LABELS: Record<string, string> = {
+  openai: "OpenAI",
+  claude: "Claude",
   ollama: "Ollama",
-  openai_compatible: "OpenAI-compatible"
+  custom: "Custom",
+  openai_compatible: "Custom"
 };
 
 export function formatAdminDateTime(value: string | null) {

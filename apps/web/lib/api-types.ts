@@ -142,7 +142,7 @@ export type SetupWizardDietaryUserSummary = {
 };
 
 export type SetupWizardAIConfigSummary = {
-  provider_type: "ollama" | "openai_compatible" | null;
+  provider_type: "openai" | "claude" | "ollama" | "custom" | null;
   base_url: string | null;
   default_model: string | null;
   is_enabled: boolean;
@@ -201,7 +201,7 @@ export type PublicBaseURLSummary = {
 export type AIProviderConfigSummary = {
   external_id: string;
   scope_type: string;
-  provider_type: "ollama" | "openai_compatible";
+  provider_type: "openai" | "claude" | "ollama" | "custom";
   base_url: string;
   default_model: string;
   is_enabled: boolean;
@@ -295,6 +295,12 @@ export type SMTPTestEmailResponse = {
   message: string;
   delivered_to: string;
   config: SMTPConfigResponse;
+};
+
+export type SetupSMTPTestResponse = {
+  ok: boolean;
+  status: string;
+  message: string | null;
 };
 
 export type PasswordActionResponse = {

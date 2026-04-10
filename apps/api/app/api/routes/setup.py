@@ -12,6 +12,8 @@ from app.schemas.setup import (
     SetupModeUpdateRequest,
     SetupPublicURLUpdateRequest,
     SetupSMTPConfigUpdateRequest,
+    SetupSMTPTestRequest,
+    SetupSMTPTestResponse,
     SetupStatusResponse,
     SetupUsersUpdateRequest,
     SetupWelcomeUpdateRequest,
@@ -29,6 +31,7 @@ from app.services.setup import (
     update_setup_mode,
     update_setup_public_url,
     update_setup_smtp,
+    test_setup_smtp,
     update_setup_users,
     update_setup_welcome,
 )
@@ -109,6 +112,14 @@ def put_ai(payload: SetupAIConfigUpdateRequest, db: Session = Depends(get_db_ses
 def put_smtp(payload: SetupSMTPConfigUpdateRequest, db: Session = Depends(get_db_session)):
     try:
         return update_setup_smtp(db, payload)
+    except ValueError as exc:
+        raise _handle_setup_error(exc) from exc
+
+
+@router.post("/wizard/smtp/test", response_model=SetupSMTPTestResponse)
+def post_smtp_test(payload: SetupSMTPTestRequest, db: Session = Depends(get_db_session)):
+    try:
+        return test_setup_smtp(db, payload)
     except ValueError as exc:
         raise _handle_setup_error(exc) from exc
 

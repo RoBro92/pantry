@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.security import hash_password, normalize_email
-from app.domain.ai import AI_HEALTH_UNKNOWN, AI_PROVIDER_OLLAMA, AI_PROVIDER_OPENAI_COMPATIBLE, AI_PROVIDER_TYPES, AI_SCOPE_INSTANCE, AI_SCOPE_KEY_INSTANCE
+from app.domain.ai import AI_HEALTH_UNKNOWN, AI_PROVIDER_OLLAMA, AI_PROVIDER_TYPES, AI_SCOPE_INSTANCE, AI_SCOPE_KEY_INSTANCE
 from app.domain.roles import HOUSEHOLD_ADMIN_ROLE, HOUSEHOLD_USER_ROLE, PLATFORM_ADMIN_ROLE
 from app.models.ai_provider_config import AIProviderConfig
 from app.models.household import Household
@@ -25,6 +25,8 @@ from app.schemas.setup import (
     SetupModeUpdateRequest,
     SetupPublicURLUpdateRequest,
     SetupSMTPConfigUpdateRequest,
+    SetupSMTPTestRequest,
+    SetupSMTPTestResponse,
     SetupStatusResponse,
     SetupStagedRestoreSummary,
     SetupStepState,
@@ -39,7 +41,11 @@ from app.schemas.setup import (
     StagedSetupUserSummary,
 )
 from app.services.backups import clear_staged_backup, load_staged_backup, restore_instance_backup_bundle, stage_backup_upload
-from app.services.ai_config import _normalize_base_url, get_instance_provider_config
+from app.services.ai_config import (
+    _normalize_base_url,
+    get_instance_provider_config,
+    normalize_provider_type,
+)
 from app.services.audit import record_audit_event
 from app.services.auth import count_platform_admins, get_user_by_email, get_user_by_external_id
 from app.services.instance_settings import (
@@ -53,7 +59,8 @@ from app.services.instance_settings import (
 )
 from app.services.pantry_normalization import dedupe_preserving_order, normalize_lookup_name, require_text
 from app.services.roles import get_role_by_code
-from app.services.secrets import encrypt_secret
+from app.services.secrets import decrypt_secret, encrypt_secret
+from app.services.smtp import test_smtp_connection
 
 SETUP_SCOPE_KEY = "instance"
 SETUP_STATUS_IN_PROGRESS = "in_progress"
@@ -535,7 +542,14 @@ def get_setup_wizard_state(db: Session) -> SetupWizardStateResponse:
             for stage_user_id, preferences in (dietary.get("user_preferences") or {}).items()
         ],
         ai_config=StagedSetupAIConfigSummary(
-            provider_type=ai.get("provider_type"),
+            provider_type=(
+                normalize_provider_type(
+                    str(ai.get("provider_type")),
+                    base_url=str(ai.get("base_url") or ""),
+                )
+                if ai.get("provider_type")
+                else None
+            ),
             base_url=_normalize_optional_text(str(ai.get("base_url") or "")),
             default_model=_normalize_optional_text(str(ai.get("default_model") or "")),
             is_enabled=bool(ai.get("is_enabled")),
@@ -763,21 +777,27 @@ def update_setup_ai(db: Session, payload: SetupAIConfigUpdateRequest) -> SetupWi
             raise ValueError("Unsupported AI provider type.")
         if not payload.base_url:
             raise ValueError("Provider base URL is required.")
-        if not payload.default_model or not payload.default_model.strip():
-            raise ValueError("Default model is required.")
 
         api_key = _normalize_optional_text(payload.api_key)
-        if payload.provider_type == AI_PROVIDER_OPENAI_COMPATIBLE and not (api_key or state.encrypted_ai_api_key):
-            raise ValueError("An API key is required for OpenAI-compatible providers.")
+        previous_provider_type = (
+            normalize_provider_type(
+                str(merged["ai"].get("provider_type") or ""),
+                base_url=str(merged["ai"].get("base_url") or ""),
+            )
+            if merged["ai"].get("provider_type")
+            else None
+        )
 
         merged["ai"] = {
             "provider_type": payload.provider_type,
             "base_url": _normalize_base_url(payload.base_url),
-            "default_model": payload.default_model.strip(),
+            "default_model": (payload.default_model or "").strip(),
             "is_enabled": payload.is_enabled,
         }
         if api_key:
             state.encrypted_ai_api_key = encrypt_secret(api_key)
+        elif payload.provider_type == AI_PROVIDER_OLLAMA or previous_provider_type != payload.provider_type:
+            state.encrypted_ai_api_key = None
 
     skipped_steps = set(merged.get("skipped_optional_steps") or [])
     if (
@@ -797,61 +817,95 @@ def update_setup_ai(db: Session, payload: SetupAIConfigUpdateRequest) -> SetupWi
     return get_setup_wizard_state(db)
 
 
+def _normalize_setup_smtp_payload(
+    *,
+    host: str | None,
+    port: int | None,
+    username: str | None,
+    password: str | None,
+    from_email: str | None,
+    from_name: str | None,
+    security: str | None,
+    is_enabled: bool,
+    password_reset_enabled: bool,
+    has_existing_password: bool,
+) -> tuple[dict[str, object], str | None]:
+    has_any_values = any(
+        [
+            host,
+            port is not None,
+            username,
+            password,
+            from_email,
+            from_name,
+            security,
+            is_enabled,
+        ]
+    )
+    if not has_any_values:
+        return (
+            {
+                "host": "",
+                "port": None,
+                "username": "",
+                "from_email": "",
+                "from_name": "",
+                "security": None,
+                "is_enabled": False,
+                "password_reset_enabled": False,
+            },
+            None,
+        )
+
+    normalized_host = normalize_smtp_host(host)
+    if not normalized_host:
+        raise ValueError("SMTP host is required when saving SMTP configuration.")
+
+    normalized_security = normalize_smtp_security(security)
+    normalized_username = _normalize_optional_text(username)
+    normalized_password = _normalize_optional_text(password)
+    if normalized_username and not (normalized_password or has_existing_password):
+        raise ValueError("An SMTP password is required when an SMTP username is configured.")
+    if normalized_password and not normalized_username:
+        raise ValueError("An SMTP username is required when an SMTP password is configured.")
+
+    return (
+        {
+            "host": normalized_host,
+            "port": _normalize_smtp_port(port, security=normalized_security),
+            "username": normalized_username,
+            "from_email": _require_valid_email(from_email, field_name="SMTP from email")
+            if _normalize_optional_text(from_email)
+            else None,
+            "from_name": _normalize_optional_text(from_name),
+            "security": normalized_security,
+            "is_enabled": is_enabled,
+            "password_reset_enabled": password_reset_enabled and is_enabled,
+        },
+        normalized_password,
+    )
+
+
 def update_setup_smtp(db: Session, payload: SetupSMTPConfigUpdateRequest) -> SetupWizardStateResponse:
     state = _get_or_create_setup_state(db)
     merged = _merged_payload(state.payload)
 
-    has_any_values = any(
-        [
-            payload.host,
-            payload.port is not None,
-            payload.username,
-            payload.password,
-            payload.from_email,
-            payload.from_name,
-            payload.security,
-            payload.is_enabled,
-        ]
+    merged["smtp"], normalized_password = _normalize_setup_smtp_payload(
+        host=payload.host,
+        port=payload.port,
+        username=payload.username,
+        password=payload.password,
+        from_email=payload.from_email,
+        from_name=payload.from_name,
+        security=payload.security,
+        is_enabled=payload.is_enabled,
+        password_reset_enabled=payload.password_reset_enabled,
+        has_existing_password=bool(state.encrypted_smtp_password),
     )
-    if not has_any_values:
-        merged["smtp"] = {
-            "host": "",
-            "port": None,
-            "username": "",
-            "from_email": "",
-            "from_name": "",
-            "security": None,
-            "is_enabled": False,
-            "password_reset_enabled": False,
-        }
+    if not merged["smtp"].get("host"):
         state.encrypted_smtp_password = None
-    else:
-        host = normalize_smtp_host(payload.host)
-        if not host:
-            raise ValueError("SMTP host is required when saving SMTP configuration.")
-
-        security = normalize_smtp_security(payload.security)
-        username = _normalize_optional_text(payload.username)
-        password = _normalize_optional_text(payload.password)
-        if username and not (password or state.encrypted_smtp_password):
-            raise ValueError("An SMTP password is required when an SMTP username is configured.")
-        if password and not username:
-            raise ValueError("An SMTP username is required when an SMTP password is configured.")
-
-        merged["smtp"] = {
-            "host": host,
-            "port": _normalize_smtp_port(payload.port, security=security),
-            "username": username,
-            "from_email": _require_valid_email(payload.from_email, field_name="SMTP from email")
-            if _normalize_optional_text(payload.from_email)
-            else None,
-            "from_name": _normalize_optional_text(payload.from_name),
-            "security": security,
-            "is_enabled": payload.is_enabled,
-            "password_reset_enabled": payload.password_reset_enabled and payload.is_enabled,
-        }
-        if password:
-            state.encrypted_smtp_password = encrypt_secret(password)
+    elif normalized_password:
+        state.encrypted_smtp_password = encrypt_secret(normalized_password)
 
     skipped_steps = set(merged.get("skipped_optional_steps") or [])
     if merged["smtp"].get("host"):
@@ -864,6 +918,35 @@ def update_setup_smtp(db: Session, payload: SetupSMTPConfigUpdateRequest) -> Set
     db.add(state)
     db.commit()
     return get_setup_wizard_state(db)
+
+
+def test_setup_smtp(db: Session, payload: SetupSMTPTestRequest) -> SetupSMTPTestResponse:
+    state = _get_or_create_setup_state(db)
+    normalized_smtp, normalized_password = _normalize_setup_smtp_payload(
+        host=payload.host,
+        port=payload.port,
+        username=payload.username,
+        password=payload.password,
+        from_email=payload.from_email,
+        from_name=payload.from_name,
+        security=payload.security,
+        is_enabled=True,
+        password_reset_enabled=False,
+        has_existing_password=bool(state.encrypted_smtp_password),
+    )
+    if not normalized_smtp["host"] or normalized_smtp["port"] is None or not normalized_smtp["security"]:
+        raise ValueError("SMTP is not configured well enough to test.")
+
+    result = test_smtp_connection(
+        host=str(normalized_smtp["host"]),
+        port=int(normalized_smtp["port"]),
+        username=normalized_smtp["username"] if isinstance(normalized_smtp["username"], str) else None,
+        password=normalized_password or (
+            decrypt_secret(state.encrypted_smtp_password) if state.encrypted_smtp_password else None
+        ),
+        security=str(normalized_smtp["security"]),
+    )
+    return SetupSMTPTestResponse(ok=result.ok, status=result.status, message=result.message)
 
 
 def _role_or_error(db: Session, code: str):
