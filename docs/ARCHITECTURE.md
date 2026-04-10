@@ -19,6 +19,7 @@ Pantry is a small repo for a self hosted product with three runtime services and
 - Pantry is self hosted and operator managed
 - Household access is enforced server side
 - Product identity stays Pantry owned even when external enrichment from Open Food Facts is linked
+- AI product intelligence is stored separately from the core product record so classification can be rerun and versioned safely
 - Open Food Facts is optional advisory enrichment, not the source of truth for Pantry records
 - Uploaded files and restore bundles are treated as hostile input
 - Updates are advisory and operator triggered; Pantry does not auto-update
