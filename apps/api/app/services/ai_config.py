@@ -51,6 +51,37 @@ def _normalize_base_url(value: str) -> str:
     return normalized
 
 
+def normalize_provider_type(provider_type: str, *, base_url: str | None = None) -> str:
+    del base_url
+    normalized_provider_type = canonical_provider_type(provider_type)
+    if normalized_provider_type is None or normalized_provider_type not in AI_PROVIDER_TYPES:
+        raise ValueError("Unsupported AI provider type.")
+    return normalized_provider_type
+
+
+def has_selected_model(config: AIProviderConfig) -> bool:
+    return bool(config.default_model.strip())
+
+
+def provider_is_ready_for_runtime(config: AIProviderConfig) -> tuple[bool, str | None]:
+    provider_type = normalize_provider_type(config.provider_type, base_url=config.base_url)
+    if not config.base_url.strip():
+        return False, "The configured AI provider does not have a base URL yet."
+    if AI_PROVIDER_API_KEY_REQUIRED[provider_type] and not config.encrypted_api_key:
+        return False, "The configured AI provider needs an API key before it can be used."
+    if not has_selected_model(config):
+        return False, "Choose a model for the configured AI provider before using AI suggestions."
+    return True, None
+
+
+def validate_provider_health_check_ready(config: AIProviderConfig) -> None:
+    provider_type = normalize_provider_type(config.provider_type, base_url=config.base_url)
+    if not config.base_url.strip():
+        raise ValueError("Provider base URL is required before checking the connection.")
+    if AI_PROVIDER_API_KEY_REQUIRED[provider_type] and not config.encrypted_api_key:
+        raise ValueError("An API key is required before checking this provider connection.")
+
+
 def _build_scope_key(*, scope_type: str, household: Household | None) -> str:
     if scope_type == AI_SCOPE_INSTANCE:
         return AI_SCOPE_KEY_INSTANCE
@@ -117,9 +148,7 @@ def upsert_instance_provider_config(
     api_key: str | None,
     is_enabled: bool,
 ) -> AIProviderConfig:
-    provider_type = canonical_provider_type(provider_type)
-    if provider_type not in AI_PROVIDER_TYPES:
-        raise ValueError("Unsupported AI provider type.")
+    provider_type = normalize_provider_type(provider_type, base_url=base_url)
 
     normalized_base_url = _normalize_base_url(base_url)
     normalized_model = default_model.strip()
@@ -134,6 +163,9 @@ def upsert_instance_provider_config(
 
     config = get_instance_provider_config(db)
     created = config is None
+    previous_provider_type = (
+        normalize_provider_type(config.provider_type, base_url=config.base_url) if config is not None else None
+    )
     if config is None:
         config = AIProviderConfig(
             scope_type=AI_SCOPE_INSTANCE,
@@ -156,7 +188,7 @@ def upsert_instance_provider_config(
     config.capabilities = {}
     if normalized_api_key:
         config.encrypted_api_key = encrypt_secret(normalized_api_key)
-    elif provider_type == AI_PROVIDER_OLLAMA:
+    elif provider_type == AI_PROVIDER_OLLAMA or previous_provider_type != provider_type:
         config.encrypted_api_key = None
 
     db.add(config)
@@ -188,10 +220,8 @@ def refresh_provider_health(
     *,
     config: AIProviderConfig,
 ) -> AIProviderHealth:
-    provider_type = canonical_provider_type(config.provider_type)
-    if provider_type is None:
-        raise ValueError("Unsupported AI provider type.")
-
+    validate_provider_health_check_ready(config)
+    provider_type = normalize_provider_type(config.provider_type, base_url=config.base_url)
     config.provider_type = provider_type
     api_key = decrypt_secret(config.encrypted_api_key) if config.encrypted_api_key else None
     adapter = build_ai_provider_adapter(

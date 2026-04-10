@@ -145,7 +145,7 @@ export function PantryControls({
               href={`/app/households/${householdExternalId}/ai`}
               className="secondary-link compact-link"
             >
-              View AI suggestions
+              Meal suggestions
             </Link>
           </div>
         </div>

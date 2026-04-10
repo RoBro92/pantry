@@ -55,6 +55,7 @@ class OpenAICompatibleProviderAdapter:
                 capabilities={
                     "supports_model_listing": True,
                     "supports_structured_output": True,
+                    "supports_manual_model_entry": True,
                 },
             )
         except Exception as exc:
@@ -66,6 +67,7 @@ class OpenAICompatibleProviderAdapter:
                 capabilities={
                     "supports_model_listing": True,
                     "supports_structured_output": True,
+                    "supports_manual_model_entry": True,
                 },
             )
 
@@ -98,6 +100,12 @@ class OpenAICompatibleProviderAdapter:
         choice = (body.get("choices") or [{}])[0]
         message = choice.get("message") or {}
         output_text = message.get("content", "")
+        if isinstance(output_text, list):
+            output_text = "".join(
+                str(part.get("text", ""))
+                for part in output_text
+                if isinstance(part, dict) and part.get("type") == "text"
+            )
         if not output_text:
             raise ValueError("Provider returned an empty response.")
 

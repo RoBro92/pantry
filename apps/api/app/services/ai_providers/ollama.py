@@ -46,6 +46,7 @@ class OllamaProviderAdapter:
                 capabilities={
                     "supports_model_listing": True,
                     "supports_structured_output": True,
+                    "supports_manual_model_entry": True,
                 },
             )
         except Exception as exc:
@@ -57,6 +58,7 @@ class OllamaProviderAdapter:
                 capabilities={
                     "supports_model_listing": True,
                     "supports_structured_output": True,
+                    "supports_manual_model_entry": True,
                 },
             )
 

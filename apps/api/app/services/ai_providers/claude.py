@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 from urllib.parse import urljoin
 
 import httpx
@@ -12,9 +13,9 @@ from app.services.ai_providers.base import (
     StructuredCompletionRequest,
     StructuredCompletionResult,
 )
-from app.services.ai_providers.common import parse_json_output
 
 ANTHROPIC_VERSION = "2023-06-01"
+STRUCTURED_OUTPUT_TOOL_NAME = "pantry_structured_output"
 
 
 class ClaudeProviderAdapter:
@@ -22,7 +23,10 @@ class ClaudeProviderAdapter:
         self._config = config
 
     def _url(self, path: str) -> str:
-        return urljoin(f"{self._config.base_url.rstrip('/')}/", path.lstrip("/"))
+        base = self._config.base_url.rstrip("/")
+        if not base.endswith("/v1"):
+            base = f"{base}/v1"
+        return urljoin(f"{base}/", path.lstrip("/"))
 
     def _headers(self) -> dict[str, str]:
         headers = {
@@ -35,7 +39,7 @@ class ClaudeProviderAdapter:
 
     def list_models(self) -> list[str]:
         with httpx.Client(timeout=self._config.timeout_seconds, headers=self._headers()) as client:
-            response = client.get(self._url("/v1/models"))
+            response = client.get(self._url("/models"), params={"limit": 1000})
             response.raise_for_status()
             payload = response.json()
         return sorted(
@@ -57,6 +61,7 @@ class ClaudeProviderAdapter:
                 capabilities={
                     "supports_model_listing": True,
                     "supports_structured_output": True,
+                    "structured_output_mode": "tool_use",
                 },
             )
         except Exception as exc:
@@ -68,6 +73,7 @@ class ClaudeProviderAdapter:
                 capabilities={
                     "supports_model_listing": True,
                     "supports_structured_output": True,
+                    "structured_output_mode": "tool_use",
                 },
             )
 
@@ -75,41 +81,47 @@ class ClaudeProviderAdapter:
         self,
         request: StructuredCompletionRequest,
     ) -> StructuredCompletionResult:
-        payload = {
+        payload: dict[str, Any] = {
             "model": request.model,
-            "max_tokens": 4096,
-            "temperature": request.temperature,
-            "system": (
-                f"{request.system_prompt} "
-                "Return only JSON that matches the supplied schema. Do not wrap the JSON in markdown fences."
-            ),
+            "max_tokens": 1200,
+            "system": request.system_prompt,
             "messages": [
                 {
                     "role": "user",
-                    "content": json.dumps(
-                        {
-                            "payload": request.user_payload,
-                            "output_schema": request.output_schema,
-                        }
-                    ),
+                    "content": json.dumps(request.user_payload),
                 }
             ],
+            "temperature": request.temperature,
+            "tools": [
+                {
+                    "name": STRUCTURED_OUTPUT_TOOL_NAME,
+                    "description": "Return the Pantry AI response in the expected structured format.",
+                    "input_schema": request.output_schema,
+                }
+            ],
+            "tool_choice": {
+                "type": "tool",
+                "name": STRUCTURED_OUTPUT_TOOL_NAME,
+            },
         }
 
         with httpx.Client(timeout=self._config.timeout_seconds, headers=self._headers()) as client:
-            response = client.post(self._url("/v1/messages"), json=payload)
+            response = client.post(self._url("/messages"), json=payload)
             response.raise_for_status()
             body = response.json()
 
-        output_text = "\n".join(
-            block.get("text", "")
-            for block in body.get("content", [])
-            if isinstance(block, dict) and block.get("type") == "text"
-        ).strip()
-        parsed_output = parse_json_output(output_text)
+        for block in body.get("content", []):
+            if (
+                isinstance(block, dict)
+                and block.get("type") == "tool_use"
+                and block.get("name") == STRUCTURED_OUTPUT_TOOL_NAME
+                and isinstance(block.get("input"), dict)
+            ):
+                parsed_output = block["input"]
+                return StructuredCompletionResult(
+                    output_text=json.dumps(parsed_output),
+                    parsed_output=parsed_output,
+                    provider_request_id=body.get("id"),
+                )
 
-        return StructuredCompletionResult(
-            output_text=output_text,
-            parsed_output=parsed_output,
-            provider_request_id=body.get("id"),
-        )
+        raise ValueError("Claude did not return the structured response tool payload.")

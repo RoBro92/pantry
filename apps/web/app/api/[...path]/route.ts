@@ -66,8 +66,14 @@ async function proxyRequest(request: NextRequest, context: RouteContext): Promis
     cache: "no-store",
     redirect: "manual"
   });
+  const responseBody =
+    request.method === "HEAD" ||
+    upstreamResponse.status === 204 ||
+    upstreamResponse.status === 304
+      ? null
+      : await upstreamResponse.arrayBuffer();
 
-  return new Response(upstreamResponse.body, {
+  return new Response(responseBody, {
     status: upstreamResponse.status,
     statusText: upstreamResponse.statusText,
     headers: copyResponseHeaders(upstreamResponse.headers)

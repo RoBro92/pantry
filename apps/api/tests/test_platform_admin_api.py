@@ -27,6 +27,7 @@ from app.services.instance_settings import (
     upsert_smtp_settings,
 )
 from app.services.ai_providers import AIProviderHealth
+from app.services.secrets import encrypt_secret
 from app.services.pantry_catalog import create_location, create_location_group, create_product
 from app.services.pantry_normalization import normalize_lookup_name
 from app.services.pantry_stock import add_stock_lot
@@ -164,7 +165,7 @@ def test_platform_admin_ai_provider_config_normalizes_legacy_openai_compatible_r
             provider_type="openai_compatible",
             base_url="https://api.openai.com/v1",
             default_model="gpt-4o-mini",
-            encrypted_api_key=None,
+            encrypted_api_key=encrypt_secret("legacy-openai-key"),
             is_enabled=True,
         )
     )

@@ -180,6 +180,22 @@ class SetupSMTPConfigUpdateRequest(BaseModel):
     mark_skipped: bool = False
 
 
+class SetupSMTPTestRequest(BaseModel):
+    host: str | None = None
+    port: int | None = None
+    username: str | None = None
+    password: str | None = None
+    from_email: str | None = None
+    from_name: str | None = None
+    security: str | None = None
+
+
+class SetupSMTPTestResponse(BaseModel):
+    ok: bool
+    status: str
+    message: str | None = None
+
+
 class LoginCompatibilityRequest(BaseModel):
     identifier: str | None = None
     email: str | None = None

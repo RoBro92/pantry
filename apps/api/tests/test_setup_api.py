@@ -13,6 +13,7 @@ from app.models.location_group import LocationGroup
 from app.models.membership import Membership
 from app.models.setup_state import SetupState
 from app.models.user import User
+from app.services.smtp import SMTPTestResult
 
 
 def _save_required_setup_steps(client):
@@ -369,6 +370,31 @@ def test_setup_finalize_commits_all_staged_data_and_authenticates(client, db_ses
     assert setup_state.payload == {}
     assert setup_state.encrypted_ai_api_key is None
     assert setup_state.encrypted_smtp_password is None
+
+
+def test_setup_smtp_step_can_run_connectivity_test(client, monkeypatch):
+    monkeypatch.setattr(
+        "app.services.setup.test_smtp_connection",
+        lambda **_: SMTPTestResult(status="passed", ok=True, message="250 OK"),
+    )
+
+    response = client.post(
+        "/api/setup/wizard/smtp/test",
+        json={
+            "host": "smtp.example.com",
+            "port": 587,
+            "username": "mailer",
+            "password": "smtp-password",
+            "from_email": "pantry@example.com",
+            "from_name": "Pantry",
+            "security": "starttls",
+        },
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    assert payload["status"] == "passed"
+    assert payload["message"] == "250 OK"
 
 
 def test_setup_finalize_creates_multiple_room_groups_when_rooms_are_staged(client, db_session):

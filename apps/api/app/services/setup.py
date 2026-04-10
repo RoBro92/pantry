@@ -33,6 +33,8 @@ from app.schemas.setup import (
     SetupModeUpdateRequest,
     SetupPublicURLUpdateRequest,
     SetupSMTPConfigUpdateRequest,
+    SetupSMTPTestRequest,
+    SetupSMTPTestResponse,
     SetupStatusResponse,
     SetupStagedRestoreSummary,
     SetupStepState,
@@ -61,7 +63,8 @@ from app.services.instance_settings import (
 )
 from app.services.pantry_normalization import dedupe_preserving_order, normalize_lookup_name, require_text
 from app.services.roles import get_role_by_code
-from app.services.secrets import encrypt_secret
+from app.services.secrets import decrypt_secret, encrypt_secret
+from app.services.smtp import test_smtp_connection
 
 SETUP_SCOPE_KEY = "instance"
 SETUP_STATUS_IN_PROGRESS = "in_progress"
@@ -873,6 +876,35 @@ def update_setup_smtp(db: Session, payload: SetupSMTPConfigUpdateRequest) -> Set
     db.add(state)
     db.commit()
     return get_setup_wizard_state(db)
+
+
+def test_setup_smtp(db: Session, payload: SetupSMTPTestRequest) -> SetupSMTPTestResponse:
+    state = _get_or_create_setup_state(db)
+    host = normalize_smtp_host(payload.host)
+    if not host:
+        raise ValueError("SMTP host is required when testing SMTP configuration.")
+
+    security = normalize_smtp_security(payload.security)
+    port = _normalize_smtp_port(payload.port, security=security)
+    username = _normalize_optional_text(payload.username)
+    password = _normalize_optional_text(payload.password)
+    if username and not (password or state.encrypted_smtp_password):
+        raise ValueError("An SMTP password is required when an SMTP username is configured.")
+    if password and not username:
+        raise ValueError("An SMTP username is required when an SMTP password is configured.")
+
+    result = test_smtp_connection(
+        host=host,
+        port=port,
+        username=username,
+        password=password or (decrypt_secret(state.encrypted_smtp_password) if state.encrypted_smtp_password else None),
+        security=security,
+    )
+    return SetupSMTPTestResponse(
+        ok=result.ok,
+        status=result.status,
+        message=result.message,
+    )
 
 
 def _role_or_error(db: Session, code: str):
