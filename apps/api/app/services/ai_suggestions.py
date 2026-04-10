@@ -17,6 +17,9 @@ from app.schemas.ai import (
 )
 from app.services.ai_config import (
     get_ai_feature_enabled,
+    has_selected_model,
+    normalize_provider_type,
+    provider_is_ready_for_runtime,
     record_provider_runtime_failure,
     refresh_provider_health,
     resolve_provider_config,
@@ -69,13 +72,27 @@ def build_household_ai_feature_status(
         )
 
     config = resolved.record
+    provider_type = normalize_provider_type(config.provider_type, base_url=config.base_url)
     if not config.is_enabled:
         return AIFeatureStatusSummary(
             feature_enabled=True,
             available=False,
             reason="The configured AI provider is currently disabled.",
-            provider_type=config.provider_type,
+            provider_type=provider_type,
             default_model=config.default_model,
+            config_external_id=config.external_id,
+            health_status=config.health_status,
+            health_checked_at=config.health_checked_at,
+        )
+
+    runtime_ready, runtime_reason = provider_is_ready_for_runtime(config)
+    if not runtime_ready:
+        return AIFeatureStatusSummary(
+            feature_enabled=True,
+            available=False,
+            reason=runtime_reason,
+            provider_type=provider_type,
+            default_model=config.default_model if has_selected_model(config) else None,
             config_external_id=config.external_id,
             health_status=config.health_status,
             health_checked_at=config.health_checked_at,
@@ -89,7 +106,7 @@ def build_household_ai_feature_status(
             feature_enabled=True,
             available=False,
             reason=reason,
-            provider_type=config.provider_type,
+            provider_type=provider_type,
             default_model=config.default_model,
             config_external_id=config.external_id,
             health_status=config.health_status,
@@ -99,7 +116,7 @@ def build_household_ai_feature_status(
     return AIFeatureStatusSummary(
         feature_enabled=True,
         available=True,
-        provider_type=config.provider_type,
+        provider_type=provider_type,
         default_model=config.default_model,
         config_external_id=config.external_id,
         health_status=config.health_status,
@@ -136,6 +153,9 @@ def generate_household_ai_suggestions(
         raise ValueError("No AI provider is configured for this installation.")
     if not resolved.record.is_enabled:
         raise ValueError("The configured AI provider is disabled.")
+    runtime_ready, runtime_reason = provider_is_ready_for_runtime(resolved.record)
+    if not runtime_ready:
+        raise ValueError(runtime_reason or "The AI provider configuration is incomplete.")
 
     health = refresh_provider_health(db, config=resolved.record)
     feature = build_household_ai_feature_status(db, household=access.household)

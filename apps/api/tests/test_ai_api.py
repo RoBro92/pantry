@@ -394,6 +394,86 @@ def test_household_ai_suggestions_use_provider_adapter_and_record_audit(
     assert "ai.suggestion.completed" in audit_actions
 
 
+def test_household_ai_suggestions_support_claude_provider_configs(
+    client,
+    db_session,
+    monkeypatch,
+):
+    member, household = create_member_household(
+        db_session,
+        email="claude-member@example.com",
+        household_name="Claude Suggestion Household",
+    )
+    admin = create_platform_admin(
+        db_session,
+        email="claude-admin@example.com",
+        password=PASSWORD,
+        display_name="Claude Admin",
+    )
+    upsert_instance_provider_config(
+        db_session,
+        actor=admin,
+        provider_type="claude",
+        base_url="https://api.anthropic.com",
+        default_model="claude-sonnet-4-20250514",
+        api_key="claude-test-secret",
+        is_enabled=True,
+    )
+
+    captured_provider_types: list[str] = []
+
+    class StubClaudeSuggestionAdapter(StubAIProviderAdapter):
+        def generate_structured_output(self, request) -> StructuredCompletionResult:
+            assert request.model == "claude-sonnet-4-20250514"
+            assert request.user_payload["request"]["kind"] == "meal_suggestions"
+            return StructuredCompletionResult(
+                output_text='{"suggestions":[{"title":"Use the pasta","summary":"Cook pasta soon.","rationale":"It is already in the pantry.","pantry_product_names":["Pasta"],"expiring_product_names":["Tomatoes"],"missing_product_names":[],"extra_ingredient_names":["Lemon"],"substitution_ideas":["Swap basil for parsley"],"caution":"Check expiry dates before cooking."}]}',
+                parsed_output={
+                    "suggestions": [
+                        {
+                            "title": "Use the pasta",
+                            "summary": "Cook pasta soon.",
+                            "rationale": "It is already in the pantry.",
+                            "pantry_product_names": ["Pasta"],
+                            "expiring_product_names": ["Tomatoes"],
+                            "missing_product_names": [],
+                            "extra_ingredient_names": ["Lemon"],
+                            "substitution_ideas": ["Swap basil for parsley"],
+                            "caution": "Check expiry dates before cooking.",
+                        }
+                    ]
+                },
+                provider_request_id="claude_req_123",
+            )
+
+    def build_stub_adapter(config):
+        captured_provider_types.append(config.provider_type)
+        return StubClaudeSuggestionAdapter()
+
+    monkeypatch.setattr(
+        "app.services.ai_config.build_ai_provider_adapter",
+        build_stub_adapter,
+    )
+    monkeypatch.setattr(
+        "app.services.ai_suggestions.build_ai_provider_adapter",
+        build_stub_adapter,
+    )
+
+    login(client, email="claude-member@example.com")
+
+    status_response = client.get(f"/api/households/{household.external_id}/ai/status")
+    assert status_response.status_code == 200
+    assert status_response.json()["provider_type"] == "claude"
+
+    suggestion_response = client.post(
+        f"/api/households/{household.external_id}/ai/suggestions",
+        json={"kind": "meal_suggestions", "limit": 2},
+    )
+    assert suggestion_response.status_code == 200
+    assert suggestion_response.json()["feature"]["provider_type"] == "claude"
+    assert "claude" in captured_provider_types
+
+
 def test_household_ai_generation_failures_degrade_cleanly_and_update_status(
     client,
     db_session,

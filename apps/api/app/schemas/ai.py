@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class AIProviderConfigUpsertRequest(BaseModel):
-    provider_type: Literal["ollama", "openai_compatible"]
+    provider_type: Literal["openai", "claude", "ollama", "custom"]
     base_url: str
     default_model: str
     api_key: str | None = None
@@ -17,7 +17,7 @@ class AIProviderConfigUpsertRequest(BaseModel):
 class AIProviderConfigSummary(BaseModel):
     external_id: str
     scope_type: str
-    provider_type: str
+    provider_type: Literal["openai", "claude", "ollama", "custom"]
     base_url: str
     default_model: str
     is_enabled: bool
