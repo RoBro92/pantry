@@ -41,6 +41,7 @@ export default async function HouseholdPantryPage({
         householdExternalId={overview.household_external_id}
         householdName={overview.household_name}
         canAdminister={overview.can_administer}
+        catalogProducts={overview.catalog_products}
         locationGroups={overview.location_groups}
         locations={overview.locations}
         counts={overview.counts}

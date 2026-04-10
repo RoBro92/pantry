@@ -4,9 +4,11 @@ import { useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { PantryLocationSummary, PantryProductSummary } from "../lib/api-types";
 import { formatQuantityWithUnit } from "../lib/quantity-format";
+import { ModalShell } from "./modal-shell";
 import { PantryLotActions } from "./pantry-lot-actions";
 import { PantryProductDeleteDialog } from "./pantry-product-delete-dialog";
 import { ProductEnrichmentDetails } from "./product-enrichment-details";
+import { ProductIntelligenceDetails } from "./product-intelligence-details";
 import { ProductEnrichmentLookupDialog } from "./product-enrichment-lookup-dialog";
 import { PantryProductDialog } from "./pantry-product-create-dialog";
 import { ShoppingListAddDialog } from "./shopping-list-add-dialog";
@@ -46,7 +48,15 @@ function formatExpirySummary(product: PantryProductSummary) {
 function renderStatusPills(product: PantryProductSummary) {
   return (
     <div className="pantry-status-pill-pair">
-      <span className="pill">{product.enrichment ? "Enriched" : "Basic"}</span>
+      <span className={`pill${product.intelligence?.is_stale ? " is-warning" : ""}`}>
+        {product.intelligence
+          ? product.intelligence.is_stale
+            ? "AI needs refresh"
+            : "AI indexed"
+          : product.enrichment
+            ? "Enriched"
+            : "Basic"}
+      </span>
       <span className={`pill${product.stock_status === "out_of_stock" ? " is-warning" : ""}`}>
         {product.stock_status === "out_of_stock" ? "Out of stock" : "In stock"}
       </span>
@@ -74,6 +84,7 @@ export function PantryProductBrowser({
   const [lookupDialogProduct, setLookupDialogProduct] = useState<PantryProductSummary | null>(null);
   const [productEditorProduct, setProductEditorProduct] = useState<PantryProductSummary | null>(null);
   const [deleteProduct, setDeleteProduct] = useState<PantryProductSummary | null>(null);
+  const [intelligenceDetailProduct, setIntelligenceDetailProduct] = useState<PantryProductSummary | null>(null);
 
   useEffect(() => {
     if (expandedProductId === null || products.some((product) => product.product_external_id === expandedProductId)) {
@@ -212,6 +223,15 @@ export function PantryProductBrowser({
           ) : null}
 
           <div className="page-actions inventory-actions">
+            {product.intelligence ? (
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() => setIntelligenceDetailProduct(product)}
+              >
+                AI details
+              </button>
+            ) : null}
             {canAdminister ? (
               <button
                 type="button"
@@ -381,7 +401,11 @@ export function PantryProductBrowser({
                           <span>Manual ingredients: {product.manual_ingredient_tags.join(", ")}</span>
                         ) : null}
                         <span>
-                          {product.enrichment ? "Open Food Facts linked" : "User-owned product record"}
+                          {product.intelligence
+                            ? `AI indexed${product.intelligence.food_category ? ` · ${product.intelligence.food_category}` : ""}`
+                            : product.enrichment
+                              ? "Open Food Facts linked"
+                              : "User-owned product record"}
                         </span>
                       </div>
                     </td>
@@ -507,6 +531,20 @@ export function PantryProductBrowser({
           }}
           onClose={() => setDeleteProduct(null)}
         />
+      ) : null}
+
+      {intelligenceDetailProduct?.intelligence ? (
+        <ModalShell
+          title={`AI details · ${intelligenceDetailProduct.product_name}`}
+          description="Structured product intelligence stays attached to the product without rewriting the saved product identity."
+          onClose={() => setIntelligenceDetailProduct(null)}
+          panelClassName="modal-panel modal-panel-wide"
+        >
+          <ProductIntelligenceDetails
+            intelligence={intelligenceDetailProduct.intelligence}
+            productName={intelligenceDetailProduct.product_name}
+          />
+        </ModalShell>
       ) : null}
     </>
   );

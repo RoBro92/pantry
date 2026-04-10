@@ -550,6 +550,81 @@ export type ProductEnrichmentSummary = {
   attribution: ProductEnrichmentAttribution;
 };
 
+export type ProductIntelligenceStructuredMetadata = {
+  product_format: string | null;
+  storage_profile: string | null;
+  cuisine_tags: string[];
+  flavour_tags: string[];
+  preparation_tags: string[];
+};
+
+export type ProductIntelligenceSummary = {
+  source_provider: string;
+  source_model: string | null;
+  classification_scope: string;
+  classification_version: string;
+  schema_version: string;
+  classified_at: string;
+  confidence: number | null;
+  rationale_short: string | null;
+  primary_ingredient_type: string | null;
+  ingredient_families: string[];
+  food_category: string | null;
+  dietary_tags: string[];
+  allergen_tags: string[];
+  recipe_role_tags: string[];
+  substitution_groups: string[];
+  pantry_use_tags: string[];
+  structured_metadata: ProductIntelligenceStructuredMetadata;
+  is_stale: boolean;
+  stale_reasons: string[];
+};
+
+export type ProductIntelligenceStatusResponse = {
+  available: boolean;
+  reason: string | null;
+  provider_type: string | null;
+  default_model: string | null;
+  health_status: string | null;
+  classification_scope: string;
+  classification_version: string;
+  schema_version: string;
+  counts: {
+    total_product_count: number;
+    classified_product_count: number;
+    stale_product_count: number;
+    unclassified_product_count: number;
+  };
+};
+
+export type ProductIntelligenceRunItem = {
+  product_external_id: string;
+  product_name: string;
+  status: string;
+  message: string;
+  confidence: number | null;
+  stale_before_run: boolean;
+  intelligence: ProductIntelligenceSummary | null;
+};
+
+export type ProductIntelligenceRunResponse = {
+  mode: string;
+  available: boolean;
+  provider_type: string | null;
+  default_model: string | null;
+  classification_scope: string;
+  classification_version: string;
+  schema_version: string;
+  total_candidates: number;
+  classified_count: number;
+  skipped_count: number;
+  failed_count: number;
+  stale_reclassified_count: number;
+  items: ProductIntelligenceRunItem[];
+  started_at: string;
+  completed_at: string;
+};
+
 export type PantryConfirmedEnrichmentRequest = {
   source_name: string;
   source_product_id: string;
@@ -610,6 +685,7 @@ export type PantryProductSummary = {
   barcodes: string[];
   is_in_shopping_list: boolean;
   enrichment: ProductEnrichmentSummary | null;
+  intelligence: ProductIntelligenceSummary | null;
   locations: PantryProductLocationSummary[];
   stock_lots: PantryStockLotSummary[];
 };
@@ -623,6 +699,7 @@ export type PantryCatalogProductSummary = {
   notes: string | null;
   manual_ingredient_tags: string[];
   enrichment: ProductEnrichmentSummary | null;
+  intelligence: ProductIntelligenceSummary | null;
 };
 
 export type PantryStockLotSummary = {
