@@ -52,6 +52,14 @@ def _parse_deployment_mode(value: str | None) -> str:
     return mode
 
 
+def _resolve_app_version() -> str:
+    environment = os.getenv("ENVIRONMENT", "development").strip().lower()
+    fallback = os.getenv("APP_VERSION", "0.0.0-dev")
+    if environment == "development":
+        return read_repo_version(fallback=fallback)
+    return fallback
+
+
 def _resolve_git_config_path(repo_root: Path) -> Path | None:
     git_path = repo_root / ".git"
     if git_path.is_dir():
@@ -182,7 +190,7 @@ def get_settings() -> AppSettings:
         service_name=os.getenv("API_SERVICE_NAME", "pantry-api"),
         environment=os.getenv("ENVIRONMENT", "development"),
         log_level=os.getenv("LOG_LEVEL", "INFO"),
-        app_version=os.getenv("APP_VERSION", read_repo_version()),
+        app_version=_resolve_app_version(),
         deployment_mode=deployment_mode,
         demo_mode_enabled=demo_mode_enabled,
         ai_feature_enabled=_parse_bool(os.getenv("AI_FEATURE_ENABLED"), True),

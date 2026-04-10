@@ -65,8 +65,9 @@ Local branch work uses the Docker-based source stack that stays separate from th
 
 - `fresh` resets the local stack to the setup flow
 - `demo` resets and seeds a repeatable local demo account set
+- each `./pantry start --fresh` or `./pantry start --demo` run replaces the full local web/api/worker stack before seeding the selected mode
 - `./pantry reset --fresh` or `./pantry reset --demo` switches modes without forcing image rebuilds
-- `./pantry stop` stops the stack cleanly
+- `./pantry stop` stops and removes the full local stack cleanly
 - `./pantry rebuild` is only needed after Dockerfile or dependency changes
 - `./pantry status` shows the current local stack state
 - `./pantry logs` follows the local service logs
