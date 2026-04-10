@@ -9,6 +9,7 @@ Quick reference for the public repository layout.
 - `apps/worker/`: background worker
 - `packages/shared-types/`: shared TypeScript types and constants
 - `apps/api/app/services/development_seed.py`: public contributor seed and fresh/demo bootstrap data
+- `apps/api/app/services/ai_*.py` and `apps/api/app/services/ai_providers/`: AI provider config, context assembly, prompt building, and provider adapters
 
 ## Deployment And Release Files
 

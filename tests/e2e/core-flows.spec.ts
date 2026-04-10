@@ -770,6 +770,39 @@ test("ai flow covers unconfigured and configured-but-unavailable states", async 
   await expect(page.getByText("The configured AI provider is unhealthy.")).toBeVisible();
 });
 
+test("admin ai settings persist across navigation and keep stored-key state visible", async ({
+  page
+}) => {
+  await loginThroughApi(page, {
+    email: manifest.admin_email,
+    password: manifest.password
+  });
+  await dismissAdminWhatsNewIfVisible(page);
+
+  await page.goto("/admin/ai");
+  await page.getByLabel("Provider type").selectOption("openai_compatible");
+  await page.getByLabel("Base URL").fill("https://api.openai.com/v1");
+  await page.getByLabel("Default model").fill("gpt-4o-mini");
+  await page.getByLabel("API key").fill("sk-test-secret");
+  await page.getByRole("button", { name: "Save configuration" }).click();
+
+  await expect(page.getByText("Provider configuration saved.")).toBeVisible();
+  await expect(
+    page.getByText("API key is stored. Leave the field blank to keep the current key.")
+  ).toBeVisible();
+
+  await page.goto("/admin");
+  await page.goto("/admin/ai");
+
+  await expect(page.getByLabel("Provider type")).toHaveValue("openai_compatible");
+  await expect(page.getByLabel("Base URL")).toHaveValue("https://api.openai.com/v1");
+  await expect(page.getByLabel("Default model")).toHaveValue("gpt-4o-mini");
+  await expect(
+    page.getByText("API key is stored. Leave the field blank to keep the current key.")
+  ).toBeVisible();
+  await expect(page.getByLabel("API key")).toHaveValue("");
+});
+
 test("platform admin can manage household memberships from the consolidated panel", async ({
   page
 }) => {

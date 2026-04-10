@@ -12,6 +12,7 @@ It is built for local operation rather than hosted sync. The repository ships th
 - Optional Open Food Facts lookup for product enrichment
 - Guided first-run setup, including restore from a Pantry backup bundle
 - Admin tools for users, backups, diagnostics, updates, SMTP, and optional AI provider configuration
+- Optional read-only household AI suggestions backed by an instance-level Ollama or OpenAI-compatible provider
 
 ## Quick Start
 

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import type {
   AIProviderConfigResponse,
   AIProviderConfigSummary,
@@ -15,6 +16,7 @@ type AdminAIConfigFormProps = {
 export function AdminAIConfigForm({
   initialConfigResponse
 }: AdminAIConfigFormProps) {
+  const router = useRouter();
   const [config, setConfig] = useState<AIProviderConfigSummary | null>(
     initialConfigResponse.config
   );
@@ -28,6 +30,19 @@ export function AdminAIConfigForm({
   const [health, setHealth] = useState<AIProviderHealthResponse["health"] | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isCheckingHealth, setIsCheckingHealth] = useState(false);
+
+  function syncConfig(nextConfig: AIProviderConfigSummary | null) {
+    setConfig(nextConfig);
+    setProviderType(nextConfig?.provider_type ?? "ollama");
+    setBaseUrl(nextConfig?.base_url ?? "http://host.docker.internal:11434");
+    setDefaultModel(nextConfig?.default_model ?? "");
+    setIsEnabled(nextConfig?.is_enabled ?? true);
+    setApiKey("");
+  }
+
+  useEffect(() => {
+    syncConfig(initialConfigResponse.config);
+  }, [initialConfigResponse.config]);
 
   async function handleSave() {
     setIsSaving(true);
@@ -44,9 +59,9 @@ export function AdminAIConfigForm({
           is_enabled: isEnabled
         }
       );
-      setConfig(response.config);
+      syncConfig(response.config);
       setStatusMessage("Provider configuration saved.");
-      setApiKey("");
+      router.refresh();
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : "Save failed.");
     } finally {
@@ -63,9 +78,10 @@ export function AdminAIConfigForm({
         "/api/platform-admin/ai/provider-config/health-check",
         {}
       );
-      setConfig(response.config);
+      syncConfig(response.config);
       setHealth(response.health);
       setStatusMessage(response.health.is_healthy ? "Health check passed." : "Health check failed.");
+      router.refresh();
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : "Health check failed.");
     } finally {
@@ -121,6 +137,9 @@ export function AdminAIConfigForm({
             />
           </label>
         </div>
+        {config?.has_api_key ? (
+          <p className="status-note">API key is stored. Leave the field blank to keep the current key.</p>
+        ) : null}
         <label className="checkbox-row">
           <input
             type="checkbox"
