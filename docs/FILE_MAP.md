@@ -9,8 +9,9 @@ Quick reference for the public repository layout.
 - `apps/worker/`: background worker
 - `packages/shared-types/`: shared TypeScript types and constants
 - `apps/api/app/services/development_seed.py`: public contributor seed and fresh/demo bootstrap data
-- `apps/api/app/services/ai_*.py` and `apps/api/app/services/ai_providers/`: AI provider config, context assembly, prompt building, and provider adapters
+- `apps/api/app/services/ai_*.py`, `apps/api/app/services/recipe_suggestion_providers.py`, and `apps/api/app/services/ai_providers/`: AI provider config, pantry-aware meal context assembly, prompt building, provider adapters, and recipe suggestion foundations
 - `apps/web/components/admin-ai-config-form.tsx` and `apps/web/components/setup-wizard.tsx`: admin AI/provider setup UX and first-run setup flows, including SMTP connectivity testing
+- `apps/web/components/household-ai-meal-planner.tsx` and `apps/web/components/meal-suggestion-complete-dialog.tsx`: guided household AI meal suggestion flow, shortlist/detail UI, and explicit pantry stock deduction confirmation
 
 ## Deployment And Release Files
 
