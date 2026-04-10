@@ -9,17 +9,15 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.domain.ai import (
-    AI_PROVIDER_CLAUDE,
-    AI_PROVIDER_CUSTOM,
     AI_HEALTH_UNHEALTHY,
     AI_HEALTH_UNKNOWN,
+    AI_PROVIDER_API_KEY_REQUIRED,
     AI_PROVIDER_OLLAMA,
-    AI_PROVIDER_OPENAI,
-    AI_PROVIDER_OPENAI_COMPATIBLE,
     AI_PROVIDER_TYPES,
     AI_SCOPE_HOUSEHOLD,
     AI_SCOPE_INSTANCE,
     AI_SCOPE_KEY_INSTANCE,
+    canonical_provider_type,
 )
 from app.models.ai_provider_config import AIProviderConfig
 from app.models.household import Household
@@ -33,10 +31,6 @@ from app.services.secrets import decrypt_secret, encrypt_secret
 class ResolvedAIProviderConfig:
     record: AIProviderConfig
     runtime: AIProviderRuntimeConfig
-
-
-OPENAI_API_BASE_URL = "https://api.openai.com/v1"
-OPENAI_API_BASE_URL_LEGACY = "https://api.openai.com"
 
 
 def _utc_now() -> datetime:
@@ -57,29 +51,12 @@ def _normalize_base_url(value: str) -> str:
     return normalized
 
 
-def _provider_requires_api_key(provider_type: str) -> bool:
-    return provider_type in {AI_PROVIDER_OPENAI, AI_PROVIDER_CLAUDE}
-
-
-def _is_openai_base_url(base_url: str) -> bool:
-    normalized = _normalize_base_url(base_url)
-    return normalized in {OPENAI_API_BASE_URL, OPENAI_API_BASE_URL_LEGACY}
-
-
 def normalize_provider_type(provider_type: str, *, base_url: str | None = None) -> str:
-    if provider_type in AI_PROVIDER_TYPES:
-        return provider_type
-
-    if provider_type == AI_PROVIDER_OPENAI_COMPATIBLE:
-        if base_url:
-            try:
-                if _is_openai_base_url(base_url):
-                    return AI_PROVIDER_OPENAI
-            except ValueError:
-                pass
-        return AI_PROVIDER_CUSTOM
-
-    raise ValueError("Unsupported AI provider type.")
+    del base_url
+    normalized_provider_type = canonical_provider_type(provider_type)
+    if normalized_provider_type is None or normalized_provider_type not in AI_PROVIDER_TYPES:
+        raise ValueError("Unsupported AI provider type.")
+    return normalized_provider_type
 
 
 def has_selected_model(config: AIProviderConfig) -> bool:
@@ -90,7 +67,7 @@ def provider_is_ready_for_runtime(config: AIProviderConfig) -> tuple[bool, str |
     provider_type = normalize_provider_type(config.provider_type, base_url=config.base_url)
     if not config.base_url.strip():
         return False, "The configured AI provider does not have a base URL yet."
-    if _provider_requires_api_key(provider_type) and not config.encrypted_api_key:
+    if AI_PROVIDER_API_KEY_REQUIRED[provider_type] and not config.encrypted_api_key:
         return False, "The configured AI provider needs an API key before it can be used."
     if not has_selected_model(config):
         return False, "Choose a model for the configured AI provider before using AI suggestions."
@@ -101,7 +78,7 @@ def validate_provider_health_check_ready(config: AIProviderConfig) -> None:
     provider_type = normalize_provider_type(config.provider_type, base_url=config.base_url)
     if not config.base_url.strip():
         raise ValueError("Provider base URL is required before checking the connection.")
-    if _provider_requires_api_key(provider_type) and not config.encrypted_api_key:
+    if AI_PROVIDER_API_KEY_REQUIRED[provider_type] and not config.encrypted_api_key:
         raise ValueError("An API key is required before checking this provider connection.")
 
 
@@ -143,7 +120,9 @@ def resolve_provider_config(
         return None
 
     api_key = decrypt_secret(config.encrypted_api_key) if config.encrypted_api_key else None
-    provider_type = normalize_provider_type(config.provider_type, base_url=config.base_url)
+    provider_type = canonical_provider_type(config.provider_type)
+    if provider_type is None:
+        return None
     return ResolvedAIProviderConfig(
         record=config,
         runtime=AIProviderRuntimeConfig(
@@ -169,12 +148,18 @@ def upsert_instance_provider_config(
     api_key: str | None,
     is_enabled: bool,
 ) -> AIProviderConfig:
-    if provider_type not in AI_PROVIDER_TYPES:
-        raise ValueError("Unsupported AI provider type.")
+    provider_type = normalize_provider_type(provider_type, base_url=base_url)
 
     normalized_base_url = _normalize_base_url(base_url)
     normalized_model = default_model.strip()
+    if not normalized_model:
+        raise ValueError("Default model is required.")
+
     normalized_api_key = api_key.strip() if api_key else None
+    if AI_PROVIDER_API_KEY_REQUIRED[provider_type] and not normalized_api_key:
+        existing = get_instance_provider_config(db)
+        if existing is None or existing.encrypted_api_key is None:
+            raise ValueError(f"An API key is required for {provider_type} providers.")
 
     config = get_instance_provider_config(db)
     created = config is None
@@ -236,8 +221,9 @@ def refresh_provider_health(
     config: AIProviderConfig,
 ) -> AIProviderHealth:
     validate_provider_health_check_ready(config)
-    api_key = decrypt_secret(config.encrypted_api_key) if config.encrypted_api_key else None
     provider_type = normalize_provider_type(config.provider_type, base_url=config.base_url)
+    config.provider_type = provider_type
+    api_key = decrypt_secret(config.encrypted_api_key) if config.encrypted_api_key else None
     adapter = build_ai_provider_adapter(
         AIProviderRuntimeConfig(
             provider_type=provider_type,
@@ -279,11 +265,10 @@ def serialize_provider_config(config: AIProviderConfig | None) -> dict[str, obje
     if config is None:
         return None
 
-    provider_type = normalize_provider_type(config.provider_type, base_url=config.base_url)
     return {
         "external_id": config.external_id,
         "scope_type": config.scope_type,
-        "provider_type": provider_type,
+        "provider_type": canonical_provider_type(config.provider_type),
         "base_url": config.base_url,
         "default_model": config.default_model,
         "is_enabled": config.is_enabled,

@@ -4,16 +4,19 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useRef, useState } from "react";
 import type {
+  PantryCatalogProductSummary,
   PantryLocationGroupSummary,
   PantryLocationSummary,
 } from "../lib/api-types";
 import { PantryAddEntryDialog } from "./pantry-add-entry-dialog";
+import { ProductIntelligenceRunDialog } from "./product-intelligence-run-dialog";
 import { PantryRoomDialog } from "./pantry-room-dialog";
 
 type PantryControlsProps = {
   householdExternalId: string;
   householdName: string;
   canAdminister: boolean;
+  catalogProducts: PantryCatalogProductSummary[];
   locationGroups: PantryLocationGroupSummary[];
   locations: PantryLocationSummary[];
   counts: {
@@ -35,6 +38,7 @@ export function PantryControls({
   householdExternalId,
   householdName,
   canAdminister,
+  catalogProducts,
   locationGroups,
   locations,
   counts,
@@ -47,6 +51,7 @@ export function PantryControls({
   const locationSelectRef = useRef<HTMLSelectElement | null>(null);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isRoomOpen, setIsRoomOpen] = useState(false);
+  const [isProductIntelligenceOpen, setIsProductIntelligenceOpen] = useState(false);
   const [query, setQuery] = useState(filters.q ?? "");
   const [roomExternalId, setRoomExternalId] = useState(filters.location_group_external_id ?? "");
   const [locationExternalId, setLocationExternalId] = useState(filters.location_external_id ?? "");
@@ -113,6 +118,15 @@ export function PantryControls({
             {canAdminister ? (
               <button type="button" className="ghost-button" onClick={() => setIsRoomOpen(true)}>
                 Manage rooms
+              </button>
+            ) : null}
+            {canAdminister ? (
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() => setIsProductIntelligenceOpen(true)}
+              >
+                Product intelligence
               </button>
             ) : null}
             <Link
@@ -276,6 +290,14 @@ export function PantryControls({
           householdExternalId={householdExternalId}
           rooms={locationGroups}
           onClose={() => setIsRoomOpen(false)}
+        />
+      ) : null}
+
+      {isProductIntelligenceOpen ? (
+        <ProductIntelligenceRunDialog
+          householdExternalId={householdExternalId}
+          catalogProducts={catalogProducts}
+          onClose={() => setIsProductIntelligenceOpen(false)}
         />
       ) : null}
     </>

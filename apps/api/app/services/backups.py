@@ -101,6 +101,114 @@ class RestoreCompatibility:
 
 _SCHEMA_COMPATIBILITY: dict[tuple[str | None, str | None], RestoreCompatibility] = {
     (
+        "20260410_000018",
+        "20260409_000017",
+    ): RestoreCompatibility(
+        supported=True,
+        allowed_missing_tables=frozenset({"product_intelligence_records"}),
+        warnings=(
+            "This backup predates product intelligence support. Product intelligence records will restore as empty.",
+        ),
+    ),
+    (
+        "20260410_000018",
+        "20260409_000016",
+    ): RestoreCompatibility(
+        supported=True,
+        allowed_missing_tables=frozenset({"product_intelligence_records"}),
+        warnings=(
+            "This backup predates product intelligence support. Product intelligence records will restore as empty.",
+        ),
+    ),
+    (
+        "20260410_000018",
+        "20260409_000015",
+    ): RestoreCompatibility(
+        supported=True,
+        allowed_missing_tables=frozenset({"product_intelligence_records"}),
+        warnings=(
+            "This backup predates product intelligence support. Product intelligence records will restore as empty.",
+        ),
+    ),
+    (
+        "20260410_000018",
+        "20260409_000014",
+    ): RestoreCompatibility(
+        supported=True,
+        allowed_missing_tables=frozenset({"product_intelligence_records"}),
+        warnings=(
+            "This backup predates product intelligence support. Product intelligence records will restore as empty.",
+        ),
+    ),
+    (
+        "20260410_000018",
+        "20260408_000013",
+    ): RestoreCompatibility(
+        supported=True,
+        allowed_missing_tables=frozenset({"product_intelligence_records", "password_reset_tokens"}),
+        warnings=(
+            "This backup predates product intelligence support. Product intelligence records will restore as empty.",
+            "This backup predates password reset token support. Existing reset tokens will restore as empty.",
+        ),
+    ),
+    (
+        "20260410_000018",
+        "20260408_000012",
+    ): RestoreCompatibility(
+        supported=True,
+        allowed_missing_tables=frozenset({"product_intelligence_records", "password_reset_tokens"}),
+        warnings=(
+            "This backup predates product intelligence support. Product intelligence records will restore as empty.",
+            "This backup predates password reset token support. Existing reset tokens will restore as empty.",
+        ),
+    ),
+    (
+        "20260410_000018",
+        "20260408_000011",
+    ): RestoreCompatibility(
+        supported=True,
+        allowed_missing_tables=frozenset({"product_intelligence_records", "password_reset_tokens"}),
+        warnings=(
+            "This backup predates product intelligence support. Product intelligence records will restore as empty.",
+            "This backup predates password reset token support. Existing reset tokens will restore as empty.",
+        ),
+    ),
+    (
+        "20260410_000018",
+        "20260407_000010",
+    ): RestoreCompatibility(
+        supported=True,
+        allowed_missing_tables=frozenset(
+            {"product_intelligence_records", "shopping_lists", "shopping_list_items", "password_reset_tokens"}
+        ),
+        warnings=(
+            "This backup predates product intelligence support. Product intelligence records will restore as empty.",
+            "This backup predates shopping list foundations. Shopping list records will restore as empty.",
+            "This backup predates password reset token support. Existing reset tokens will restore as empty.",
+        ),
+    ),
+    (
+        "20260410_000018",
+        "20260407_000009",
+    ): RestoreCompatibility(
+        supported=True,
+        allowed_missing_tables=frozenset(
+            {
+                "product_intelligence_records",
+                "product_enrichments",
+                "shopping_lists",
+                "shopping_list_items",
+                "password_reset_tokens",
+            }
+        ),
+        warnings=(
+            "This backup predates product intelligence support. Product intelligence records will restore as empty.",
+            "This backup predates product enrichment support. Product enrichment records will restore as empty.",
+            "This backup predates shopping list foundations. Shopping list records will restore as empty.",
+            "This backup predates password reset token support. Existing reset tokens will restore as empty.",
+        ),
+    ),
+    (
         "20260409_000016",
         "20260409_000015",
     ): RestoreCompatibility(

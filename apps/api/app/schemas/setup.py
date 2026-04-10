@@ -60,7 +60,7 @@ class StagedSetupDietaryUserSummary(BaseModel):
 
 
 class StagedSetupAIConfigSummary(BaseModel):
-    provider_type: Literal["openai", "claude", "ollama", "custom"] | None = None
+    provider_type: Literal["openai", "claude", "gemini", "ollama"] | None = None
     base_url: str | None = None
     default_model: str | None = None
     is_enabled: bool = False
@@ -159,7 +159,7 @@ class SetupDietaryUpdateRequest(BaseModel):
 
 
 class SetupAIConfigUpdateRequest(BaseModel):
-    provider_type: Literal["openai", "claude", "ollama", "custom"] | None = None
+    provider_type: Literal["openai", "claude", "gemini", "ollama"] | None = None
     base_url: str | None = None
     default_model: str | None = None
     api_key: str | None = None

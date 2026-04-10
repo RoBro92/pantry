@@ -11,6 +11,7 @@ from app.models.location_group import LocationGroup
 from app.models.product import Product
 from app.models.product_alias import ProductAlias
 from app.models.product_enrichment import ProductEnrichment
+from app.models.product_intelligence import ProductIntelligence
 from app.models.recipe_ingredient import RecipeIngredient
 from app.models.shopping_list_item import ShoppingListItem
 from app.models.stock_lot import StockLot
@@ -63,7 +64,12 @@ def get_product_by_external_id(
         select(Product)
         .where(Product.household_id == household.id)
         .where(Product.external_id == external_id)
-        .options(selectinload(Product.aliases), selectinload(Product.barcodes), selectinload(Product.enrichments))
+        .options(
+            selectinload(Product.aliases),
+            selectinload(Product.barcodes),
+            selectinload(Product.enrichments),
+            selectinload(Product.intelligence_records),
+        )
     )
 
 
@@ -79,7 +85,12 @@ def get_product_by_lookup_name(
         select(Product)
         .where(Product.household_id == household.id)
         .where(Product.normalized_name == normalized_name)
-        .options(selectinload(Product.aliases), selectinload(Product.barcodes), selectinload(Product.enrichments))
+        .options(
+            selectinload(Product.aliases),
+            selectinload(Product.barcodes),
+            selectinload(Product.enrichments),
+            selectinload(Product.intelligence_records),
+        )
     )
     if product is not None:
         return product
@@ -109,6 +120,7 @@ def get_product_by_barcode(
         .options(selectinload(Barcode.product).selectinload(Product.aliases))
         .options(selectinload(Barcode.product).selectinload(Product.barcodes))
         .options(selectinload(Barcode.product).selectinload(Product.enrichments))
+        .options(selectinload(Barcode.product).selectinload(Product.intelligence_records))
     )
     if barcode_record is None:
         return None
@@ -135,7 +147,12 @@ def find_alias_conflicts(
         select(Product)
         .where(Product.household_id == household.id)
         .where(Product.normalized_name == normalized_name)
-        .options(selectinload(Product.aliases), selectinload(Product.barcodes), selectinload(Product.enrichments))
+        .options(
+            selectinload(Product.aliases),
+            selectinload(Product.barcodes),
+            selectinload(Product.enrichments),
+            selectinload(Product.intelligence_records),
+        )
     )
         if product is not None and product.id != ignore_product_id:
             conflicts.append(
@@ -603,6 +620,11 @@ def delete_product(
         .where(ProductEnrichment.household_id == household.id)
         .where(ProductEnrichment.product_id == product.id)
     ).all()
+    intelligence_records = db.scalars(
+        select(ProductIntelligence)
+        .where(ProductIntelligence.household_id == household.id)
+        .where(ProductIntelligence.product_id == product.id)
+    ).all()
 
     record_audit_event(
         db,
@@ -617,6 +639,7 @@ def delete_product(
             "alias_count": len(aliases),
             "barcode_count": len(barcodes),
             "enrichment_count": len(enrichments),
+            "intelligence_count": len(intelligence_records),
             "shopping_item_reference_count": len(shopping_items),
             "recipe_reference_count": len(recipe_ingredients),
             "import_line_reference_count": len(import_lines),
@@ -629,6 +652,8 @@ def delete_product(
         db.delete(barcode)
     for enrichment in enrichments:
         db.delete(enrichment)
+    for intelligence in intelligence_records:
+        db.delete(intelligence)
     for lot in stock_lots:
         db.delete(lot)
 

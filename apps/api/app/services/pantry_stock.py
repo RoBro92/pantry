@@ -54,6 +54,7 @@ def _load_stock_lot(
             selectinload(StockLot.product).selectinload(Product.aliases),
             selectinload(StockLot.product).selectinload(Product.barcodes),
             selectinload(StockLot.product).selectinload(Product.enrichments),
+            selectinload(StockLot.product).selectinload(Product.intelligence_records),
             selectinload(StockLot.location).selectinload(Location.location_group),
         )
     )
@@ -101,6 +102,7 @@ def _find_mergeable_stock_lot(
             selectinload(StockLot.product).selectinload(Product.aliases),
             selectinload(StockLot.product).selectinload(Product.barcodes),
             selectinload(StockLot.product).selectinload(Product.enrichments),
+            selectinload(StockLot.product).selectinload(Product.intelligence_records),
             selectinload(StockLot.location).selectinload(Location.location_group),
         )
     )
@@ -510,6 +512,7 @@ def _find_similar_product_match(
             selectinload(Product.aliases),
             selectinload(Product.barcodes),
             selectinload(Product.enrichments),
+            selectinload(Product.intelligence_records),
         )
     ).all()
 

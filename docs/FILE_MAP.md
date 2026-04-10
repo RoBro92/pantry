@@ -6,6 +6,7 @@ Quick reference for the public repository layout.
 
 - `apps/web/`: Next.js frontend
 - `apps/api/`: FastAPI backend, Alembic migrations, and API test suite
+- `apps/api/app/services/product_intelligence.py`: pantry product AI classification, staleness checks, and manual run orchestration
 - `apps/worker/`: background worker
 - `packages/shared-types/`: shared TypeScript types and constants
 - `apps/api/app/services/development_seed.py`: public contributor seed and fresh/demo bootstrap data

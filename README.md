@@ -10,6 +10,7 @@ It is built for local operation rather than hosted sync. The repository ships th
 - Shopping lists with review and reconciliation flows
 - Recipes with pantry coverage summaries
 - Optional Open Food Facts lookup for product enrichment
+- Optional AI product intelligence that classifies pantry products into structured recipe-matching metadata
 - Guided first-run setup, including restore from a Pantry backup bundle
 - Admin tools for users, backups, diagnostics, updates, SMTP, and optional AI provider configuration
 - Optional guided household AI meal suggestions backed by an instance-level OpenAI, Claude, Ollama, or custom OpenAI-compatible provider, including pantry-aware recipe completion writeback

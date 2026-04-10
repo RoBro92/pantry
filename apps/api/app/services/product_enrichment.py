@@ -73,6 +73,11 @@ def serialize_product_enrichment(enrichment: ProductEnrichment | None) -> Produc
 
 
 def serialize_product_summary(product: Product) -> ProductSummary:
+    from app.services.product_intelligence import (
+        get_primary_product_intelligence,
+        serialize_product_intelligence,
+    )
+
     return ProductSummary(
         external_id=product.external_id,
         name=product.name,
@@ -82,6 +87,7 @@ def serialize_product_summary(product: Product) -> ProductSummary:
         notes=product.notes,
         manual_ingredient_tags=list(product.manual_ingredient_tags or []),
         enrichment=serialize_product_enrichment(get_primary_enrichment(product)),
+        intelligence=serialize_product_intelligence(get_primary_product_intelligence(product), product=product),
     )
 
 

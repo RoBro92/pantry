@@ -41,18 +41,23 @@ export async function readApiErrorMessage(
 }
 
 async function sendToApi<T>(
-  method: "DELETE" | "PATCH" | "POST" | "PUT",
+  method: "DELETE" | "GET" | "PATCH" | "POST" | "PUT",
   path: string,
   payload?: unknown
 ): Promise<T> {
-  const response = await fetch(`${appConfig.apiBaseUrl}${path}`, {
+  const init: RequestInit = {
     method,
     credentials: "include",
-    headers: {
+  };
+
+  if (payload !== undefined) {
+    init.headers = {
       "content-type": "application/json"
-    },
-    body: payload === undefined ? undefined : JSON.stringify(payload)
-  });
+    };
+    init.body = JSON.stringify(payload);
+  }
+
+  const response = await fetch(`${appConfig.apiBaseUrl}${path}`, init);
 
   if (!response.ok) {
     throw new Error(await readApiErrorMessage(response));
@@ -61,20 +66,32 @@ async function sendToApi<T>(
   return (await response.json()) as T;
 }
 
+export async function getFromApi<T>(path: string): Promise<T> {
+  return sendToApi("GET", path);
+}
+
+async function sendToApiWithBody<T>(
+  method: "DELETE" | "PATCH" | "POST" | "PUT",
+  path: string,
+  payload?: unknown
+): Promise<T> {
+  return sendToApi(method, path, payload);
+}
+
 export async function postToApi<T>(path: string, payload: unknown): Promise<T> {
-  return sendToApi("POST", path, payload);
+  return sendToApiWithBody("POST", path, payload);
 }
 
 export async function putToApi<T>(path: string, payload: unknown): Promise<T> {
-  return sendToApi("PUT", path, payload);
+  return sendToApiWithBody("PUT", path, payload);
 }
 
 export async function patchToApi<T>(path: string, payload: unknown): Promise<T> {
-  return sendToApi("PATCH", path, payload);
+  return sendToApiWithBody("PATCH", path, payload);
 }
 
 export async function deleteToApi<T>(path: string, payload?: unknown): Promise<T> {
-  return sendToApi("DELETE", path, payload);
+  return sendToApiWithBody("DELETE", path, payload);
 }
 
 export async function postFormToApi<T>(path: string, payload: FormData): Promise<T> {

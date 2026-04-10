@@ -1,484 +1,499 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type {
   AIProviderConfigResponse,
   AIProviderConfigSummary,
   AIProviderHealthResponse
 } from "../lib/api-types";
-import type { AIProviderType } from "../lib/ai-provider-config";
 import {
-  AI_PROVIDER_DEFINITIONS,
-  getAIProviderLabel,
-  getDefaultAIBaseUrl,
-  getModelPlaceholder,
-  getProviderDescription,
-  providerRequiresApiKey
+  AI_PROVIDER_API_KEY_REQUIRED,
+  AI_PROVIDER_LABELS,
+  AI_PROVIDER_OPTIONS,
+  type AIProviderType,
+  getDefaultBaseUrl,
+  getDefaultModel,
+  normalizeAIProviderType
 } from "../lib/ai-provider-config";
 import { postToApi, putToApi } from "../lib/client-api";
-import { AdminAIModelPickerModal } from "./admin-ai-model-picker-modal";
+import { getAIProviderLabel } from "../lib/admin-display";
+import { ModalShell } from "./modal-shell";
 
 type AdminAIConfigFormProps = {
   initialConfigResponse: AIProviderConfigResponse;
 };
 
-type DraftState = {
+type ProviderDraft = {
   providerType: AIProviderType;
   baseUrl: string;
   defaultModel: string;
   isEnabled: boolean;
 };
 
-type FeedbackState = {
-  tone: "error" | "success";
-  text: string;
-} | null;
-
-const DEFAULT_PROVIDER: AIProviderType = "openai";
-
-function buildDraft(config: AIProviderConfigSummary | null): DraftState {
-  const providerType = config?.provider_type ?? DEFAULT_PROVIDER;
-  return {
-    providerType,
-    baseUrl: config?.base_url ?? getDefaultAIBaseUrl(providerType) ?? "",
-    defaultModel: config?.default_model ?? "",
-    isEnabled: config?.is_enabled ?? true
-  };
+function getInitialProviderType(config: AIProviderConfigSummary | null): AIProviderType {
+  return normalizeAIProviderType(config?.provider_type) ?? "ollama";
 }
 
-function getProviderButtonLabel(providerType: AIProviderType) {
-  return providerType === "custom" ? "Browse or enter model" : "Choose model";
+function buildDraft(config: AIProviderConfigSummary | null): ProviderDraft {
+  const providerType = getInitialProviderType(config);
+  return {
+    providerType,
+    baseUrl: config?.base_url ?? getDefaultBaseUrl(providerType),
+    defaultModel: config?.default_model ?? getDefaultModel(providerType),
+    isEnabled: config?.is_enabled ?? true
+  };
 }
 
 export function AdminAIConfigForm({
   initialConfigResponse
 }: AdminAIConfigFormProps) {
+  const initialDraft = buildDraft(initialConfigResponse.config);
   const [config, setConfig] = useState<AIProviderConfigSummary | null>(
     initialConfigResponse.config
+      ? {
+          ...initialConfigResponse.config,
+          provider_type: getInitialProviderType(initialConfigResponse.config)
+        }
+      : null
   );
-  const [draft, setDraft] = useState<DraftState>(buildDraft(initialConfigResponse.config));
+  const [providerType, setProviderType] = useState<AIProviderType>(initialDraft.providerType);
+  const [baseUrl, setBaseUrl] = useState(initialDraft.baseUrl);
+  const [defaultModel, setDefaultModel] = useState(initialDraft.defaultModel);
   const [apiKey, setApiKey] = useState("");
-  const [featureEnabled] = useState(initialConfigResponse.feature_enabled);
+  const [isEnabled, setIsEnabled] = useState(initialDraft.isEnabled);
   const [health, setHealth] = useState<AIProviderHealthResponse["health"] | null>(null);
-  const [feedback, setFeedback] = useState<FeedbackState>(null);
-  const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [isCheckingConnection, setIsCheckingConnection] = useState(false);
+  const [isCheckingHealth, setIsCheckingHealth] = useState(false);
   const [isModelPickerOpen, setIsModelPickerOpen] = useState(false);
-  const [saveState, setSaveState] = useState<"idle" | "saved" | "error" | "saving">("idle");
+  const [modelQuery, setModelQuery] = useState("");
+  const [draftModelSelection, setDraftModelSelection] = useState(initialDraft.defaultModel);
+  const latestIssuedSaveIdRef = useRef(0);
+  const latestAppliedSaveIdRef = useRef(0);
 
-  const editVersionRef = useRef(0);
-  const hasUnsavedChangesRef = useRef(false);
-  const saveQueueRef = useRef(Promise.resolve<AIProviderConfigSummary | null>(null));
-
-  function syncFromConfig(
-    nextConfig: AIProviderConfigSummary | null,
-    options: { overwriteDraft: boolean }
-  ) {
-    setConfig(nextConfig);
-    if (options.overwriteDraft) {
-      setDraft(buildDraft(nextConfig));
-      setApiKey("");
-      hasUnsavedChangesRef.current = false;
+  const featureEnabled = initialConfigResponse.feature_enabled;
+  const providerRequiresApiKey = AI_PROVIDER_API_KEY_REQUIRED[providerType];
+  const availableModels = health?.models ?? [];
+  const filteredModels = useMemo(() => {
+    const normalizedQuery = modelQuery.trim().toLowerCase();
+    if (!normalizedQuery) {
+      return availableModels;
     }
-  }
+    return availableModels.filter((model) => model.toLowerCase().includes(normalizedQuery));
+  }, [availableModels, modelQuery]);
 
-  useEffect(() => {
-    syncFromConfig(initialConfigResponse.config, { overwriteDraft: true });
-    setHealth(null);
-    setAvailableModels([]);
-    setFeedback(null);
-    setSaveState("idle");
-  }, [initialConfigResponse.config]);
-
-  const providerDefinition = AI_PROVIDER_DEFINITIONS[draft.providerType];
-  const hasStoredApiKey = Boolean(
-    config?.has_api_key && config.provider_type === draft.providerType
-  );
-  const typedApiKey = apiKey.trim();
-  const requiresApiKey = providerRequiresApiKey(draft.providerType);
-  const connectionReady =
-    draft.baseUrl.trim().length > 0 && (!requiresApiKey || hasStoredApiKey || typedApiKey.length > 0);
-  const canOpenModelPicker = health?.is_healthy ?? false;
-
-  function markDirty(clearConnectionState = false) {
-    editVersionRef.current += 1;
-    hasUnsavedChangesRef.current = true;
-    setSaveState("idle");
-    if (clearConnectionState) {
-      setHealth(null);
-      setAvailableModels([]);
-    }
-  }
-
-  function getSavePayload(snapshot: DraftState, apiKeyValue: string) {
+  function buildCurrentDraft(overrides?: Partial<ProviderDraft>): ProviderDraft {
     return {
-      provider_type: snapshot.providerType,
-      base_url: snapshot.baseUrl.trim(),
-      default_model: snapshot.defaultModel.trim(),
-      api_key: apiKeyValue.trim() || null,
-      is_enabled: snapshot.isEnabled
+      providerType,
+      baseUrl,
+      defaultModel,
+      isEnabled,
+      ...overrides
     };
   }
 
-  async function persistDraft(
-    snapshot: DraftState,
-    apiKeyValue: string,
-    saveVersion: number,
-    options: {
-      force?: boolean;
-      successMessage?: string;
-    } = {}
-  ) {
-    if (!snapshot.baseUrl.trim()) {
-      return config;
+  function syncDraftFromConfig(nextConfig: AIProviderConfigSummary) {
+    const nextProviderType = getInitialProviderType(nextConfig);
+    setConfig({
+      ...nextConfig,
+      provider_type: nextProviderType
+    });
+    setProviderType(nextProviderType);
+    setBaseUrl(nextConfig.base_url);
+    setDefaultModel(nextConfig.default_model);
+    setIsEnabled(nextConfig.is_enabled);
+    setDraftModelSelection(nextConfig.default_model);
+  }
+
+  function resolveApiKeyForSave() {
+    const trimmedApiKey = apiKey.trim();
+    return trimmedApiKey ? trimmedApiKey : null;
+  }
+
+  function canPersistDraft(draft: ProviderDraft) {
+    if (!draft.baseUrl.trim() || !draft.defaultModel.trim()) {
+      return false;
     }
-    if (!options.force && !hasUnsavedChangesRef.current) {
-      return config;
+    if (!AI_PROVIDER_API_KEY_REQUIRED[draft.providerType]) {
+      return true;
+    }
+    return Boolean(resolveApiKeyForSave() || config?.has_api_key);
+  }
+
+  async function saveDraft(
+    draft: ProviderDraft,
+    options?: {
+      successMessage?: string | null;
+      syncLocalState?: boolean;
+    }
+  ) {
+    if (!canPersistDraft(draft)) {
+      return false;
     }
 
+    const saveId = latestIssuedSaveIdRef.current + 1;
+    latestIssuedSaveIdRef.current = saveId;
     setIsSaving(true);
-    setSaveState("saving");
+    setErrorMessage(null);
+
+    const apiKeyForSave = resolveApiKeyForSave();
+
     try {
       const response = await putToApi<AIProviderConfigResponse>(
         "/api/platform-admin/ai/provider-config",
-        getSavePayload(snapshot, apiKeyValue)
-      );
-      setConfig(response.config);
-      if (saveVersion === editVersionRef.current) {
-        syncFromConfig(response.config, { overwriteDraft: true });
-        setSaveState("saved");
-        if (options.successMessage) {
-          setFeedback({ tone: "success", text: options.successMessage });
+        {
+          provider_type: draft.providerType,
+          base_url: draft.baseUrl,
+          default_model: draft.defaultModel,
+          api_key: apiKeyForSave,
+          is_enabled: draft.isEnabled
         }
+      );
+
+      if (!response.config || saveId < latestAppliedSaveIdRef.current) {
+        return true;
       }
-      return response.config;
-    } catch (error) {
-      if (saveVersion === editVersionRef.current) {
-        setSaveState("error");
-        setFeedback({
-          tone: "error",
-          text: error instanceof Error ? error.message : "Save failed."
+
+      latestAppliedSaveIdRef.current = saveId;
+      setHealth(null);
+      if (options?.syncLocalState !== false) {
+        syncDraftFromConfig(response.config);
+      } else {
+        setConfig({
+          ...response.config,
+          provider_type: getInitialProviderType(response.config)
         });
       }
-      throw error;
+      if (apiKeyForSave) {
+        setApiKey((currentValue) => (currentValue.trim() === apiKeyForSave ? "" : currentValue));
+      }
+      if (options?.successMessage) {
+        setStatusMessage(options.successMessage);
+      }
+      return true;
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Save failed.");
+      return false;
     } finally {
-      setIsSaving(false);
+      if (saveId === latestIssuedSaveIdRef.current) {
+        setIsSaving(false);
+      }
     }
   }
 
-  function enqueueSave(
-    snapshot: DraftState,
-    apiKeyValue: string,
-    options: {
-      force?: boolean;
-      successMessage?: string;
-    } = {}
-  ) {
-    const saveVersion = editVersionRef.current;
-    const task = async () => persistDraft(snapshot, apiKeyValue, saveVersion, options);
-    const queued = saveQueueRef.current.then(task, task);
-    saveQueueRef.current = queued.catch(() => null);
-    return queued;
-  }
-
-  function handleProviderChange(nextProviderType: AIProviderType) {
-    const nextBaseUrl = getDefaultAIBaseUrl(nextProviderType);
-    const shouldClearCustomBaseUrl =
-      nextProviderType === "custom" &&
-      Object.values(AI_PROVIDER_DEFINITIONS)
-        .map((provider) => provider.defaultBaseUrl)
-        .includes(draft.baseUrl);
-    const nextDraft: DraftState = {
-      providerType: nextProviderType,
-      baseUrl:
-        nextProviderType === "custom"
-          ? shouldClearCustomBaseUrl
-            ? ""
-            : draft.baseUrl
-          : nextBaseUrl ?? draft.baseUrl,
-      defaultModel: "",
-      isEnabled: draft.isEnabled
-    };
-
-    setDraft(nextDraft);
-    setApiKey("");
-    setFeedback(null);
-    markDirty(true);
-    void enqueueSave(nextDraft, "", { successMessage: "Provider settings saved." });
-  }
-
-  function handleEnabledChange(nextIsEnabled: boolean) {
-    const nextDraft = { ...draft, isEnabled: nextIsEnabled };
-    setDraft(nextDraft);
-    setFeedback(null);
-    markDirty(false);
-    void enqueueSave(nextDraft, apiKey, { successMessage: "Provider settings saved." });
-  }
-
-  async function handleCheckConnection() {
-    const snapshot = { ...draft };
-    const apiKeyValue = apiKey;
-    setIsCheckingConnection(true);
-    setFeedback(null);
+  async function handleHealthCheck() {
+    setIsCheckingHealth(true);
+    setErrorMessage(null);
+    setStatusMessage(null);
 
     try {
-      await enqueueSave(snapshot, apiKeyValue, { force: true });
       const response = await postToApi<AIProviderHealthResponse>(
         "/api/platform-admin/ai/provider-config/health-check",
         {}
       );
-      setConfig(response.config);
+      syncDraftFromConfig(response.config);
       setHealth(response.health);
-      setAvailableModels(response.health.models);
-      if (response.health.is_healthy) {
-        setFeedback({
-          tone: "success",
-          text: "Connection looks good. Choose a model next."
-        });
-        setIsModelPickerOpen(true);
-      } else {
-        setFeedback({
-          tone: "error",
-          text: response.health.message ?? "Connection check failed."
-        });
-      }
+      setStatusMessage(response.health.is_healthy ? "Health check passed." : "Health check failed.");
     } catch (error) {
-      setFeedback({
-        tone: "error",
-        text: error instanceof Error ? error.message : "Connection check failed."
-      });
+      setErrorMessage(error instanceof Error ? error.message : "Health check failed.");
     } finally {
-      setIsCheckingConnection(false);
+      setIsCheckingHealth(false);
     }
   }
 
-  async function handleModelSave(model: string) {
-    const nextDraft = { ...draft, defaultModel: model };
-    setDraft(nextDraft);
-    markDirty(false);
-    await enqueueSave(nextDraft, apiKey, {
-      force: true,
-      successMessage: "Default model saved."
-    });
-    setIsModelPickerOpen(false);
+  async function runAutoHealthCheck() {
+    if (!featureEnabled || isCheckingHealth) {
+      return;
+    }
+    await handleHealthCheck();
   }
+
+  async function handleProviderChange(nextProviderType: AIProviderType) {
+    const nextBaseUrl = getDefaultBaseUrl(nextProviderType);
+    const nextDefaultModel = getDefaultModel(nextProviderType);
+    const nextDraft = buildCurrentDraft({
+      providerType: nextProviderType,
+      baseUrl: nextBaseUrl,
+      defaultModel: nextDefaultModel
+    });
+    setProviderType(nextProviderType);
+    setBaseUrl(nextBaseUrl);
+    setDefaultModel(nextDefaultModel);
+    setDraftModelSelection(nextDefaultModel);
+    setApiKey("");
+    setStatusMessage(null);
+    setErrorMessage(null);
+
+    if (canPersistDraft(nextDraft)) {
+      await saveDraft(nextDraft, { syncLocalState: false });
+    }
+  }
+
+  async function handleEnabledChange(nextIsEnabled: boolean) {
+    const nextDraft = buildCurrentDraft({ isEnabled: nextIsEnabled });
+    setIsEnabled(nextIsEnabled);
+    setStatusMessage(null);
+    setErrorMessage(null);
+
+    if (canPersistDraft(nextDraft)) {
+      await saveDraft(nextDraft, { syncLocalState: false });
+    }
+  }
+
+  async function handleBaseUrlBlur() {
+    await saveDraft(buildCurrentDraft(), { syncLocalState: true });
+  }
+
+  async function handleApiKeyBlur() {
+    if (!resolveApiKeyForSave()) {
+      return;
+    }
+    const saved = await saveDraft(buildCurrentDraft(), { syncLocalState: true });
+    if (saved) {
+      await runAutoHealthCheck();
+    }
+  }
+
+  async function handleSaveModelSelection() {
+    const nextDraft = buildCurrentDraft({ defaultModel: draftModelSelection });
+    setDefaultModel(draftModelSelection);
+
+    if (!canPersistDraft(nextDraft)) {
+      setStatusMessage("Model selected. Finish the remaining fields to autosave this provider.");
+      setIsModelPickerOpen(false);
+      return;
+    }
+
+    const saved = await saveDraft(nextDraft, {
+      successMessage: "Model saved.",
+      syncLocalState: true
+    });
+    if (saved) {
+      await runAutoHealthCheck();
+      setIsModelPickerOpen(false);
+    }
+  }
+
+  const minimumFieldsPresent =
+    baseUrl.trim().length > 0 &&
+    defaultModel.trim().length > 0 &&
+    (!providerRequiresApiKey || Boolean(config?.has_api_key));
+  const savedProviderType = normalizeAIProviderType(config?.provider_type) ?? null;
+  const hasStoredApiKeyForSelectedProvider =
+    savedProviderType === providerType && Boolean(config?.has_api_key);
+  const hasUnsavedChanges =
+    savedProviderType !== providerType ||
+    (config?.base_url ?? "") !== baseUrl ||
+    (config?.default_model ?? "") !== defaultModel ||
+    (config?.is_enabled ?? true) !== isEnabled ||
+    apiKey.trim().length > 0;
+  const canRunHealthCheck =
+    featureEnabled &&
+    !isSaving &&
+    !isCheckingHealth &&
+    Boolean(config) &&
+    minimumFieldsPresent &&
+    !hasUnsavedChanges;
+  const effectiveHealthStatus = health?.status ?? config?.health_status ?? "unknown";
+  const effectiveHealthMessage =
+    health?.message ??
+    config?.health_error ??
+    (effectiveHealthStatus === "unknown" ? "No health check has been recorded yet." : "No issues reported.");
 
   return (
     <div className="stack" data-testid="admin-ai-config-page">
-      <section className="panel ai-settings-panel">
-        <div className="ai-settings-header">
-          <div className="stack compact-stack">
-            <p className="eyebrow">Instance AI Provider</p>
-            <h1>AI setup</h1>
-            <p className="section-copy">
-              Choose a provider, add credentials, check the connection, then pick the model Pantry
-              should use for suggestions.
-            </p>
-          </div>
-          <div className="ai-settings-save-indicator">
-            {saveState === "saving" ? <span className="pill">Saving…</span> : null}
-            {saveState === "saved" ? <span className="pill is-success">Saved</span> : null}
-            {saveState === "error" ? <span className="pill is-danger">Save failed</span> : null}
-          </div>
-        </div>
-
+      <section className="panel">
+        <p className="eyebrow">Instance AI Provider</p>
+        <h1>Provider Setup</h1>
+        <p>
+          The self hosted installation uses provider details configured here. Changes save
+          automatically, secrets are not shown after save, and secrets are never written to logs.
+        </p>
         {!featureEnabled ? (
           <p className="error-text">AI features are disabled for this deployment.</p>
         ) : null}
-        {feedback ? (
-          <p className={feedback.tone === "error" ? "error-text" : "status-note"}>{feedback.text}</p>
-        ) : null}
-
-        <div className="ai-setup-steps">
-          <article className="ai-setup-step">
-            <strong>1. Choose provider</strong>
-            <span>Built-in providers prefill the known API host.</span>
-          </article>
-          <article className="ai-setup-step">
-            <strong>2. Add credentials</strong>
-            <span>Changes autosave when fields blur or toggles change.</span>
-          </article>
-          <article className="ai-setup-step">
-            <strong>3. Check and choose model</strong>
-            <span>Pick a recommended or searched model after a successful connection.</span>
-          </article>
-        </div>
-
-        <div className="ai-provider-layout">
-          <div className="stack">
-            <label className="field">
-              <span>Provider</span>
-              <select
-                value={draft.providerType}
-                onChange={(event) => handleProviderChange(event.target.value as AIProviderType)}
-              >
-                {Object.entries(AI_PROVIDER_DEFINITIONS).map(([providerType, definition]) => (
-                  <option key={providerType} value={providerType}>
-                    {definition.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <div className="ai-provider-callout">
-              <strong>{getAIProviderLabel(draft.providerType)}</strong>
-              <p>{getProviderDescription(draft.providerType)}</p>
-              {providerDefinition.defaultBaseUrl ? (
-                <span className="pill">Default URL: {providerDefinition.defaultBaseUrl}</span>
-              ) : (
-                <span className="pill">Manual setup</span>
-              )}
+        {isSaving ? <p className="status-note">Saving changes...</p> : null}
+        {statusMessage ? <p className="status-note">{statusMessage}</p> : null}
+        {errorMessage ? <p className="error-text">{errorMessage}</p> : null}
+        <div className="content-grid ai-provider-top-grid">
+          <label className="field ai-provider-top-field">
+            <span>Provider type</span>
+            <select
+              className="ai-provider-field-control ai-provider-select"
+              value={providerType}
+              onChange={(event) => void handleProviderChange(event.target.value as AIProviderType)}
+            >
+              {AI_PROVIDER_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field ai-provider-top-field">
+            <span>Base URL</span>
+            <div className="ai-provider-readonly-value" aria-label="Base URL">
+              {baseUrl}
             </div>
-          </div>
-
-          <div className="stack">
-            <div className="content-grid">
-              <label className="field">
-                <span>Base URL</span>
-                <input
-                  value={draft.baseUrl}
-                  onChange={(event) => {
-                    setDraft((current) => ({ ...current, baseUrl: event.target.value }));
-                    setFeedback(null);
-                    markDirty(true);
-                  }}
-                  onBlur={() =>
-                    void enqueueSave({ ...draft }, apiKey, { successMessage: "Provider settings saved." })
-                  }
-                  placeholder={providerDefinition.defaultBaseUrl ?? "https://provider.example.com/v1"}
-                />
-              </label>
-
-              {draft.providerType === "custom" ? (
-                <label className="field">
-                  <span>Model</span>
-                  <input
-                    value={draft.defaultModel}
-                    onChange={(event) => {
-                      setDraft((current) => ({ ...current, defaultModel: event.target.value }));
-                      setFeedback(null);
-                      markDirty(false);
-                    }}
-                    onBlur={() =>
-                      void enqueueSave({ ...draft }, apiKey, { successMessage: "Provider settings saved." })
-                    }
-                    placeholder={getModelPlaceholder(draft.providerType)}
-                  />
-                </label>
-              ) : null}
-
-              {draft.providerType !== "ollama" ? (
-                <label className="field">
-                  <span>API key</span>
-                  <input
-                    type="password"
-                    value={apiKey}
-                    onChange={(event) => {
-                      setApiKey(event.target.value);
-                      setFeedback(null);
-                      markDirty(true);
-                    }}
-                    onBlur={() =>
-                      void enqueueSave({ ...draft }, apiKey, { successMessage: "Provider settings saved." })
-                    }
-                    placeholder={
-                      hasStoredApiKey
-                        ? "Stored. Enter a new key to replace it."
-                        : requiresApiKey
-                          ? "Required"
-                          : "Optional"
-                    }
-                  />
-                </label>
-              ) : (
-                <div className="ai-provider-callout is-muted">
-                  <strong>No API key needed</strong>
-                  <p>Ollama connections use the configured host directly.</p>
-                </div>
-              )}
+          </label>
+          <label className="field ai-provider-top-field">
+            <span>Default model</span>
+            <div className="ai-provider-readonly-value" aria-label="Default model">
+              {defaultModel || getDefaultModel(providerType)}
             </div>
-
-            {draft.providerType !== "ollama" && hasStoredApiKey ? (
-              <p className="helper-text">An API key is stored for this provider. Leave the field blank to keep it.</p>
-            ) : null}
-
-            <label className="checkbox-row">
-              <input
-                type="checkbox"
-                checked={draft.isEnabled}
-                onChange={(event) => handleEnabledChange(event.target.checked)}
-              />
-              <span>Enable this provider for household AI suggestions.</span>
-            </label>
-
-            {draft.providerType !== "custom" ? (
-              <div className="ai-model-summary">
-                <div className="stack compact-stack">
-                  <span className="eyebrow">Default Model</span>
-                  <strong>{draft.defaultModel || "No model selected yet"}</strong>
-                  <p className="helper-text">
-                    {draft.defaultModel
-                      ? "You can re-run the connection check to review fetched models and switch later."
-                      : getModelPlaceholder(draft.providerType)}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  className="ghost-button"
-                  disabled={!canOpenModelPicker}
-                  onClick={() => setIsModelPickerOpen(true)}
-                >
-                  {getProviderButtonLabel(draft.providerType)}
-                </button>
-              </div>
-            ) : null}
-
-            <div className="page-actions">
+            <div className="ai-provider-model-action">
               <button
                 type="button"
-                className="primary-button"
-                disabled={isCheckingConnection || !connectionReady}
-                onClick={() => void handleCheckConnection()}
+                className="ghost-button"
+                onClick={() => {
+                  setModelQuery(defaultModel);
+                  setDraftModelSelection(defaultModel);
+                  setIsModelPickerOpen(true);
+                }}
               >
-                {isCheckingConnection ? "Checking..." : "Check connection"}
+                Choose model
               </button>
             </div>
+          </label>
+          <label className="field ai-provider-top-field">
+            <span>API key</span>
+            <input
+              className="ai-provider-field-control"
+              type="password"
+              value={apiKey}
+              onChange={(event) => setApiKey(event.target.value)}
+              onBlur={() => void handleApiKeyBlur()}
+              placeholder={
+                hasStoredApiKeyForSelectedProvider
+                  ? "Stored. Enter a new key to replace it."
+                  : providerRequiresApiKey
+                    ? `${AI_PROVIDER_LABELS[providerType]} requires an API key`
+                    : "Not required for Ollama"
+              }
+            />
+          </label>
+        </div>
+        <div className="stack" style={{ gap: "0.75rem", marginTop: "1rem" }}>
+          <label className="checkbox-row" style={{ margin: 0 }}>
+            <input
+              type="checkbox"
+              checked={isEnabled}
+              onChange={(event) => void handleEnabledChange(event.target.checked)}
+            />
+            <span>Enable this provider for household AI requests.</span>
+          </label>
+          <div className="page-actions" style={{ justifyContent: "flex-start" }}>
+            <button
+              type="button"
+              className="ghost-button"
+              disabled={!canRunHealthCheck}
+              onClick={() => void handleHealthCheck()}
+            >
+              {isCheckingHealth ? "Checking..." : "Run health check"}
+            </button>
           </div>
         </div>
+        {!minimumFieldsPresent ? (
+          <p className="status-note">
+            Add a base URL and {providerRequiresApiKey ? "save an API key" : "finish autosaving"} before running the health check.
+          </p>
+        ) : hasUnsavedChanges ? (
+          <p className="status-note">
+            Health check uses the current autosaved configuration. Finish autosaving the latest
+            changes first.
+          </p>
+        ) : null}
       </section>
 
       <section className="status-grid">
         <article className="status-card">
-          <p className="eyebrow">Provider</p>
-          <h2>{config ? getAIProviderLabel(config.provider_type) : "Not saved yet"}</h2>
-          <p>{config ? config.base_url : "Choose a provider and Pantry will autosave the configuration."}</p>
+          <p className="eyebrow">Configured Provider</p>
+          <h2>{getAIProviderLabel(config?.provider_type)}</h2>
+          <p>{config ? `${config.base_url} · ${config.default_model}` : "No provider configured yet."}</p>
         </article>
         <article className="status-card">
-          <p className="eyebrow">Connection</p>
-          <h2>{health?.status ?? config?.health_status ?? "unknown"}</h2>
-          <p>{health?.message ?? config?.health_error ?? "Run a connection check to confirm access and fetch models."}</p>
+          <p className="eyebrow">Health</p>
+          <h2>{effectiveHealthStatus}</h2>
+          <p>{effectiveHealthMessage}</p>
         </article>
         <article className="status-card">
-          <p className="eyebrow">Model</p>
-          <h2>{draft.defaultModel || "Not selected"}</h2>
-          <p>
-            {draft.defaultModel
-              ? "This is the model Pantry will use for AI suggestions."
-              : "No model has been selected yet."}
-          </p>
+          <p className="eyebrow">Models</p>
+          <h2>{String(health?.models.length ?? config?.available_model_count ?? 0)}</h2>
+          <p>Run health check to refresh the searchable model list for this provider.</p>
         </article>
       </section>
 
       {isModelPickerOpen ? (
-        <AdminAIModelPickerModal
-          providerType={draft.providerType}
-          availableModels={availableModels}
-          selectedModel={draft.defaultModel}
-          isSaving={isSaving}
+        <ModalShell
+          title={`Choose ${AI_PROVIDER_LABELS[providerType]} model`}
+          description="Search the discovered models or enter a model name manually. Save is the only explicit confirmation step on this page."
           onClose={() => setIsModelPickerOpen(false)}
-          onConfirm={(model) => handleModelSave(model)}
-        />
+          closeOnBackdropClick={false}
+          showCloseButton={false}
+          panelClassName="modal-panel modal-panel-wide"
+        >
+          <div className="stack">
+            <label className="field">
+              <span>Model name</span>
+              <input
+                value={draftModelSelection}
+                onChange={(event) => {
+                  setDraftModelSelection(event.target.value);
+                  setModelQuery(event.target.value);
+                }}
+                placeholder={getDefaultModel(providerType)}
+                autoFocus
+              />
+            </label>
+
+            <section className="panel">
+              <p className="eyebrow">Available Models</p>
+              {filteredModels.length > 0 ? (
+                <div className="tag-row">
+                  {filteredModels.map((model) => (
+                    <button
+                      key={model}
+                      type="button"
+                      className="ghost-button"
+                      onClick={() => {
+                        setDraftModelSelection(model);
+                        setModelQuery(model);
+                      }}
+                    >
+                      {model}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="status-note">
+                  {availableModels.length > 0
+                    ? "No discovered models match the current search."
+                    : "Run health check to populate the discovered model list, or enter a model manually."}
+                </p>
+              )}
+            </section>
+
+            <div className="page-actions">
+              <button
+                type="button"
+                className="ghost-button"
+                disabled={isSaving}
+                onClick={() => setIsModelPickerOpen(false)}
+              >
+                Back
+              </button>
+              <button
+                type="button"
+                className="primary-button"
+                disabled={isSaving || !draftModelSelection.trim()}
+                onClick={() => void handleSaveModelSelection()}
+              >
+                {isSaving ? "Saving..." : "Save"}
+              </button>
+            </div>
+          </div>
+        </ModalShell>
       ) : null}
     </div>
   );

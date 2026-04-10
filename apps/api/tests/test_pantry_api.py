@@ -5,12 +5,16 @@ from decimal import Decimal
 
 from sqlalchemy import select
 
+from app.domain.ai import AI_PROVIDER_OLLAMA
 from app.domain.roles import HOUSEHOLD_ADMIN_ROLE, HOUSEHOLD_USER_ROLE
 from app.models.audit_event import AuditEvent
 from app.models.product_enrichment import ProductEnrichment
+from app.models.product_intelligence import ProductIntelligence
 from app.schemas.pantry import ProductEnrichmentAttribution, ProductEnrichmentCandidate, ProductNutritionSummaryItem
 from app.models.stock_lot import StockLot
-from app.services.auth import create_household, create_membership, create_user
+from app.services.ai_config import upsert_instance_provider_config
+from app.services.ai_providers import AIProviderHealth, StructuredCompletionResult
+from app.services.auth import create_household, create_membership, create_platform_admin, create_user
 from app.services.pantry_catalog import create_location as create_location_record
 from app.services.pantry_catalog import create_location_group as create_location_group_record
 from app.services.pantry_catalog import create_product as create_product_record
@@ -141,6 +145,88 @@ def build_enrichment_candidate(
     )
 
 
+class StubProductIntelligenceAdapter:
+    def generate_structured_output(self, request) -> StructuredCompletionResult:
+        product_name = request.user_payload["product"]["product"]["name"]
+        if "sauce" in product_name.lower():
+            output = {
+                "confidence": 0.92,
+                "rationale_short": "Condiment evidence is clear from the product and enrichment data.",
+                "primary_ingredient_type": "Tomato",
+                "ingredient_families": ["Tomato", "Vinegar"],
+                "food_category": "Condiment",
+                "dietary_tags": ["Vegetarian"],
+                "allergen_tags": ["Gluten"],
+                "recipe_role_tags": ["Sauce", "Seasoning"],
+                "substitution_groups": ["Brown sauce"],
+                "pantry_use_tags": ["Pantry staple", "Sauce builder", "Shelf stable"],
+                "structured_metadata": {
+                    "product_format": "Bottled sauce",
+                    "storage_profile": "Shelf stable",
+                    "cuisine_tags": ["British"],
+                    "flavour_tags": ["Tangy", "Savoury"],
+                    "preparation_tags": ["Ready to use"],
+                },
+            }
+        else:
+            output = {
+                "confidence": 0.88,
+                "rationale_short": "Core pantry staple with a clear starch role.",
+                "primary_ingredient_type": "Wheat",
+                "ingredient_families": ["Wheat"],
+                "food_category": "Dry pasta",
+                "dietary_tags": [],
+                "allergen_tags": ["Gluten"],
+                "recipe_role_tags": ["Carbohydrate", "Base"],
+                "substitution_groups": ["Pasta"],
+                "pantry_use_tags": ["Pantry staple", "Quick meal", "Shelf stable"],
+                "structured_metadata": {
+                    "product_format": "Dried",
+                    "storage_profile": "Shelf stable",
+                    "cuisine_tags": ["Italian"],
+                    "flavour_tags": ["Neutral"],
+                    "preparation_tags": ["Boil"],
+                },
+            }
+        return StructuredCompletionResult(
+            output_text=str(output),
+            parsed_output=output,
+            provider_request_id="req_product_intelligence_stub",
+        )
+
+
+def install_stub_product_intelligence_provider(db_session, monkeypatch) -> None:
+    platform_admin = create_platform_admin(
+        db_session,
+        email="platform-admin@example.com",
+        password=PASSWORD,
+        display_name="Platform Admin",
+    )
+    upsert_instance_provider_config(
+        db_session,
+        actor=platform_admin,
+        provider_type=AI_PROVIDER_OLLAMA,
+        base_url="http://ollama.test",
+        default_model="llama3.2",
+        api_key=None,
+        is_enabled=True,
+    )
+    monkeypatch.setattr(
+        "app.services.product_intelligence.refresh_provider_health",
+        lambda db, config: AIProviderHealth(
+            is_healthy=True,
+            status="healthy",
+            message=None,
+            models=["llama3.2"],
+            capabilities={"supports_structured_output": True},
+        ),
+    )
+    monkeypatch.setattr(
+        "app.services.product_intelligence.build_ai_provider_adapter",
+        lambda runtime: StubProductIntelligenceAdapter(),
+    )
+
+
 def test_pantry_overview_aggregates_and_supports_search_and_filters(client, db_session):
     user, household = create_household_with_role(
         db_session,
@@ -265,6 +351,124 @@ def test_pantry_overview_aggregates_and_supports_search_and_filters(client, db_s
     near_expiry_payload = near_expiry.json()
     assert len(near_expiry_payload["lots"]) == 1
     assert near_expiry_payload["lots"][0]["location_name"] == "Top Shelf"
+
+
+def test_product_intelligence_run_supports_product_and_unclassified_modes(client, db_session, monkeypatch):
+    _, household = create_household_with_role(
+        db_session,
+        email="classification@example.com",
+        household_name="Classification Household",
+        role_code=HOUSEHOLD_ADMIN_ROLE,
+    )
+    install_stub_product_intelligence_provider(db_session, monkeypatch)
+    login(client, email="classification@example.com")
+
+    sauce = create_product(
+        client,
+        household.external_id,
+        name="Brown sauce",
+        default_unit="bottle",
+        aliases=["HP sauce"],
+        barcodes=["5000111046244"],
+        manual_ingredient_tags=["Tomatoes", "Vinegar"],
+    )
+    pasta = create_product(
+        client,
+        household.external_id,
+        name="Pasta",
+        default_unit="pack",
+        aliases=["Spaghetti"],
+        barcodes=[],
+    )
+
+    initial_status = client.get(f"/api/households/{household.external_id}/product-intelligence/status")
+    assert initial_status.status_code == 200
+    assert initial_status.json()["counts"] == {
+        "total_product_count": 2,
+        "classified_product_count": 0,
+        "stale_product_count": 0,
+        "unclassified_product_count": 2,
+    }
+
+    product_run = client.post(
+        f"/api/households/{household.external_id}/product-intelligence/classify",
+        json={"mode": "product", "product_external_id": sauce["external_id"]},
+    )
+    assert product_run.status_code == 200
+    product_run_payload = product_run.json()
+    assert product_run_payload["classified_count"] == 1
+    assert product_run_payload["skipped_count"] == 0
+    assert product_run_payload["items"][0]["status"] == "classified"
+    assert product_run_payload["items"][0]["intelligence"]["food_category"] == "Condiment"
+
+    intelligence_record = db_session.scalar(select(ProductIntelligence).where(ProductIntelligence.product_id.is_not(None)))
+    assert intelligence_record is not None
+    assert intelligence_record.food_category == "Condiment"
+
+    unclassified_run = client.post(
+        f"/api/households/{household.external_id}/product-intelligence/classify",
+        json={"mode": "unclassified"},
+    )
+    assert unclassified_run.status_code == 200
+    unclassified_payload = unclassified_run.json()
+    assert unclassified_payload["total_candidates"] == 2
+    assert unclassified_payload["classified_count"] == 1
+    assert unclassified_payload["skipped_count"] == 1
+    assert {item["status"] for item in unclassified_payload["items"]} == {"classified", "skipped"}
+
+    overview = client.get(f"/api/households/{household.external_id}/pantry/overview")
+    assert overview.status_code == 200
+    products = overview.json()["products"]
+    intelligence_by_name = {item["product_name"]: item["intelligence"] for item in products}
+    assert intelligence_by_name["Brown sauce"]["food_category"] == "Condiment"
+    assert intelligence_by_name["Pasta"]["food_category"] == "Dry pasta"
+
+
+def test_product_intelligence_marks_stale_after_material_product_update(client, db_session, monkeypatch):
+    _, household = create_household_with_role(
+        db_session,
+        email="classification-stale@example.com",
+        household_name="Classification Stale Household",
+        role_code=HOUSEHOLD_ADMIN_ROLE,
+    )
+    install_stub_product_intelligence_provider(db_session, monkeypatch)
+    login(client, email="classification-stale@example.com")
+
+    product = create_product(
+        client,
+        household.external_id,
+        name="Brown sauce",
+        default_unit="bottle",
+        aliases=[],
+        barcodes=["5000111046244"],
+        manual_ingredient_tags=["Tomatoes"],
+    )
+
+    classify = client.post(
+        f"/api/households/{household.external_id}/product-intelligence/classify",
+        json={"mode": "product", "product_external_id": product["external_id"]},
+    )
+    assert classify.status_code == 200
+
+    updated = update_product(
+        client,
+        household.external_id,
+        product["external_id"],
+        name="Brown sauce",
+        default_unit="bottle",
+        aliases=["Breakfast sauce"],
+        barcodes=["5000111046244"],
+        notes="Use on bacon rolls.",
+        manual_ingredient_tags=["Tomatoes", "Vinegar"],
+    )
+    assert updated["intelligence"]["is_stale"] is True
+    assert "source_product_data_changed" in updated["intelligence"]["stale_reasons"]
+
+    overview = client.get(f"/api/households/{household.external_id}/pantry/overview")
+    assert overview.status_code == 200
+    intelligence = overview.json()["catalog_products"][0]["intelligence"]
+    assert intelligence["is_stale"] is True
+    assert "source_product_data_changed" in intelligence["stale_reasons"]
 
 
 def test_pantry_overview_supports_product_pagination_metadata(client, db_session):

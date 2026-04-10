@@ -45,6 +45,8 @@ def build_suggestion_prompt_plan(
             f"{_goal_copy(request.kind)} "
             "Return valid JSON only. Keep every suggestion advisory and read-only. "
             "Do not claim to modify inventory, recipes, or imports. "
+            "Prefer classified pantry products over fallback name-based product data whenever both are available. "
+            "Use dietary tags, ingredient families, recipe roles, and substitution groups directly when they are present. "
             "Use the structured pantry and recipe context exactly as provided."
         ),
         user_payload={
@@ -54,6 +56,8 @@ def build_suggestion_prompt_plan(
                 "notes": [
                     "Populate suggestions with concise, structured advisory items.",
                     "Prefer pantry products already present in the context.",
+                    "Use pantry.classified_products before pantry.fallback_products when choosing pantry matches.",
+                    "Use household dietary preferences and classified dietary tags efficiently instead of inferring from names.",
                     "Only include substitution ideas when they fit naturally.",
                 ],
             },

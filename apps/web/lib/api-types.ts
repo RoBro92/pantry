@@ -1,3 +1,5 @@
+import type { AIProviderType } from "./ai-provider-config";
+
 export type SessionMembership = {
   external_id: string;
   household_external_id: string;
@@ -142,7 +144,7 @@ export type SetupWizardDietaryUserSummary = {
 };
 
 export type SetupWizardAIConfigSummary = {
-  provider_type: "openai" | "claude" | "ollama" | "custom" | null;
+  provider_type: AIProviderType | null;
   base_url: string | null;
   default_model: string | null;
   is_enabled: boolean;
@@ -201,7 +203,7 @@ export type PublicBaseURLSummary = {
 export type AIProviderConfigSummary = {
   external_id: string;
   scope_type: string;
-  provider_type: "openai" | "claude" | "ollama" | "custom";
+  provider_type: AIProviderType;
   base_url: string;
   default_model: string;
   is_enabled: boolean;
@@ -232,6 +234,124 @@ export type AIProviderHealthResponse = {
   feature_enabled: boolean;
   config: AIProviderConfigSummary;
   health: AIProviderHealthSummary;
+};
+
+export type AIHouseholdMemberSummary = {
+  user_external_id: string;
+  display_name: string;
+  dietary_preferences: string[];
+};
+
+export type AIMealPlannerPantrySummary = {
+  pantry_product_count: number;
+  active_lot_count: number;
+  near_expiry_lot_count: number;
+  near_expiry_product_names: string[];
+  local_recipe_count: number;
+};
+
+export type AIMealPlannerResponse = {
+  household_external_id: string;
+  household_name: string;
+  feature: AIFeatureStatus;
+  household_dietary_preferences: string[];
+  members: AIHouseholdMemberSummary[];
+  pantry_summary: AIMealPlannerPantrySummary;
+};
+
+export type AIMealSuggestionRequest = {
+  people_count: number;
+  selected_user_external_ids: string[];
+  meal_type: "breakfast" | "lunch" | "dinner";
+  extra_portion_count: number;
+  max_total_minutes: number | null;
+  prioritize_near_expiry: boolean;
+  allow_extra_ingredients: boolean;
+  pantry_only: boolean;
+  temporary_include_preferences: string[];
+  temporary_exclude_preferences: string[];
+  removed_preference_pills: string[];
+};
+
+export type AIMealSuggestionContextSnapshot = {
+  pantry_product_count: number;
+  active_lot_count: number;
+  near_expiry_lot_count: number;
+  selected_user_count: number;
+  effective_preference_count: number;
+  candidate_recipe_count: number;
+  pantry_only: boolean;
+};
+
+export type AIMealSuggestionSourceMetadata = {
+  kind: "ai_generated" | "household_recipe_reference" | "external_recipe_reference";
+  label: string;
+  recipe_external_id: string | null;
+  recipe_title: string | null;
+  recipe_url: string | null;
+  provider_name: string | null;
+};
+
+export type AIMealSuggestionIngredient = {
+  id: string;
+  name: string;
+  quantity: string;
+  unit: string;
+  note: string | null;
+  pantry_product_external_id: string | null;
+  pantry_product_name: string | null;
+  pantry_match_source: string | null;
+  availability_status: "available" | "partial" | "missing" | "unmatched" | "unit_mismatch";
+  pantry_available_quantity: string;
+  covered_quantity: string;
+  missing_quantity: string;
+  uses_near_expiry_item: boolean;
+  is_extra_ingredient: boolean;
+  can_consume_from_pantry: boolean;
+};
+
+export type AIMealSuggestion = {
+  id: string;
+  title: string;
+  short_summary: string;
+  why_it_matches: string;
+  total_time_minutes: number | null;
+  pantry_ingredients_available: string[];
+  extra_ingredients_needed: string[];
+  dietary_fit_summary: string;
+  near_expiry_note: string | null;
+  source: AIMealSuggestionSourceMetadata;
+  ingredients: AIMealSuggestionIngredient[];
+  steps: string[];
+};
+
+export type AIMealSuggestionResponse = {
+  household_external_id: string;
+  feature: AIFeatureStatus;
+  request: AIMealSuggestionRequest;
+  context_snapshot: AIMealSuggestionContextSnapshot;
+  suggestions: AIMealSuggestion[];
+  generated_at: string;
+};
+
+export type CompletedAIMealSuggestionIngredient = {
+  ingredient_id: string;
+  name: string;
+  unit: string;
+  requested_quantity: string;
+  consumed_quantity: string;
+  pantry_product_external_id: string | null;
+  pantry_product_name: string | null;
+  status: "consumed" | "partially_consumed" | "skipped" | "missing";
+  note: string | null;
+};
+
+export type CompleteAIMealSuggestionResponse = {
+  completed: boolean;
+  suggestion_id: string;
+  suggestion_title: string;
+  consumed_ingredients: CompletedAIMealSuggestionIngredient[];
+  warnings: string[];
 };
 
 export type SMTPConfigValue = {
@@ -295,12 +415,6 @@ export type SMTPTestEmailResponse = {
   message: string;
   delivered_to: string;
   config: SMTPConfigResponse;
-};
-
-export type SetupSMTPTestResponse = {
-  ok: boolean;
-  status: string;
-  message: string | null;
 };
 
 export type PasswordActionResponse = {
@@ -488,131 +602,6 @@ export type AISuggestionResponse = {
   generated_at: string;
 };
 
-export type AIHouseholdMemberSummary = {
-  user_external_id: string;
-  display_name: string;
-  dietary_preferences: string[];
-};
-
-export type AIMealPlannerResponse = {
-  household_external_id: string;
-  household_name: string;
-  feature: AIFeatureStatus;
-  household_dietary_preferences: string[];
-  members: AIHouseholdMemberSummary[];
-  pantry_summary: {
-    pantry_product_count: number;
-    active_lot_count: number;
-    near_expiry_lot_count: number;
-    near_expiry_product_names: string[];
-    local_recipe_count: number;
-  };
-};
-
-export type AIMealSuggestionIngredient = {
-  id: string;
-  name: string;
-  quantity: string;
-  unit: string;
-  note: string | null;
-  pantry_product_external_id: string | null;
-  pantry_product_name: string | null;
-  pantry_match_source: string | null;
-  availability_status: "available" | "partial" | "missing" | "unmatched" | "unit_mismatch";
-  pantry_available_quantity: string;
-  covered_quantity: string;
-  missing_quantity: string;
-  uses_near_expiry_item: boolean;
-  is_extra_ingredient: boolean;
-  can_consume_from_pantry: boolean;
-};
-
-export type AIMealSuggestionSourceMetadata = {
-  kind: "ai_generated" | "household_recipe_reference" | "external_recipe_reference";
-  label: string;
-  recipe_external_id: string | null;
-  recipe_title: string | null;
-  recipe_url: string | null;
-  provider_name: string | null;
-};
-
-export type AIMealSuggestion = {
-  id: string;
-  title: string;
-  short_summary: string;
-  why_it_matches: string;
-  total_time_minutes: number | null;
-  pantry_ingredients_available: string[];
-  extra_ingredients_needed: string[];
-  dietary_fit_summary: string;
-  near_expiry_note: string | null;
-  source: AIMealSuggestionSourceMetadata;
-  ingredients: AIMealSuggestionIngredient[];
-  steps: string[];
-};
-
-export type AIMealSuggestionRequest = {
-  people_count: number;
-  selected_user_external_ids: string[];
-  meal_type: "breakfast" | "lunch" | "dinner";
-  extra_portion_count: number;
-  max_total_minutes: number | null;
-  prioritize_near_expiry: boolean;
-  allow_extra_ingredients: boolean;
-  pantry_only: boolean;
-  temporary_include_preferences: string[];
-  temporary_exclude_preferences: string[];
-  removed_preference_pills: string[];
-};
-
-export type AIMealSuggestionResponse = {
-  household_external_id: string;
-  feature: AIFeatureStatus;
-  request: AIMealSuggestionRequest;
-  context_snapshot: {
-    pantry_product_count: number;
-    active_lot_count: number;
-    near_expiry_lot_count: number;
-    selected_user_count: number;
-    effective_preference_count: number;
-    candidate_recipe_count: number;
-    pantry_only: boolean;
-  };
-  suggestions: AIMealSuggestion[];
-  generated_at: string;
-};
-
-export type CompleteAIMealSuggestionRequest = {
-  suggestion_id: string;
-  suggestion_title: string;
-  ingredients: Array<{
-    ingredient_id: string;
-    name: string;
-    quantity: string;
-    unit: string;
-    pantry_product_external_id: string | null;
-    consume_quantity: string;
-  }>;
-};
-
-export type CompleteAIMealSuggestionResponse = {
-  completed: boolean;
-  suggestion_id: string;
-  suggestion_title: string;
-  consumed_ingredients: Array<{
-    ingredient_id: string;
-    name: string;
-    unit: string;
-    requested_quantity: string;
-    consumed_quantity: string;
-    pantry_product_external_id: string | null;
-    pantry_product_name: string | null;
-    status: "consumed" | "partially_consumed" | "skipped" | "missing";
-    note: string | null;
-  }>;
-  warnings: string[];
-};
-
 export type PantryLocationGroupSummary = {
   external_id: string;
   name: string;
@@ -681,6 +670,81 @@ export type ProductEnrichmentSummary = {
   attribution: ProductEnrichmentAttribution;
 };
 
+export type ProductIntelligenceStructuredMetadata = {
+  product_format: string | null;
+  storage_profile: string | null;
+  cuisine_tags: string[];
+  flavour_tags: string[];
+  preparation_tags: string[];
+};
+
+export type ProductIntelligenceSummary = {
+  source_provider: string;
+  source_model: string | null;
+  classification_scope: string;
+  classification_version: string;
+  schema_version: string;
+  classified_at: string;
+  confidence: number | null;
+  rationale_short: string | null;
+  primary_ingredient_type: string | null;
+  ingredient_families: string[];
+  food_category: string | null;
+  dietary_tags: string[];
+  allergen_tags: string[];
+  recipe_role_tags: string[];
+  substitution_groups: string[];
+  pantry_use_tags: string[];
+  structured_metadata: ProductIntelligenceStructuredMetadata;
+  is_stale: boolean;
+  stale_reasons: string[];
+};
+
+export type ProductIntelligenceStatusResponse = {
+  available: boolean;
+  reason: string | null;
+  provider_type: string | null;
+  default_model: string | null;
+  health_status: string | null;
+  classification_scope: string;
+  classification_version: string;
+  schema_version: string;
+  counts: {
+    total_product_count: number;
+    classified_product_count: number;
+    stale_product_count: number;
+    unclassified_product_count: number;
+  };
+};
+
+export type ProductIntelligenceRunItem = {
+  product_external_id: string;
+  product_name: string;
+  status: string;
+  message: string;
+  confidence: number | null;
+  stale_before_run: boolean;
+  intelligence: ProductIntelligenceSummary | null;
+};
+
+export type ProductIntelligenceRunResponse = {
+  mode: string;
+  available: boolean;
+  provider_type: string | null;
+  default_model: string | null;
+  classification_scope: string;
+  classification_version: string;
+  schema_version: string;
+  total_candidates: number;
+  classified_count: number;
+  skipped_count: number;
+  failed_count: number;
+  stale_reclassified_count: number;
+  items: ProductIntelligenceRunItem[];
+  started_at: string;
+  completed_at: string;
+};
+
 export type PantryConfirmedEnrichmentRequest = {
   source_name: string;
   source_product_id: string;
@@ -741,6 +805,7 @@ export type PantryProductSummary = {
   barcodes: string[];
   is_in_shopping_list: boolean;
   enrichment: ProductEnrichmentSummary | null;
+  intelligence: ProductIntelligenceSummary | null;
   locations: PantryProductLocationSummary[];
   stock_lots: PantryStockLotSummary[];
 };
@@ -754,6 +819,7 @@ export type PantryCatalogProductSummary = {
   notes: string | null;
   manual_ingredient_tags: string[];
   enrichment: ProductEnrichmentSummary | null;
+  intelligence: ProductIntelligenceSummary | null;
 };
 
 export type PantryStockLotSummary = {

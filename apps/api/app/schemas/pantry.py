@@ -96,6 +96,38 @@ class ProductEnrichmentSummary(BaseModel):
     attribution: ProductEnrichmentAttribution
 
 
+class ProductIntelligenceStructuredMetadata(BaseModel):
+    product_format: str | None = None
+    storage_profile: str | None = None
+    cuisine_tags: list[str] = Field(default_factory=list)
+    flavour_tags: list[str] = Field(default_factory=list)
+    preparation_tags: list[str] = Field(default_factory=list)
+
+
+class ProductIntelligenceSummary(BaseModel):
+    source_provider: str
+    source_model: str | None = None
+    classification_scope: str
+    classification_version: str
+    schema_version: str
+    classified_at: datetime
+    confidence: float | None = None
+    rationale_short: str | None = None
+    primary_ingredient_type: str | None = None
+    ingredient_families: list[str] = Field(default_factory=list)
+    food_category: str | None = None
+    dietary_tags: list[str] = Field(default_factory=list)
+    allergen_tags: list[str] = Field(default_factory=list)
+    recipe_role_tags: list[str] = Field(default_factory=list)
+    substitution_groups: list[str] = Field(default_factory=list)
+    pantry_use_tags: list[str] = Field(default_factory=list)
+    structured_metadata: ProductIntelligenceStructuredMetadata = Field(
+        default_factory=ProductIntelligenceStructuredMetadata
+    )
+    is_stale: bool = False
+    stale_reasons: list[str] = Field(default_factory=list)
+
+
 class ConfirmedProductEnrichmentRequest(BaseModel):
     source_name: str
     source_product_id: str
@@ -202,6 +234,7 @@ class ProductSummary(BaseModel):
     notes: str | None = None
     manual_ingredient_tags: list[str] = Field(default_factory=list)
     enrichment: ProductEnrichmentSummary | None = None
+    intelligence: ProductIntelligenceSummary | None = None
 
 
 class DeleteProductResponse(BaseModel):
@@ -233,8 +266,61 @@ class PantryProductSummary(BaseModel):
     barcodes: list[str]
     is_in_shopping_list: bool = False
     enrichment: ProductEnrichmentSummary | None = None
+    intelligence: ProductIntelligenceSummary | None = None
     locations: list[ProductLocationSummary]
     stock_lots: list["StockLotSummary"]
+
+
+class ProductIntelligenceStatusCounts(BaseModel):
+    total_product_count: int
+    classified_product_count: int
+    stale_product_count: int
+    unclassified_product_count: int
+
+
+class ProductIntelligenceStatusResponse(BaseModel):
+    available: bool
+    reason: str | None = None
+    provider_type: str | None = None
+    default_model: str | None = None
+    health_status: str | None = None
+    counts: ProductIntelligenceStatusCounts
+    classification_scope: str
+    classification_version: str
+    schema_version: str
+
+
+class ProductIntelligenceRunRequest(BaseModel):
+    mode: str = Field(pattern="^(unclassified|all|product)$")
+    product_external_id: str | None = None
+
+
+class ProductIntelligenceRunItem(BaseModel):
+    product_external_id: str
+    product_name: str
+    status: str
+    message: str
+    confidence: float | None = None
+    stale_before_run: bool = False
+    intelligence: ProductIntelligenceSummary | None = None
+
+
+class ProductIntelligenceRunResponse(BaseModel):
+    mode: str
+    available: bool
+    provider_type: str | None = None
+    default_model: str | None = None
+    classification_scope: str
+    classification_version: str
+    schema_version: str
+    total_candidates: int
+    classified_count: int
+    skipped_count: int
+    failed_count: int
+    stale_reclassified_count: int
+    items: list[ProductIntelligenceRunItem] = Field(default_factory=list)
+    started_at: datetime
+    completed_at: datetime
 
 
 class ProductMatchSummary(BaseModel):

@@ -750,15 +750,66 @@ test("ai flow covers unconfigured and configured-but-unavailable states", async 
     email: manifest.admin_email,
     password: manifest.password
   });
+  await dismissAdminWhatsNewIfVisible(page);
 
   await page.goto("/admin/ai");
-  await page.getByLabel("Base URL").fill("http://api:9");
-  await page.getByLabel("Default model").fill("llama3.2");
-  await page.getByRole("button", { name: "Save configuration" }).click();
-  await expect(page.getByText("Provider configuration saved.")).toBeVisible();
+  const providerType = page.getByLabel("Provider type");
+  const baseUrlField = page.getByLabel("Base URL");
+  const defaultModelField = page.getByLabel("Default model");
+  const apiKeyField = page.getByLabel("API key");
+  await expect(page.getByRole("button", { name: "Save configuration" })).toHaveCount(0);
+  await expect(providerType.locator("option")).toHaveText(["OpenAI", "Claude", "Gemini", "Ollama"]);
+  await expect(baseUrlField).toHaveValue("http://localhost:11434");
+  await expect(defaultModelField).toHaveValue("llama3.2");
+
+  const providerBox = await providerType.boundingBox();
+  const baseUrlBox = await baseUrlField.boundingBox();
+  const defaultModelBox = await defaultModelField.boundingBox();
+  const apiKeyBox = await apiKeyField.boundingBox();
+  expect(providerBox?.height).toBe(baseUrlBox?.height);
+  expect(baseUrlBox?.height).toBe(defaultModelBox?.height);
+  expect(defaultModelBox?.height).toBe(apiKeyBox?.height);
+
+  await providerType.selectOption({ label: "OpenAI" });
+  await expect(baseUrlField).toHaveValue("https://api.openai.com/v1");
+  await expect(defaultModelField).toHaveValue("gpt-4o-mini");
+  await expect(page.getByRole("button", { name: "Run health check" })).toBeDisabled();
+
+  await page.getByRole("button", { name: "Choose model" }).click();
+  await expect(page.getByRole("button", { name: "Back" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Close" })).toHaveCount(0);
+  await expect(page.getByLabel("Model name")).toHaveValue("gpt-4o-mini");
+  await page.getByLabel("Model name").fill("gpt-4.1-mini");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(defaultModelField).toHaveValue("gpt-4.1-mini");
+  await expect(page.getByRole("button", { name: "Run health check" })).toBeDisabled();
+
+  await apiKeyField.fill("test-openai-key");
+  await page.keyboard.press("Tab");
+  await expect(page.getByText("Health check failed.")).toBeVisible();
+
+  await providerType.selectOption({ label: "Ollama" });
+  await expect(baseUrlField).toHaveValue("http://localhost:11434");
+  await expect(defaultModelField).toHaveValue("llama3.2");
+
+  await page.getByRole("button", { name: "Choose model" }).click();
+  await page.getByLabel("Model name").fill("llama3.2");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByText("Model saved.")).toBeVisible();
+
+  await baseUrlField.fill("http://api:9");
+  await page.keyboard.press("Tab");
+  await expect(page.getByRole("button", { name: "Run health check" })).toBeEnabled();
 
   await page.getByRole("button", { name: "Run health check" }).click();
   await expect(page.getByText("Health check failed.")).toBeVisible();
+
+  await page.goto("/admin");
+  await page.goto("/admin/ai");
+  await expect(providerType).toHaveValue("ollama");
+  await expect(baseUrlField).toHaveValue("http://api:9");
+  await expect(page.getByRole("button", { name: "Save configuration" })).toHaveCount(0);
 
   await page.getByRole("button", { name: "Logout" }).click();
   await loginThroughApi(page, {

@@ -9,6 +9,7 @@ from app.domain.ai import AI_PROVIDER_OLLAMA
 from app.domain.roles import HOUSEHOLD_ADMIN_ROLE
 from app.models.audit_event import AuditEvent
 from app.models.product import Product
+from app.models.product_intelligence import ProductIntelligence
 from app.models.stock_lot import StockLot
 from app.schemas.pantry import ConfirmedProductEnrichmentRequest
 from app.schemas.ai import AISuggestionRequest
@@ -17,6 +18,12 @@ from app.services.ai_context import build_household_ai_context
 from app.services.product_enrichment import apply_confirmed_product_enrichment
 from app.services.ai_providers import AIProviderHealth, StructuredCompletionResult
 from app.services.platform_features import FLAG_AI_SUGGESTIONS, upsert_feature_flag
+from app.services.product_intelligence import (
+    PRODUCT_INTELLIGENCE_CLASSIFICATION_VERSION,
+    PRODUCT_INTELLIGENCE_SCHEMA_VERSION,
+    PRODUCT_INTELLIGENCE_SCOPE,
+    build_product_intelligence_source_data_hash,
+)
 from app.services.auth import (
     create_household,
     create_membership,
@@ -202,7 +209,7 @@ def test_ai_context_assembly_uses_structured_pantry_and_recipe_data(client, db_s
     assert context_bundle.snapshot.active_lot_count == 2
     assert context_bundle.snapshot.near_expiry_lot_count == 1
     assert context_bundle.snapshot.recipe_title == "Simple Pasta"
-    assert context_bundle.payload["pantry"]["products"][0]["product_name"] == "Pasta"
+    assert context_bundle.payload["pantry"]["fallback_products"][0]["product_name"] == "Pasta"
     assert context_bundle.payload["recipes"]["focused_recipe"]["title"] == "Simple Pasta"
 
 
@@ -328,11 +335,117 @@ def test_ai_context_includes_product_enrichment_when_available(client, db_sessio
         request=AISuggestionRequest(kind="meal_suggestions", limit=2),
     )
 
-    enrichment = context_bundle.payload["pantry"]["products"][0]["enrichment"]
-    assert enrichment["ingredients_text"] == "Tomatoes, vinegar, barley malt"
+    enrichment = context_bundle.payload["pantry"]["fallback_products"][0]["enrichment"]
+    assert enrichment["ingredient_tags"] == []
     assert enrichment["allergen_tags"] == ["Gluten"]
-    assert enrichment["labels"] == ["Vegetarian"]
-    assert context_bundle.payload["dietary_context"]["enriched_products"][0]["enrichment"]["traces_text"] == "Mustard"
+    assert enrichment["categories"] == ["Brown Sauces"]
+    assert context_bundle.payload["dietary_context"]["fallback_product_count"] == 1
+
+
+def test_ai_context_prefers_classified_product_intelligence_with_fallback_for_unclassified_products(
+    client,
+    db_session,
+):
+    user, household = create_member_household(
+        db_session,
+        email="ai-classified-context@example.com",
+        household_name="AI Classified Context Household",
+    )
+    household.dietary_preferences = ["Vegetarian"]
+    db_session.add(household)
+    db_session.commit()
+    login(client, email="ai-classified-context@example.com")
+
+    pantry_group = create_location_group(client, household.external_id, "Pantry")
+    shelf = create_location(client, household.external_id, pantry_group["external_id"], "Shelf")
+    sauce = create_product(
+        client,
+        household.external_id,
+        name="Brown sauce",
+        default_unit="bottle",
+        aliases=["HP sauce"],
+        barcodes=["5000111046244"],
+        manual_ingredient_tags=["Tomatoes", "Vinegar"],
+    )
+    beans = create_product(
+        client,
+        household.external_id,
+        name="Butter beans",
+        default_unit="can",
+        aliases=[],
+        barcodes=[],
+        manual_ingredient_tags=["Beans"],
+    )
+
+    add_stock_lot(
+        client,
+        household.external_id,
+        product_external_id=sauce["external_id"],
+        location_external_id=shelf["external_id"],
+        quantity="1.000",
+    )
+    add_stock_lot(
+        client,
+        household.external_id,
+        product_external_id=beans["external_id"],
+        location_external_id=shelf["external_id"],
+        quantity="2.000",
+    )
+
+    sauce_product = db_session.scalar(select(Product).where(Product.external_id == sauce["external_id"]))
+    assert sauce_product is not None
+    db_session.add(
+        ProductIntelligence(
+            household_id=household.id,
+            product_id=sauce_product.id,
+            source_provider="ollama",
+            source_model="llama3.2",
+            classification_scope=PRODUCT_INTELLIGENCE_SCOPE,
+            classification_version=PRODUCT_INTELLIGENCE_CLASSIFICATION_VERSION,
+            schema_version=PRODUCT_INTELLIGENCE_SCHEMA_VERSION,
+            source_data_hash=build_product_intelligence_source_data_hash(sauce_product),
+            classified_at=sauce_product.updated_at,
+            confidence=0.91,
+            rationale_short="Useful condiment classification for recipe matching.",
+            primary_ingredient_type="Tomato",
+            ingredient_families=["Tomato", "Vinegar"],
+            food_category="Condiment",
+            dietary_tags=["Vegetarian"],
+            allergen_tags=["Gluten"],
+            recipe_role_tags=["Sauce", "Seasoning"],
+            substitution_groups=["Brown sauce"],
+            pantry_use_tags=["Pantry staple", "Shelf stable"],
+            structured_metadata={
+                "product_format": "Bottled sauce",
+                "storage_profile": "Shelf stable",
+                "cuisine_tags": ["British"],
+                "flavour_tags": ["Tangy"],
+                "preparation_tags": ["Ready to use"],
+            },
+        )
+    )
+    db_session.commit()
+
+    access = resolve_household_access(
+        db_session,
+        household_external_id=household.external_id,
+        user=user,
+    )
+    assert access is not None
+
+    context_bundle = build_household_ai_context(
+        db_session,
+        access=access,
+        request=AISuggestionRequest(kind="meal_suggestions", limit=2),
+    )
+
+    assert context_bundle.payload["household"]["dietary_preferences"] == ["Vegetarian"]
+    assert context_bundle.payload["dietary_context"]["classified_product_count"] == 1
+    assert context_bundle.payload["dietary_context"]["fallback_product_count"] == 1
+    assert context_bundle.payload["pantry"]["classified_products"][0]["product_name"] == "Brown sauce"
+    assert context_bundle.payload["pantry"]["classified_products"][0]["ingredient_families"] == ["Tomato", "Vinegar"]
+    assert context_bundle.payload["pantry"]["fallback_products"][0]["product_name"] == "Butter beans"
+    assert context_bundle.payload["pantry"]["fallback_products"][0]["manual_ingredient_tags"] == ["Beans"]
 
 
 def test_household_ai_suggestions_use_provider_adapter_and_record_audit(
