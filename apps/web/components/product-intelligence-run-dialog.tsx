@@ -143,11 +143,12 @@ export function ProductIntelligenceRunDialog({
   }, [householdExternalId]);
 
   useEffect(() => {
-    if (!currentRun || !ACTIVE_RUN_STATUSES.has(currentRun.status)) {
+    const activeRun = currentRun;
+    if (!activeRun || !ACTIVE_RUN_STATUSES.has(activeRun.status)) {
       return undefined;
     }
 
-    const runExternalId = currentRun.external_id;
+    const runExternalId = activeRun.external_id;
     let isCancelled = false;
 
     async function pollRun() {
