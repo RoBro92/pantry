@@ -6,7 +6,7 @@ Pantry is a small repo for a self hosted product with three runtime services and
 
 - `apps/web`: Next.js application for setup, authentication, pantry, shopping list, recipes, imports, and admin pages
 - `apps/api`: FastAPI application for domain APIs, setup flows, admin operations, release metadata, backups, and authentication
-- `apps/worker`: Python worker for background import and recipe URL processing
+- `apps/worker`: Python worker for background import, recipe URL processing, and product intelligence classification runs
 
 ## Shared Infrastructure
 
@@ -20,6 +20,7 @@ Pantry is a small repo for a self hosted product with three runtime services and
 - Household access is enforced server side
 - Product identity stays Pantry owned even when external enrichment from Open Food Facts is linked
 - AI product intelligence is stored separately from the core product record so classification can be rerun and versioned safely
+- Product intelligence execution state is tracked as persisted background runs so classification progress survives page refreshes and worker restarts
 - Open Food Facts is optional advisory enrichment, not the source of truth for Pantry records
 - AI support is optional, provider-abstracted, and currently focused on guided pantry-aware meal suggestions plus explicit recipe-completion pantry writeback
 - AI provider configuration is stored at installation scope today, with routing kept self-hosted and operator managed

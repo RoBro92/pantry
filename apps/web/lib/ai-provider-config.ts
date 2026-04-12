@@ -28,10 +28,10 @@ export const AI_PROVIDER_DEFAULT_BASE_URLS: Record<AIProviderType, string> = {
 };
 
 export const AI_PROVIDER_DEFAULT_MODELS: Record<AIProviderType, string> = {
-  openai: "gpt-4o-mini",
-  claude: "claude-3-5-haiku-latest",
-  gemini: "gemini-2.0-flash",
-  ollama: "llama3.2"
+  openai: "gpt-4.1-mini",
+  claude: "claude-sonnet-4-6",
+  gemini: "gemini-2.5-flash",
+  ollama: "qwen3:8b"
 };
 
 export const AI_PROVIDER_API_KEY_REQUIRED: Record<AIProviderType, boolean> = {
@@ -46,36 +46,51 @@ const AI_PROVIDER_RECOMMENDED_MODELS: Record<AIProviderType, ProviderRecommendat
     {
       model: "gpt-4o-mini",
       label: "Fast / low cost",
-      description: "Good default for lightweight Pantry suggestions."
+      description: "Good for lightweight Pantry prompts and cheaper high-volume runs."
+    },
+    {
+      model: "gpt-4.1-mini",
+      label: "Balanced",
+      description: "Pantry’s default OpenAI pick for classification and everyday reasoning."
     },
     {
       model: "gpt-4.1",
-      label: "Balanced",
-      description: "A steady middle ground for quality and cost."
+      label: "Higher quality",
+      description: "Use when Pantry should favour stronger categorisation quality."
     }
   ],
   claude: [
     {
-      model: "claude-3-5-haiku-latest",
+      model: "claude-haiku-4-5",
       label: "Fast / low cost",
-      description: "Fast and affordable for compact Pantry suggestions."
+      description: "Fast and affordable for compact Pantry suggestions and classifications."
     },
     {
-      model: "claude-sonnet-4-0",
+      model: "claude-sonnet-4-6",
       label: "Balanced",
-      description: "A strong default for quality and responsiveness."
+      description: "Pantry’s default Anthropic option for speed and quality."
+    },
+    {
+      model: "claude-opus-4-6",
+      label: "Higher quality",
+      description: "Use when Pantry should prioritise quality over cost and latency."
     }
   ],
   gemini: [
     {
-      model: "gemini-2.0-flash",
+      model: "gemini-2.5-flash-lite",
       label: "Fast / low cost",
-      description: "Good default for lightweight Pantry suggestions."
+      description: "The lightest Pantry-supported Gemini option."
+    },
+    {
+      model: "gemini-2.5-flash",
+      label: "Balanced",
+      description: "Pantry’s default Gemini choice for classification and suggestions."
     },
     {
       model: "gemini-2.5-pro",
-      label: "Stronger",
-      description: "Use when you want stronger reasoning quality."
+      label: "Higher quality",
+      description: "Use when you want stronger Gemini reasoning quality."
     }
   ],
   ollama: [
@@ -85,9 +100,14 @@ const AI_PROVIDER_RECOMMENDED_MODELS: Record<AIProviderType, ProviderRecommendat
       description: "Good default if it is installed locally."
     },
     {
-      model: "qwen2.5:7b-instruct",
+      model: "qwen3:8b",
       label: "Balanced",
-      description: "A practical local model if available."
+      description: "Pantry’s default local model when it is available."
+    },
+    {
+      model: "llama3.3",
+      label: "Higher quality",
+      description: "Use when a stronger local model is worth the extra latency."
     }
   ]
 };
