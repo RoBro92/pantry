@@ -87,8 +87,13 @@ class OpenAIProviderAdapter:
                 },
             },
         }
+        if request.max_output_tokens is not None:
+            payload["max_tokens"] = request.max_output_tokens
 
-        with httpx.Client(timeout=self._config.timeout_seconds, headers=self._headers()) as client:
+        with httpx.Client(
+            timeout=request.timeout_seconds or self._config.timeout_seconds,
+            headers=self._headers(),
+        ) as client:
             response = client.post(self._url("/chat/completions"), json=payload)
             response.raise_for_status()
             body = response.json()

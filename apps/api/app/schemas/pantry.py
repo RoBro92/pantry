@@ -288,6 +288,7 @@ class ProductIntelligenceStatusResponse(BaseModel):
     classification_scope: str
     classification_version: str
     schema_version: str
+    latest_run: "ProductIntelligenceRunSummary | None" = None
 
 
 class ProductIntelligenceRunRequest(BaseModel):
@@ -302,10 +303,19 @@ class ProductIntelligenceRunItem(BaseModel):
     message: str
     confidence: float | None = None
     stale_before_run: bool = False
+    batch_index: int | None = None
     intelligence: ProductIntelligenceSummary | None = None
 
 
-class ProductIntelligenceRunResponse(BaseModel):
+class ProductIntelligenceRunEvent(BaseModel):
+    occurred_at: datetime
+    level: str
+    message: str
+    batch_index: int | None = None
+
+
+class ProductIntelligenceRunSummary(BaseModel):
+    external_id: str
     mode: str
     available: bool
     provider_type: str | None = None
@@ -313,14 +323,27 @@ class ProductIntelligenceRunResponse(BaseModel):
     classification_scope: str
     classification_version: str
     schema_version: str
+    status: str
     total_candidates: int
+    processed_count: int
     classified_count: int
     skipped_count: int
     failed_count: int
     stale_reclassified_count: int
+    batch_count: int
+    completed_batch_count: int
+    last_error: str | None = None
+    requested_by_display: str | None = None
     items: list[ProductIntelligenceRunItem] = Field(default_factory=list)
-    started_at: datetime
-    completed_at: datetime
+    events: list[ProductIntelligenceRunEvent] = Field(default_factory=list)
+    created_at: datetime
+    started_at: datetime | None = None
+    last_progress_at: datetime | None = None
+    completed_at: datetime | None = None
+
+
+class ProductIntelligenceRunResponse(ProductIntelligenceRunSummary):
+    created: bool = True
 
 
 class ProductMatchSummary(BaseModel):

@@ -83,7 +83,7 @@ class ClaudeProviderAdapter:
     ) -> StructuredCompletionResult:
         payload: dict[str, Any] = {
             "model": request.model,
-            "max_tokens": 1200,
+            "max_tokens": request.max_output_tokens or 1200,
             "system": request.system_prompt,
             "messages": [
                 {
@@ -105,7 +105,10 @@ class ClaudeProviderAdapter:
             },
         }
 
-        with httpx.Client(timeout=self._config.timeout_seconds, headers=self._headers()) as client:
+        with httpx.Client(
+            timeout=request.timeout_seconds or self._config.timeout_seconds,
+            headers=self._headers(),
+        ) as client:
             response = client.post(self._url("/messages"), json=payload)
             response.raise_for_status()
             body = response.json()

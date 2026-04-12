@@ -30,4 +30,5 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     password_reset_tokens = relationship("PasswordResetToken", back_populates="user")
     recipe_url_imports_requested = relationship("RecipeURLImport", back_populates="requested_by_user")
     import_jobs_requested = relationship("ImportJob", back_populates="requested_by_user")
+    product_intelligence_runs_requested = relationship("ProductIntelligenceRun", back_populates="requested_by_user")
     import_source_files_uploaded = relationship("ImportSourceFile", back_populates="uploaded_by_user")

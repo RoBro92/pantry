@@ -102,8 +102,13 @@ class GeminiProviderAdapter:
                 "responseMimeType": "application/json",
             },
         }
+        if request.max_output_tokens is not None:
+            payload["generationConfig"]["maxOutputTokens"] = request.max_output_tokens
 
-        with httpx.Client(timeout=self._config.timeout_seconds, headers=self._headers()) as client:
+        with httpx.Client(
+            timeout=request.timeout_seconds or self._config.timeout_seconds,
+            headers=self._headers(),
+        ) as client:
             response = client.post(
                 self._url(f"/v1beta/models/{quote(model, safe='')}:generateContent"),
                 json=payload,

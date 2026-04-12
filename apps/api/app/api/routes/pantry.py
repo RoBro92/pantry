@@ -68,7 +68,10 @@ from app.services.product_enrichment import (
 )
 from app.services.product_intelligence import (
     build_product_intelligence_status,
-    run_product_intelligence_classification,
+)
+from app.services.product_intelligence_runs import (
+    get_product_intelligence_run_summary,
+    queue_product_intelligence_run,
 )
 from app.services.tenancy import HouseholdAccess
 
@@ -133,7 +136,7 @@ def post_product_intelligence_classification(
     access: HouseholdAccess = Depends(require_household_access(allowed_roles={HOUSEHOLD_ADMIN_ROLE})),
 ):
     try:
-        return run_product_intelligence_classification(
+        return queue_product_intelligence_run(
             db,
             household=access.household,
             actor=current_user,
@@ -146,6 +149,27 @@ def post_product_intelligence_classification(
         else:
             status_code = status.HTTP_400_BAD_REQUEST
         raise HTTPException(status_code=status_code, detail=message) from exc
+
+
+@router.get("/product-intelligence/runs/{run_external_id}", response_model=ProductIntelligenceRunResponse)
+def get_product_intelligence_run(
+    run_external_id: str,
+    db: Session = Depends(get_db_session),
+    access: HouseholdAccess = Depends(require_household_access(allowed_roles={HOUSEHOLD_ADMIN_ROLE})),
+):
+    summary = get_product_intelligence_run_summary(
+        db,
+        household=access.household,
+        run_external_id=run_external_id,
+    )
+    if summary is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Classification run not found.")
+    return ProductIntelligenceRunResponse.model_validate(
+        {
+            **summary.model_dump(mode="python"),
+            "created": False,
+        }
+    )
 
 
 @router.post("/location-groups", response_model=LocationGroupSummary, status_code=status.HTTP_201_CREATED)
