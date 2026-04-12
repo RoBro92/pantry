@@ -103,6 +103,8 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://pantry:change-me@postgres:5432/pantry}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       IMPORT_STORAGE_ROOT: ${IMPORT_STORAGE_ROOT:-/workspace/.local/imports}
+      SETTINGS_ENCRYPTION_KEY: ${SETTINGS_ENCRYPTION_KEY:-}
+      SESSION_SECRET_KEY: ${SESSION_SECRET_KEY:-change-me-for-development}
       PYTHONPATH: /workspace/apps/api:/workspace/apps/worker
       WORKER_POLL_INTERVAL_SECONDS: ${WORKER_POLL_INTERVAL_SECONDS:-30}
     working_dir: /workspace/apps/worker
