@@ -147,13 +147,14 @@ export function ProductIntelligenceRunDialog({
       return undefined;
     }
 
+    const runExternalId = currentRun.external_id;
     let isCancelled = false;
 
     async function pollRun() {
       try {
         const [runPayload, statusPayload] = await Promise.all([
           getFromApi<ProductIntelligenceRunResponse>(
-            `/api/households/${householdExternalId}/product-intelligence/runs/${currentRun.external_id}`
+            `/api/households/${householdExternalId}/product-intelligence/runs/${runExternalId}`
           ),
           getFromApi<ProductIntelligenceStatusResponse>(
             `/api/households/${householdExternalId}/product-intelligence/status`
