@@ -715,6 +715,7 @@ export type ProductIntelligenceStatusResponse = {
     stale_product_count: number;
     unclassified_product_count: number;
   };
+  latest_run: ProductIntelligenceRunSummary | null;
 };
 
 export type ProductIntelligenceRunItem = {
@@ -724,10 +725,19 @@ export type ProductIntelligenceRunItem = {
   message: string;
   confidence: number | null;
   stale_before_run: boolean;
+  batch_index: number | null;
   intelligence: ProductIntelligenceSummary | null;
 };
 
-export type ProductIntelligenceRunResponse = {
+export type ProductIntelligenceRunEvent = {
+  occurred_at: string;
+  level: string;
+  message: string;
+  batch_index: number | null;
+};
+
+export type ProductIntelligenceRunSummary = {
+  external_id: string;
   mode: string;
   available: boolean;
   provider_type: string | null;
@@ -735,14 +745,27 @@ export type ProductIntelligenceRunResponse = {
   classification_scope: string;
   classification_version: string;
   schema_version: string;
+  status: string;
   total_candidates: number;
+  processed_count: number;
   classified_count: number;
   skipped_count: number;
   failed_count: number;
   stale_reclassified_count: number;
+  batch_count: number;
+  completed_batch_count: number;
+  last_error: string | null;
+  requested_by_display: string | null;
   items: ProductIntelligenceRunItem[];
-  started_at: string;
-  completed_at: string;
+  events: ProductIntelligenceRunEvent[];
+  created_at: string;
+  started_at: string | null;
+  last_progress_at: string | null;
+  completed_at: string | null;
+};
+
+export type ProductIntelligenceRunResponse = ProductIntelligenceRunSummary & {
+  created: boolean;
 };
 
 export type PantryConfirmedEnrichmentRequest = {
