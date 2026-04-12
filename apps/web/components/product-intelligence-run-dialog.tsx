@@ -6,6 +6,10 @@ import type {
   ProductIntelligenceRunResponse,
   ProductIntelligenceStatusResponse
 } from "../lib/api-types";
+import {
+  getAIProviderSupport,
+  normalizeAIProviderType,
+} from "../lib/ai-provider-config";
 import { getFromApi, postToApi } from "../lib/client-api";
 import { ModalShell } from "./modal-shell";
 
@@ -88,6 +92,8 @@ export function ProductIntelligenceRunDialog({
   }, [currentRun]);
 
   const activeRunInProgress = currentRun ? ACTIVE_RUN_STATUSES.has(currentRun.status) : false;
+  const normalizedProviderType = normalizeAIProviderType(status?.provider_type);
+  const providerSupport = normalizedProviderType ? getAIProviderSupport(normalizedProviderType) : null;
 
   useEffect(() => {
     let isCancelled = false;
@@ -245,6 +251,9 @@ export function ProductIntelligenceRunDialog({
                   ? `Scope ${status.classification_scope} · classifier ${status.classification_version} · schema ${status.schema_version}`
                   : status.reason ?? "AI classification is unavailable."}
               </p>
+              {providerSupport && !providerSupport.isCurrentlySupported ? (
+                <p className="helper-text is-error">{providerSupport.description}</p>
+              ) : null}
             </div>
 
             <section className="modal-form-section">

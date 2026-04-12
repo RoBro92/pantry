@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import type { AIProviderType } from "../lib/ai-provider-config";
 import {
   getAIProviderLabel,
+  getAIProviderSupport,
   getRecommendedModels,
   providerSupportsManualModelEntry
 } from "../lib/ai-provider-config";
@@ -40,6 +41,7 @@ export function AdminAIModelPickerModal({
     () => getRecommendedModels(providerType, availableModels),
     [availableModels, providerType]
   );
+  const providerSupport = getAIProviderSupport(providerType);
   const canConfirm = query.trim().length > 0;
 
   async function handleConfirm() {
@@ -59,6 +61,9 @@ export function AdminAIModelPickerModal({
       panelClassName="modal-panel modal-panel-wide"
     >
       <div className="modal-form-section">
+        <p className={`helper-text${providerSupport.isCurrentlySupported ? "" : " is-error"}`}>
+          {providerSupport.statusLabel}. {providerSupport.description}
+        </p>
         <label className="field">
           <span>Model name</span>
           <input
@@ -99,9 +104,13 @@ export function AdminAIModelPickerModal({
           <h3 className="modal-section-title">Fetched models</h3>
           <p className="helper-text">
             {availableModels.length > 0
-              ? "Pick from the provider’s reported models or keep typing a manual value."
+              ? providerSupport.isCurrentlySupported
+                ? "Pick from the provider’s reported models or keep typing a manual value."
+                : "Pick from the provider’s reported models or enter a manual value for foundation testing."
               : providerSupportsManualModelEntry(providerType)
-                ? "No models were listed. You can still enter a model name manually."
+                ? providerSupport.isCurrentlySupported
+                  ? "No models were listed. You can still enter a model name manually."
+                  : "No models were listed. You can still enter a model name manually for foundation testing."
                 : "No models were listed. You can still try a manual model name if your provider supports it."}
           </p>
         </div>

@@ -6,11 +6,17 @@ type ProviderRecommendation = {
   description: string;
 };
 
+type ProviderSupportMetadata = {
+  isCurrentlySupported: boolean;
+  statusLabel: string;
+  description: string;
+};
+
 export const AI_PROVIDER_OPTIONS: Array<{ value: AIProviderType; label: string }> = [
   { value: "openai", label: "OpenAI" },
-  { value: "claude", label: "Claude" },
-  { value: "gemini", label: "Gemini" },
-  { value: "ollama", label: "Ollama" }
+  { value: "claude", label: "Claude (not currently supported)" },
+  { value: "gemini", label: "Gemini (not currently supported)" },
+  { value: "ollama", label: "Ollama (not currently supported)" }
 ];
 
 export const AI_PROVIDER_LABELS: Record<AIProviderType, string> = {
@@ -112,6 +118,33 @@ const AI_PROVIDER_RECOMMENDED_MODELS: Record<AIProviderType, ProviderRecommendat
   ]
 };
 
+const AI_PROVIDER_SUPPORT: Record<AIProviderType, ProviderSupportMetadata> = {
+  openai: {
+    isCurrentlySupported: true,
+    statusLabel: "Supported",
+    description:
+      "OpenAI is Pantry’s currently supported provider for product classification and guided meal suggestions."
+  },
+  claude: {
+    isCurrentlySupported: false,
+    statusLabel: "Foundation only",
+    description:
+      "Anthropic groundwork remains in the codebase, but Claude is not currently supported for Pantry’s normal AI flows."
+  },
+  gemini: {
+    isCurrentlySupported: false,
+    statusLabel: "Foundation only",
+    description:
+      "Gemini setup and runtime groundwork remain available, but Gemini is not currently supported for Pantry’s normal AI flows."
+  },
+  ollama: {
+    isCurrentlySupported: false,
+    statusLabel: "Foundation only",
+    description:
+      "Ollama setup and local-model groundwork remain available, but Ollama is not currently supported for Pantry’s normal AI flows."
+  }
+};
+
 export function getDefaultBaseUrl(providerType: AIProviderType) {
   return AI_PROVIDER_DEFAULT_BASE_URLS[providerType];
 }
@@ -122,6 +155,14 @@ export function getDefaultModel(providerType: AIProviderType) {
 
 export function getAIProviderLabel(providerType: AIProviderType) {
   return AI_PROVIDER_LABELS[providerType];
+}
+
+export function getAIProviderSupport(providerType: AIProviderType) {
+  return AI_PROVIDER_SUPPORT[providerType];
+}
+
+export function isAIProviderCurrentlySupported(providerType: AIProviderType) {
+  return AI_PROVIDER_SUPPORT[providerType].isCurrentlySupported;
 }
 
 export function providerSupportsManualModelEntry(_providerType: AIProviderType) {
@@ -142,6 +183,9 @@ function resolveRecommendedModel(availableModels: string[], desiredModel: string
 }
 
 export function getRecommendedModels(providerType: AIProviderType, availableModels: string[]) {
+  if (!isAIProviderCurrentlySupported(providerType)) {
+    return [];
+  }
   return AI_PROVIDER_RECOMMENDED_MODELS[providerType].map((pick) => ({
     ...pick,
     model: resolveRecommendedModel(availableModels, pick.model)

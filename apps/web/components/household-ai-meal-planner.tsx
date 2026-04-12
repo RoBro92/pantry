@@ -10,6 +10,10 @@ import type {
   AIMealSuggestionResponse,
   CompleteAIMealSuggestionResponse,
 } from "../lib/api-types";
+import {
+  getAIProviderSupport,
+  normalizeAIProviderType,
+} from "../lib/ai-provider-config";
 import { postToApi } from "../lib/client-api";
 import { formatQuantityValue, formatQuantityWithUnit } from "../lib/quantity-format";
 import { MealSuggestionCompleteDialog } from "./meal-suggestion-complete-dialog";
@@ -173,6 +177,10 @@ export function HouseholdAIMealPlanner({
     result?.suggestions.find((suggestion) => suggestion.id === selectedSuggestionId) ?? null;
   const completionSuggestion =
     result?.suggestions.find((suggestion) => suggestion.id === completeSuggestionId) ?? null;
+  const normalizedProviderType = normalizeAIProviderType(initialPlanner.feature.provider_type);
+  const providerSupport = normalizedProviderType
+    ? getAIProviderSupport(normalizedProviderType)
+    : null;
 
   async function handleGenerate() {
     if (members.length > 0 && selectedUserExternalIds.length === 0) {
@@ -236,6 +244,9 @@ export function HouseholdAIMealPlanner({
             {initialPlanner.pantry_summary.local_recipe_count} local recipes
           </span>
         </div>
+        {providerSupport && !providerSupport.isCurrentlySupported ? (
+          <p className="helper-text is-error">{providerSupport.description}</p>
+        ) : null}
         {!initialPlanner.feature.available ? (
           <div className="stack">
             <p className="error-text">
