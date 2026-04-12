@@ -27,6 +27,7 @@ from app.schemas.pantry import (
 )
 from app.services.ai_config import refresh_provider_health, resolve_provider_config
 from app.services.ai_providers import StructuredCompletionRequest, build_ai_provider_adapter
+from app.services.ai_runtime import PantryAIError, normalize_ai_error
 from app.services.audit import record_audit_event
 from app.services.product_intelligence import (
     PRODUCT_INTELLIGENCE_CLASSIFICATION_VERSION,
@@ -229,11 +230,16 @@ def process_next_product_intelligence_run() -> bool:
             _process_claimed_run(db, run)
         except Exception as exc:
             db.rollback()
-            logger.exception("worker.product_intelligence_run.failed", error=str(exc))
+            ai_error = normalize_ai_error(
+                exc,
+                provider_type=run.provider_type,
+                model=run.source_model,
+            )
+            logger.exception("worker.product_intelligence_run.failed", error=ai_error.technical_message)
             run = _load_run_by_id(db, run_id=run.id)
             if run is not None:
-                _append_run_event(run, level="error", message=str(exc))
-                run.last_error = str(exc)[:512]
+                _append_run_event(run, level="error", message=str(ai_error))
+                run.last_error = str(ai_error)[:512]
                 run.status = (
                     RUN_STATUS_PARTIALLY_COMPLETED if run.processed_count > 0 else RUN_STATUS_FAILED
                 )
@@ -373,11 +379,16 @@ def _process_claimed_run(db: Session, run: ProductIntelligenceRun) -> None:
             )
             consecutive_transient_failures = 0
         except TransientProviderError as exc:
+            ai_error = normalize_ai_error(
+                exc,
+                provider_type=run.provider_type,
+                model=effective_model,
+            )
             consecutive_transient_failures += 1
-            _mark_batch_failed(run, batch=batch, batch_index=batch_index, message=str(exc))
-            _append_run_event(run, level="warning", message=str(exc), batch_index=batch_index)
+            _mark_batch_failed(run, batch=batch, batch_index=batch_index, message=str(ai_error))
+            _append_run_event(run, level="warning", message=str(ai_error), batch_index=batch_index)
             _refresh_run_counters(run)
-            run.last_error = str(exc)[:512]
+            run.last_error = str(ai_error)[:512]
             run.last_progress_at = utc_now()
             db.add(run)
             db.commit()
@@ -408,10 +419,15 @@ def _process_claimed_run(db: Session, run: ProductIntelligenceRun) -> None:
             time.sleep(profile.retry.cooldown_after_exhausted_seconds)
             continue
         except Exception as exc:
-            _mark_batch_failed(run, batch=batch, batch_index=batch_index, message=str(exc))
-            _append_run_event(run, level="error", message=str(exc), batch_index=batch_index)
+            ai_error = normalize_ai_error(
+                exc,
+                provider_type=run.provider_type,
+                model=effective_model,
+            )
+            _mark_batch_failed(run, batch=batch, batch_index=batch_index, message=str(ai_error))
+            _append_run_event(run, level="error", message=str(ai_error), batch_index=batch_index)
             _refresh_run_counters(run)
-            run.last_error = str(exc)[:512]
+            run.last_error = str(ai_error)[:512]
             run.last_progress_at = utc_now()
             db.add(run)
             db.commit()
@@ -587,9 +603,14 @@ def _execute_batch_with_retry(
         except Exception as exc:
             if not _is_transient_provider_error(exc):
                 raise
+            ai_error = normalize_ai_error(
+                exc,
+                provider_type=provider_type,
+                model=model,
+            )
             if attempts >= profile.retry.max_attempts:
                 raise TransientProviderError(
-                    f"Batch {batch_index} failed after {attempts} attempt(s): {exc}"
+                    f"Batch {batch_index} failed after {attempts} attempt(s). {ai_error}"
                 ) from exc
 
             delay = _compute_retry_delay(profile.retry, attempt=attempts)
@@ -654,6 +675,8 @@ def _fit_batch_payload(
 
 
 def _is_transient_provider_error(exc: Exception) -> bool:
+    if isinstance(exc, PantryAIError):
+        return exc.retryable
     if isinstance(exc, (httpx.TimeoutException, httpx.NetworkError, httpx.TransportError)):
         return True
     if isinstance(exc, httpx.HTTPStatusError):

@@ -24,6 +24,7 @@ from app.schemas.pantry import (
 )
 from app.services.ai_config import get_ai_feature_enabled, resolve_provider_config
 from app.services.ai_providers import StructuredCompletionRequest
+from app.services.ai_runtime import normalize_ai_error
 from app.services.audit import record_audit_event
 from app.services.pantry_normalization import normalize_text_tags, require_text
 from app.services.product_enrichment import get_primary_enrichment
@@ -136,7 +137,13 @@ def build_product_intelligence_status(
     if record.health_status == AI_HEALTH_UNHEALTHY:
         return ProductIntelligenceStatusResponse(
             available=False,
-            reason=record.health_error or "The configured AI provider is unhealthy.",
+            reason=str(
+                normalize_ai_error(
+                    record.health_error or "The configured AI provider is unhealthy.",
+                    provider_type=record.provider_type,
+                    model=record.default_model,
+                )
+            ),
             provider_type=record.provider_type,
             default_model=record.default_model,
             health_status=record.health_status,

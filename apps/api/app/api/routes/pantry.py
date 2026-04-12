@@ -73,6 +73,7 @@ from app.services.product_intelligence_runs import (
     get_product_intelligence_run_summary,
     queue_product_intelligence_run,
 )
+from app.services.ai_runtime import PantryAIError
 from app.services.tenancy import HouseholdAccess
 
 router = APIRouter(prefix="/households/{household_external_id}", tags=["pantry"])
@@ -143,6 +144,8 @@ def post_product_intelligence_classification(
             request=payload,
         )
     except ValueError as exc:
+        if isinstance(exc, PantryAIError):
+            raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
         message = str(exc)
         if "provider" in message.lower() or "ai " in message.lower() or "disabled" in message.lower():
             status_code = status.HTTP_503_SERVICE_UNAVAILABLE

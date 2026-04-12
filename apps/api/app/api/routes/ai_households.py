@@ -17,6 +17,7 @@ from app.schemas.ai import (
     CompleteAIMealSuggestionRequest,
     CompleteAIMealSuggestionResponse,
 )
+from app.services.ai_runtime import PantryAIError
 from app.services.ai_meal_suggestions import (
     complete_ai_meal_suggestion,
     generate_ai_meal_suggestions,
@@ -37,6 +38,8 @@ def get_ai_status(
 
 
 def _http_error_from_value_error(exc: ValueError) -> HTTPException:
+    if isinstance(exc, PantryAIError):
+        return HTTPException(status_code=exc.status_code, detail=str(exc))
     message = str(exc)
     if "disabled for this household" in message.lower():
         status_code = status.HTTP_403_FORBIDDEN

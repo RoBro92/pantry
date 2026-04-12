@@ -6,7 +6,7 @@ from decimal import Decimal
 import httpx
 from sqlalchemy import select
 
-from app.domain.ai import AI_PROVIDER_OLLAMA
+from app.domain.ai import AI_PROVIDER_OLLAMA, AI_PROVIDER_OPENAI
 from app.domain.roles import HOUSEHOLD_ADMIN_ROLE, HOUSEHOLD_USER_ROLE
 from app.models.audit_event import AuditEvent
 from app.models.product_enrichment import ProductEnrichment
@@ -647,6 +647,82 @@ def test_product_intelligence_run_reports_partial_success_when_batch_output_omit
     assert payload["failed_count"] == 1
     assert {item["status"] for item in payload["items"]} == {"classified", "failed"}
     assert sauce["external_id"] in {item["product_external_id"] for item in payload["items"]}
+
+
+def test_product_intelligence_run_surfaces_friendly_openai_errors(client, db_session, monkeypatch):
+    _, household = create_household_with_role(
+        db_session,
+        email="classification-openai-error@example.com",
+        household_name="Classification OpenAI Error Household",
+        role_code=HOUSEHOLD_ADMIN_ROLE,
+    )
+    platform_admin = create_platform_admin(
+        db_session,
+        email="classification-openai-admin@example.com",
+        password=PASSWORD,
+        display_name="OpenAI Classification Admin",
+    )
+    upsert_instance_provider_config(
+        db_session,
+        actor=platform_admin,
+        provider_type=AI_PROVIDER_OPENAI,
+        base_url="https://api.openai.com/v1",
+        default_model="gpt-4.1-mini",
+        api_key="openai-secret",
+        is_enabled=True,
+    )
+    monkeypatch.setattr(
+        "app.services.product_intelligence_runs.refresh_provider_health",
+        lambda db, config: AIProviderHealth(
+            is_healthy=True,
+            status="healthy",
+            message=None,
+            models=["gpt-4.1-mini"],
+            capabilities={"supports_structured_output": True},
+        ),
+    )
+
+    class FailingOpenAIClassificationAdapter(StubProductIntelligenceAdapter):
+        def generate_structured_output(self, request) -> StructuredCompletionResult:
+            request_obj = httpx.Request("POST", "https://api.openai.com/v1/chat/completions")
+            response = httpx.Response(
+                400,
+                request=request_obj,
+                text='{"error":{"message":"Invalid schema for response_format json_schema"}}',
+            )
+            raise httpx.HTTPStatusError("400 Client Error", request=request_obj, response=response)
+
+    monkeypatch.setattr(
+        "app.services.product_intelligence_runs.build_ai_provider_adapter",
+        lambda runtime: FailingOpenAIClassificationAdapter(),
+    )
+
+    login(client, email="classification-openai-error@example.com")
+    create_product(
+        client,
+        household.external_id,
+        name="Pasta",
+        default_unit="pack",
+        aliases=[],
+        barcodes=[],
+    )
+
+    queued = client.post(
+        f"/api/households/{household.external_id}/product-intelligence/classify",
+        json={"mode": "all"},
+    )
+    assert queued.status_code == 200
+
+    assert process_next_product_intelligence_run() is True
+
+    run_detail = client.get(
+        f"/api/households/{household.external_id}/product-intelligence/runs/{queued.json()['external_id']}"
+    )
+    assert run_detail.status_code == 200
+    payload = run_detail.json()
+    assert payload["status"] == "failed"
+    assert "gpt-4.1-mini" in payload["last_error"]
+    assert "gpt-4o-mini" in payload["last_error"]
 
 
 def test_product_intelligence_profiles_choose_gemini_default_and_token_aware_batches(db_session):
