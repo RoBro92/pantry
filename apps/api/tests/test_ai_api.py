@@ -17,6 +17,7 @@ from app.services.ai_config import upsert_instance_provider_config
 from app.services.ai_context import build_household_ai_context
 from app.services.product_enrichment import apply_confirmed_product_enrichment
 from app.services.ai_providers import AIProviderHealth, StructuredCompletionResult
+from app.services.ai_providers.errors import AIProviderError
 from app.services.platform_features import FLAG_AI_SUGGESTIONS, upsert_feature_flag
 from app.services.product_intelligence import (
     PRODUCT_INTELLIGENCE_CLASSIFICATION_VERSION,
@@ -930,6 +931,83 @@ def test_ai_meal_suggestions_support_pantry_only_and_pantry_plus_extras_modes(
     assert "Mushrooms" in captured_payloads[0]["context"]["dietary_preferences"]["excluded_preferences"]
     assert captured_payloads[0]["context"]["recipe_candidates"][0]["recipe_external_id"] == recipe_external_id
     assert captured_payloads[1]["request"]["pantry_only"] is False
+
+
+def test_ai_meal_suggestions_hide_raw_openai_400_details(client, db_session, monkeypatch):
+    member, household = create_member_household(
+        db_session,
+        email="openai-meal-error@example.com",
+        household_name="OpenAI Meal Error Household",
+    )
+    admin = create_platform_admin(
+        db_session,
+        email="openai-meal-error-admin@example.com",
+        password=PASSWORD,
+        display_name="OpenAI Meal Error Admin",
+    )
+    upsert_instance_provider_config(
+        db_session,
+        actor=admin,
+        provider_type="openai",
+        base_url="https://api.openai.com/v1",
+        default_model="gpt-4o-mini",
+        api_key="openai-test-secret",
+        is_enabled=True,
+    )
+
+    class FailingOpenAIAdapter:
+        def generate_structured_output(self, request) -> StructuredCompletionResult:
+            raise AIProviderError(
+                (
+                    "The selected OpenAI model (gpt-4o-mini) is not compatible with Pantry's "
+                    "structured AI requests on Chat Completions. Choose a recommended OpenAI "
+                    "model such as gpt-4o-mini, gpt-4.1."
+                ),
+                diagnostic_message=(
+                    "Client error '400 Bad Request' for url "
+                    "'https://api.openai.com/v1/chat/completions'"
+                ),
+                category="unsupported_model",
+            )
+
+    monkeypatch.setattr(
+        "app.services.ai_meal_suggestions.refresh_provider_health",
+        lambda db, config: AIProviderHealth(
+            is_healthy=True,
+            status="healthy",
+            message=None,
+            models=["gpt-4o-mini"],
+            capabilities={"supports_structured_output": True},
+        ),
+    )
+    monkeypatch.setattr(
+        "app.services.ai_meal_suggestions.build_ai_provider_adapter",
+        lambda config: FailingOpenAIAdapter(),
+    )
+
+    login(client, email="openai-meal-error@example.com")
+
+    response = client.post(
+        f"/api/households/{household.external_id}/ai/meal-suggestions",
+        json={
+            "people_count": 2,
+            "selected_user_external_ids": [member.external_id],
+            "meal_type": "dinner",
+            "extra_portion_count": 0,
+            "max_total_minutes": 30,
+            "prioritize_near_expiry": False,
+            "allow_extra_ingredients": True,
+            "pantry_only": False,
+            "temporary_include_preferences": [],
+            "temporary_exclude_preferences": [],
+            "removed_preference_pills": [],
+        },
+    )
+
+    assert response.status_code == 503
+    assert "OpenAI model" in response.json()["detail"]
+    assert "400 Bad Request" not in response.json()["detail"]
+    assert "https://api.openai.com/v1/chat/completions" not in response.json()["detail"]
 
 
 def test_complete_ai_meal_suggestion_deducts_stock_across_multiple_lots(client, db_session):

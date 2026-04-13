@@ -14,6 +14,7 @@ from app.schemas.pantry import ProductEnrichmentAttribution, ProductEnrichmentCa
 from app.models.stock_lot import StockLot
 from app.services.ai_config import upsert_instance_provider_config
 from app.services.ai_providers import AIProviderHealth, StructuredCompletionResult
+from app.services.ai_providers.errors import AIProviderError
 from app.services.auth import create_household, create_membership, create_platform_admin, create_user
 from app.services.pantry_catalog import create_location as create_location_record
 from app.services.pantry_catalog import create_location_group as create_location_group_record
@@ -469,6 +470,84 @@ def test_product_intelligence_marks_stale_after_material_product_update(client, 
     intelligence = overview.json()["catalog_products"][0]["intelligence"]
     assert intelligence["is_stale"] is True
     assert "source_product_data_changed" in intelligence["stale_reasons"]
+
+
+def test_product_intelligence_hides_raw_openai_400_details_in_failed_items(client, db_session, monkeypatch):
+    _, household = create_household_with_role(
+        db_session,
+        email="classification-openai-error@example.com",
+        household_name="Classification OpenAI Error Household",
+        role_code=HOUSEHOLD_ADMIN_ROLE,
+    )
+    platform_admin = create_platform_admin(
+        db_session,
+        email="classification-openai-error-admin@example.com",
+        password=PASSWORD,
+        display_name="Classification OpenAI Error Admin",
+    )
+    upsert_instance_provider_config(
+        db_session,
+        actor=platform_admin,
+        provider_type="openai",
+        base_url="https://api.openai.com/v1",
+        default_model="gpt-4o-mini",
+        api_key="openai-test-secret",
+        is_enabled=True,
+    )
+
+    class FailingOpenAIProductAdapter:
+        def generate_structured_output(self, request) -> StructuredCompletionResult:
+            raise AIProviderError(
+                (
+                    "The selected OpenAI model (gpt-4o-mini) is not compatible with Pantry's "
+                    "structured AI requests on Chat Completions. Choose a recommended OpenAI "
+                    "model such as gpt-4o-mini, gpt-4.1."
+                ),
+                diagnostic_message=(
+                    "Client error '400 Bad Request' for url "
+                    "'https://api.openai.com/v1/chat/completions'"
+                ),
+                category="unsupported_model",
+            )
+
+    monkeypatch.setattr(
+        "app.services.product_intelligence.refresh_provider_health",
+        lambda db, config: AIProviderHealth(
+            is_healthy=True,
+            status="healthy",
+            message=None,
+            models=["gpt-4o-mini"],
+            capabilities={"supports_structured_output": True},
+        ),
+    )
+    monkeypatch.setattr(
+        "app.services.product_intelligence.build_ai_provider_adapter",
+        lambda runtime: FailingOpenAIProductAdapter(),
+    )
+
+    login(client, email="classification-openai-error@example.com")
+
+    product = create_product(
+        client,
+        household.external_id,
+        name="Brown sauce",
+        default_unit="bottle",
+        aliases=[],
+        barcodes=["5000111046244"],
+        manual_ingredient_tags=["Tomatoes"],
+    )
+
+    classify = client.post(
+        f"/api/households/{household.external_id}/product-intelligence/classify",
+        json={"mode": "product", "product_external_id": product["external_id"]},
+    )
+
+    assert classify.status_code == 200
+    payload = classify.json()
+    assert payload["failed_count"] == 1
+    assert "OpenAI model" in payload["items"][0]["message"]
+    assert "400 Bad Request" not in payload["items"][0]["message"]
+    assert "https://api.openai.com/v1/chat/completions" not in payload["items"][0]["message"]
 
 
 def test_pantry_overview_supports_product_pagination_metadata(client, db_session):
