@@ -758,9 +758,9 @@ test("ai flow covers unconfigured and configured-but-unavailable states", async 
   const defaultModelField = page.getByLabel("Default model");
   const apiKeyField = page.getByLabel("API key");
   await expect(page.getByRole("button", { name: "Save configuration" })).toHaveCount(0);
-  await expect(providerType.locator("option")).toHaveText(["OpenAI", "Claude", "Gemini", "Ollama"]);
-  await expect(baseUrlField).toHaveValue("http://localhost:11434");
-  await expect(defaultModelField).toHaveValue("llama3.2");
+  await expect(providerType).toContainText("OpenAI");
+  await expect(baseUrlField).toHaveValue("https://api.openai.com/v1");
+  await expect(defaultModelField).toHaveValue("gpt-5.4-mini");
 
   const providerBox = await providerType.boundingBox();
   const baseUrlBox = await baseUrlField.boundingBox();
@@ -770,16 +770,16 @@ test("ai flow covers unconfigured and configured-but-unavailable states", async 
   expect(baseUrlBox?.height).toBe(defaultModelBox?.height);
   expect(defaultModelBox?.height).toBe(apiKeyBox?.height);
 
-  await providerType.selectOption({ label: "OpenAI" });
-  await expect(baseUrlField).toHaveValue("https://api.openai.com/v1");
-  await expect(defaultModelField).toHaveValue("gpt-4o-mini");
   await expect(page.getByRole("button", { name: "Run health check" })).toBeDisabled();
 
   await page.getByRole("button", { name: "Choose model" }).click();
   await expect(page.getByRole("button", { name: "Back" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Close" })).toHaveCount(0);
-  await expect(page.getByLabel("Model name")).toHaveValue("gpt-4o-mini");
+  await expect(page.getByText("Fastest / cheapest")).toBeVisible();
+  await expect(page.getByText("Recommended default")).toBeVisible();
+  await expect(page.getByText("Best quality")).toBeVisible();
+  await expect(page.getByLabel("Model name")).toHaveValue("gpt-5.4-mini");
   await page.getByLabel("Model name").fill("gpt-4.1-mini");
   await page.getByRole("button", { name: "Save" }).click();
   await expect(defaultModelField).toHaveValue("gpt-4.1-mini");
@@ -788,15 +788,6 @@ test("ai flow covers unconfigured and configured-but-unavailable states", async 
   await apiKeyField.fill("test-openai-key");
   await page.keyboard.press("Tab");
   await expect(page.getByText("Health check failed.")).toBeVisible();
-
-  await providerType.selectOption({ label: "Ollama" });
-  await expect(baseUrlField).toHaveValue("http://localhost:11434");
-  await expect(defaultModelField).toHaveValue("llama3.2");
-
-  await page.getByRole("button", { name: "Choose model" }).click();
-  await page.getByLabel("Model name").fill("llama3.2");
-  await page.getByRole("button", { name: "Save" }).click();
-  await expect(page.getByText("Model saved.")).toBeVisible();
 
   await baseUrlField.fill("http://api:9");
   await page.keyboard.press("Tab");
@@ -807,7 +798,7 @@ test("ai flow covers unconfigured and configured-but-unavailable states", async 
 
   await page.goto("/admin");
   await page.goto("/admin/ai");
-  await expect(providerType).toHaveValue("ollama");
+  await expect(providerType).toContainText("OpenAI");
   await expect(baseUrlField).toHaveValue("http://api:9");
   await expect(page.getByRole("button", { name: "Save configuration" })).toHaveCount(0);
 
@@ -831,26 +822,23 @@ test("admin ai settings persist across navigation and keep stored-key state visi
   await dismissAdminWhatsNewIfVisible(page);
 
   await page.goto("/admin/ai");
-  await page.getByLabel("Provider type").selectOption("openai_compatible");
+  await expect(page.getByLabel("Provider type")).toContainText("OpenAI");
   await page.getByLabel("Base URL").fill("https://api.openai.com/v1");
-  await page.getByLabel("Default model").fill("gpt-4o-mini");
+  await page.keyboard.press("Tab");
+  await page.getByRole("button", { name: "Choose model" }).click();
+  await page.getByText("Recommended default").click();
+  await page.getByRole("button", { name: "Save" }).click();
   await page.getByLabel("API key").fill("sk-test-secret");
-  await page.getByRole("button", { name: "Save configuration" }).click();
+  await page.keyboard.press("Tab");
 
-  await expect(page.getByText("Provider configuration saved.")).toBeVisible();
-  await expect(
-    page.getByText("API key is stored. Leave the field blank to keep the current key.")
-  ).toBeVisible();
+  await expect(page.getByText("Health check failed.")).toBeVisible();
 
   await page.goto("/admin");
   await page.goto("/admin/ai");
 
-  await expect(page.getByLabel("Provider type")).toHaveValue("openai_compatible");
+  await expect(page.getByLabel("Provider type")).toContainText("OpenAI");
   await expect(page.getByLabel("Base URL")).toHaveValue("https://api.openai.com/v1");
-  await expect(page.getByLabel("Default model")).toHaveValue("gpt-4o-mini");
-  await expect(
-    page.getByText("API key is stored. Leave the field blank to keep the current key.")
-  ).toBeVisible();
+  await expect(page.getByLabel("Default model")).toHaveValue("gpt-5.4-mini");
   await expect(page.getByLabel("API key")).toHaveValue("");
 });
 

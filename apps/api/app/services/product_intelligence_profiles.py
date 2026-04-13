@@ -144,29 +144,29 @@ PROVIDER_FALLBACK_PROFILES: dict[str, ProductIntelligenceExecutionProfile] = {
 SUPPORTED_MODEL_PROFILES: dict[str, tuple[SupportedModelProfile, ...]] = {
     AI_PROVIDER_OPENAI: (
         SupportedModelProfile(
-            model="gpt-4o-mini",
+            model="gpt-4.1-mini",
             tier="lower",
-            title="Fast / lower cost",
-            description="Fast enough for lightweight Pantry prompts and cheaper classification runs.",
+            title="Fast / cheapest",
+            description="The lowest-cost supported OpenAI option for compact Pantry AI runs.",
             execution_profile=ProductIntelligenceExecutionProfile(
                 **{
                     **PROVIDER_FALLBACK_PROFILES[AI_PROVIDER_OPENAI].__dict__,
-                    "profile_label": "openai_gpt_4o_mini",
+                    "profile_label": "openai_gpt_4_1_mini",
                     "support_level": PROFILE_TUNED,
-                    "max_input_tokens": 7_500,
+                    "max_input_tokens": 8_000,
                     "max_products_per_batch": 5,
                 }
             ),
         ),
         SupportedModelProfile(
-            model="gpt-4.1-mini",
+            model="gpt-5.4-mini",
             tier="balanced",
             title="Balanced default",
-            description="A strong Pantry default for classification, suggestions, and light reasoning.",
+            description="Pantry's recommended OpenAI default for product intelligence and meal suggestions.",
             execution_profile=ProductIntelligenceExecutionProfile(
                 **{
                     **PROVIDER_FALLBACK_PROFILES[AI_PROVIDER_OPENAI].__dict__,
-                    "profile_label": "openai_gpt_4_1_mini",
+                    "profile_label": "openai_gpt_5_4_mini",
                     "support_level": PROFILE_TUNED,
                     "max_input_tokens": 9_000,
                     "max_products_per_batch": 7,
@@ -174,14 +174,14 @@ SUPPORTED_MODEL_PROFILES: dict[str, tuple[SupportedModelProfile, ...]] = {
             ),
         ),
         SupportedModelProfile(
-            model="gpt-4.1",
+            model="gpt-5.4",
             tier="higher",
             title="Higher quality",
-            description="Use when Pantry needs stronger categorisation and recipe reasoning quality.",
+            description="Use when Pantry should prioritize stronger OpenAI quality over latency and cost.",
             execution_profile=ProductIntelligenceExecutionProfile(
                 **{
                     **PROVIDER_FALLBACK_PROFILES[AI_PROVIDER_OPENAI].__dict__,
-                    "profile_label": "openai_gpt_4_1",
+                    "profile_label": "openai_gpt_5_4",
                     "support_level": PROFILE_TUNED,
                     "max_input_tokens": 10_000,
                     "max_output_tokens": 2_200,

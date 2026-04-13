@@ -9,7 +9,7 @@ from pydantic import ValidationError
 
 from app.domain.ai import AI_PROVIDER_OPENAI, canonical_provider_type
 
-OPENAI_SUPPORTED_MODELS = ("gpt-4o-mini", "gpt-4.1-mini", "gpt-4.1")
+OPENAI_SUPPORTED_MODELS = ("gpt-4.1-mini", "gpt-5.4-mini", "gpt-5.4")
 TRANSIENT_STATUS_CODES = {408, 409, 425, 429, 500, 502, 503, 504}
 
 AI_ERROR_CONFIGURATION = "configuration"
@@ -47,7 +47,7 @@ class PantryAIError(ValueError):
 def get_provider_support_copy(provider_type: str | None) -> str:
     provider = canonical_provider_type(provider_type)
     if provider == AI_PROVIDER_OPENAI:
-        return "Use one of Pantry's supported OpenAI models: gpt-4.1-mini, gpt-4o-mini, or gpt-4.1."
+        return "Use one of Pantry's supported OpenAI models: gpt-4.1-mini, gpt-5.4-mini, or gpt-5.4."
     return "Pantry currently supports OpenAI for product classification and guided meal suggestions."
 
 
