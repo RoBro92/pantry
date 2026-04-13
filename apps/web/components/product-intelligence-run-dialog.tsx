@@ -94,6 +94,7 @@ export function ProductIntelligenceRunDialog({
   const activeRunInProgress = currentRun ? ACTIVE_RUN_STATUSES.has(currentRun.status) : false;
   const normalizedProviderType = normalizeAIProviderType(status?.provider_type);
   const providerSupport = normalizedProviderType ? getAIProviderSupport(normalizedProviderType) : null;
+  const runDetails = currentRun;
 
   useEffect(() => {
     let isCancelled = false;
@@ -332,42 +333,42 @@ export function ProductIntelligenceRunDialog({
           </>
         ) : null}
 
-        {currentRun ? (
+        {runDetails ? (
           <section className="modal-form-section">
             <div className="stack compact-stack">
               <h3 className="modal-section-title">
                 {activeRunInProgress ? "Active run" : "Latest run"}
               </h3>
               <p className="helper-text">
-                Requested {formatRunDate(currentRun.created_at)} · started{" "}
-                {formatRunDate(currentRun.started_at)} · completed {formatRunDate(currentRun.completed_at)}
+                Requested {formatRunDate(runDetails.created_at)} · started{" "}
+                {formatRunDate(runDetails.started_at)} · completed {formatRunDate(runDetails.completed_at)}
               </p>
             </div>
 
             <div className="inline-status-card">
               <div className="tag-row">
-                <span className="tag">{formatRunLabel(currentRun.status)}</span>
-                <span className="tag subtle-tag">processed {currentRun.processed_count}</span>
-                <span className="tag subtle-tag">classified {currentRun.classified_count}</span>
-                <span className="tag subtle-tag">skipped {currentRun.skipped_count}</span>
-                <span className="tag subtle-tag">failed {currentRun.failed_count}</span>
+                <span className="tag">{formatRunLabel(runDetails.status)}</span>
+                <span className="tag subtle-tag">processed {runDetails.processed_count}</span>
+                <span className="tag subtle-tag">classified {runDetails.classified_count}</span>
+                <span className="tag subtle-tag">skipped {runDetails.skipped_count}</span>
+                <span className="tag subtle-tag">failed {runDetails.failed_count}</span>
                 <span className="tag subtle-tag">
-                  batches {currentRun.completed_batch_count}/{currentRun.batch_count}
+                  batches {runDetails.completed_batch_count}/{runDetails.batch_count}
                 </span>
               </div>
               <div className="run-progress-meter" aria-hidden="true">
                 <div className="run-progress-fill" style={{ width: `${progressPercent}%` }} />
               </div>
               <p className="helper-text">
-                {progressPercent}% complete · {currentRun.total_candidates} targeted product
-                {currentRun.total_candidates === 1 ? "" : "s"}
+                {progressPercent}% complete · {runDetails.total_candidates} targeted product
+                {runDetails.total_candidates === 1 ? "" : "s"}
               </p>
-              {currentRun.last_error ? <p className="error-text">{currentRun.last_error}</p> : null}
+              {runDetails.last_error ? <p className="error-text">{runDetails.last_error}</p> : null}
             </div>
 
-            {currentRun.events.length > 0 ? (
+            {runDetails.events.length > 0 ? (
               <div className="stack intelligence-run-list">
-                {currentRun.events
+                {runDetails.events
                   .slice()
                   .reverse()
                   .map((event, index) => (
@@ -386,9 +387,9 @@ export function ProductIntelligenceRunDialog({
               </div>
             ) : null}
 
-            {currentRun.items.length > 0 ? (
+            {runDetails.items.length > 0 ? (
               <div className="stack intelligence-run-list">
-                {currentRun.items
+                {runDetails.items
                   .slice()
                   .reverse()
                   .slice(0, 10)
