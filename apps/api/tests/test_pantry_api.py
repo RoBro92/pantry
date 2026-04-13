@@ -16,6 +16,7 @@ from app.schemas.pantry import ProductEnrichmentAttribution, ProductEnrichmentCa
 from app.models.stock_lot import StockLot
 from app.services.ai_config import upsert_instance_provider_config
 from app.services.ai_providers import AIProviderHealth, StructuredCompletionResult
+from app.services.ai_providers.errors import AIProviderError
 from app.services.auth import create_household, create_membership, create_platform_admin, create_user
 from app.services.pantry_catalog import create_location as create_location_record
 from app.services.pantry_catalog import create_location_group as create_location_group_record
@@ -667,7 +668,7 @@ def test_product_intelligence_run_surfaces_friendly_openai_errors(client, db_ses
         actor=platform_admin,
         provider_type=AI_PROVIDER_OPENAI,
         base_url="https://api.openai.com/v1",
-        default_model="gpt-4.1-mini",
+        default_model="gpt-5.4-mini",
         api_key="openai-secret",
         is_enabled=True,
     )
@@ -677,7 +678,7 @@ def test_product_intelligence_run_surfaces_friendly_openai_errors(client, db_ses
             is_healthy=True,
             status="healthy",
             message=None,
-            models=["gpt-4.1-mini"],
+            models=["gpt-5.4-mini"],
             capabilities={"supports_structured_output": True},
         ),
     )
@@ -721,8 +722,11 @@ def test_product_intelligence_run_surfaces_friendly_openai_errors(client, db_ses
     assert run_detail.status_code == 200
     payload = run_detail.json()
     assert payload["status"] == "failed"
+    assert "gpt-5.4-mini" in payload["last_error"]
     assert "gpt-4.1-mini" in payload["last_error"]
-    assert "gpt-4o-mini" in payload["last_error"]
+    assert "gpt-5.4" in payload["last_error"]
+    assert "400 Bad Request" not in payload["last_error"]
+    assert "https://api.openai.com/v1/chat/completions" not in payload["last_error"]
 
 
 def test_product_intelligence_profiles_choose_gemini_default_and_token_aware_batches(db_session):

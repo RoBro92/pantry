@@ -223,7 +223,7 @@ def generate_household_ai_suggestions(
             config=resolved.record,
             error_message=str(ai_error),
         )
-        logger.exception(
+        logger.warning(
             "ai.request.failed",
             household_external_id=access.household.external_id,
             provider_config_external_id=resolved.record.external_id,

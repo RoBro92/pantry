@@ -31,7 +31,9 @@ def test_openai_adapter_sanitizes_strict_json_schema_before_request(monkeypatch)
         def __exit__(self, exc_type, exc, tb):
             return False
 
-        def post(self, url: str, json: dict[str, object]):
+        def request(self, method: str, url: str, json: dict[str, object] | None = None):
+            assert method == "POST"
+            assert json is not None
             captured_payload.update(json)
             return StubResponse(
                 {

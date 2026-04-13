@@ -19,6 +19,10 @@ export const AI_PROVIDER_OPTIONS: Array<{ value: AIProviderType; label: string }
   { value: "ollama", label: "Ollama (not currently supported)" }
 ];
 
+export const VISIBLE_AI_PROVIDER_OPTIONS: Array<{ value: AIProviderType; label: string }> = [
+  { value: "openai", label: "OpenAI" }
+];
+
 export const AI_PROVIDER_LABELS: Record<AIProviderType, string> = {
   openai: "OpenAI",
   claude: "Claude",
@@ -34,7 +38,7 @@ export const AI_PROVIDER_DEFAULT_BASE_URLS: Record<AIProviderType, string> = {
 };
 
 export const AI_PROVIDER_DEFAULT_MODELS: Record<AIProviderType, string> = {
-  openai: "gpt-4.1-mini",
+  openai: "gpt-5.4-mini",
   claude: "claude-sonnet-4-6",
   gemini: "gemini-2.5-flash",
   ollama: "qwen3:8b"
@@ -50,19 +54,19 @@ export const AI_PROVIDER_API_KEY_REQUIRED: Record<AIProviderType, boolean> = {
 const AI_PROVIDER_RECOMMENDED_MODELS: Record<AIProviderType, ProviderRecommendation[]> = {
   openai: [
     {
-      model: "gpt-4o-mini",
-      label: "Fast / low cost",
-      description: "Good for lightweight Pantry prompts and cheaper high-volume runs."
-    },
-    {
       model: "gpt-4.1-mini",
-      label: "Balanced",
-      description: "Pantry’s default OpenAI pick for classification and everyday reasoning."
+      label: "Fastest / cheapest",
+      description: "Lowest-cost supported option for light Pantry AI runs."
     },
     {
-      model: "gpt-4.1",
-      label: "Higher quality",
-      description: "Use when Pantry should favour stronger categorisation quality."
+      model: "gpt-5.4-mini",
+      label: "Recommended default",
+      description: "Best balance for Pantry suggestions and product intelligence."
+    },
+    {
+      model: "gpt-5.4",
+      label: "Best quality",
+      description: "Stronger output quality, with more latency and cost."
     }
   ],
   claude: [
@@ -190,6 +194,13 @@ export function getRecommendedModels(providerType: AIProviderType, availableMode
     ...pick,
     model: resolveRecommendedModel(availableModels, pick.model)
   }));
+}
+
+export function isRecommendedModel(providerType: AIProviderType, model: string) {
+  const normalizedModel = normalizeModelId(model);
+  return AI_PROVIDER_RECOMMENDED_MODELS[providerType].some(
+    (pick) => normalizeModelId(pick.model) === normalizedModel
+  );
 }
 
 export function normalizeAIProviderType(providerType: string | null | undefined): AIProviderType | null {
