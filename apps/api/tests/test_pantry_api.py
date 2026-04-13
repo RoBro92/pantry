@@ -3,13 +3,15 @@ from __future__ import annotations
 from datetime import date, timedelta
 from decimal import Decimal
 
+import httpx
 from sqlalchemy import select
 
-from app.domain.ai import AI_PROVIDER_OLLAMA
+from app.domain.ai import AI_PROVIDER_OLLAMA, AI_PROVIDER_OPENAI
 from app.domain.roles import HOUSEHOLD_ADMIN_ROLE, HOUSEHOLD_USER_ROLE
 from app.models.audit_event import AuditEvent
 from app.models.product_enrichment import ProductEnrichment
 from app.models.product_intelligence import ProductIntelligence
+from app.models.product_intelligence_run import ProductIntelligenceRun
 from app.schemas.pantry import ProductEnrichmentAttribution, ProductEnrichmentCandidate, ProductNutritionSummaryItem
 from app.models.stock_lot import StockLot
 from app.services.ai_config import upsert_instance_provider_config
@@ -19,6 +21,10 @@ from app.services.pantry_catalog import create_location as create_location_recor
 from app.services.pantry_catalog import create_location_group as create_location_group_record
 from app.services.pantry_catalog import create_product as create_product_record
 from app.services.pantry_stock import add_stock_lot as add_stock_lot_record
+from app.services.product_intelligence import ProductIntelligenceStaleness
+from app.services.product_intelligence_profiles import get_default_supported_model, resolve_product_intelligence_profile
+from app.services.product_intelligence_runs import process_next_product_intelligence_run
+from app.services.product_intelligence_runs import PreparedClassificationCandidate, _build_batches
 
 
 PASSWORD = "correct horse battery"
@@ -145,49 +151,76 @@ def build_enrichment_candidate(
     )
 
 
+def _stub_product_intelligence_output(product_name: str) -> dict[str, object]:
+    if "sauce" in product_name.lower():
+        return {
+            "confidence": 0.92,
+            "rationale_short": "Condiment evidence is clear from the product and enrichment data.",
+            "primary_ingredient_type": "Tomato",
+            "ingredient_families": ["Tomato", "Vinegar"],
+            "food_category": "Condiment",
+            "dietary_tags": ["Vegetarian"],
+            "allergen_tags": ["Gluten"],
+            "recipe_role_tags": ["Sauce", "Seasoning"],
+            "substitution_groups": ["Brown sauce"],
+            "pantry_use_tags": ["Pantry staple", "Sauce builder", "Shelf stable"],
+            "structured_metadata": {
+                "product_format": "Bottled sauce",
+                "storage_profile": "Shelf stable",
+                "cuisine_tags": ["British"],
+                "flavour_tags": ["Tangy", "Savoury"],
+                "preparation_tags": ["Ready to use"],
+            },
+        }
+    return {
+        "confidence": 0.88,
+        "rationale_short": "Core pantry staple with a clear starch role.",
+        "primary_ingredient_type": "Wheat",
+        "ingredient_families": ["Wheat"],
+        "food_category": "Dry pasta",
+        "dietary_tags": [],
+        "allergen_tags": ["Gluten"],
+        "recipe_role_tags": ["Carbohydrate", "Base"],
+        "substitution_groups": ["Pasta"],
+        "pantry_use_tags": ["Pantry staple", "Quick meal", "Shelf stable"],
+        "structured_metadata": {
+            "product_format": "Dried",
+            "storage_profile": "Shelf stable",
+            "cuisine_tags": ["Italian"],
+            "flavour_tags": ["Neutral"],
+            "preparation_tags": ["Boil"],
+        },
+    }
+
+
 class StubProductIntelligenceAdapter:
+    def __init__(self, *, fail_attempts: int = 0, omitted_product_external_ids: set[str] | None = None):
+        self.fail_attempts = fail_attempts
+        self.omitted_product_external_ids = omitted_product_external_ids or set()
+        self.batches: list[list[str]] = []
+
     def generate_structured_output(self, request) -> StructuredCompletionResult:
-        product_name = request.user_payload["product"]["product"]["name"]
-        if "sauce" in product_name.lower():
-            output = {
-                "confidence": 0.92,
-                "rationale_short": "Condiment evidence is clear from the product and enrichment data.",
-                "primary_ingredient_type": "Tomato",
-                "ingredient_families": ["Tomato", "Vinegar"],
-                "food_category": "Condiment",
-                "dietary_tags": ["Vegetarian"],
-                "allergen_tags": ["Gluten"],
-                "recipe_role_tags": ["Sauce", "Seasoning"],
-                "substitution_groups": ["Brown sauce"],
-                "pantry_use_tags": ["Pantry staple", "Sauce builder", "Shelf stable"],
-                "structured_metadata": {
-                    "product_format": "Bottled sauce",
-                    "storage_profile": "Shelf stable",
-                    "cuisine_tags": ["British"],
-                    "flavour_tags": ["Tangy", "Savoury"],
-                    "preparation_tags": ["Ready to use"],
-                },
-            }
-        else:
-            output = {
-                "confidence": 0.88,
-                "rationale_short": "Core pantry staple with a clear starch role.",
-                "primary_ingredient_type": "Wheat",
-                "ingredient_families": ["Wheat"],
-                "food_category": "Dry pasta",
-                "dietary_tags": [],
-                "allergen_tags": ["Gluten"],
-                "recipe_role_tags": ["Carbohydrate", "Base"],
-                "substitution_groups": ["Pasta"],
-                "pantry_use_tags": ["Pantry staple", "Quick meal", "Shelf stable"],
-                "structured_metadata": {
-                    "product_format": "Dried",
-                    "storage_profile": "Shelf stable",
-                    "cuisine_tags": ["Italian"],
-                    "flavour_tags": ["Neutral"],
-                    "preparation_tags": ["Boil"],
-                },
-            }
+        if self.fail_attempts > 0:
+            self.fail_attempts -= 1
+            request_obj = httpx.Request("POST", "http://ollama.test/api/chat")
+            raise httpx.HTTPStatusError(
+                "429 Too Many Requests",
+                request=request_obj,
+                response=httpx.Response(429, request=request_obj),
+            )
+
+        products = request.user_payload["products"]
+        self.batches.append([product["product_external_id"] for product in products])
+        output = {
+            "items": [
+                {
+                    "product_external_id": product["product_external_id"],
+                    **_stub_product_intelligence_output(product["product"]["name"]),
+                }
+                for product in products
+                if product["product_external_id"] not in self.omitted_product_external_ids
+            ]
+        }
         return StructuredCompletionResult(
             output_text=str(output),
             parsed_output=output,
@@ -195,7 +228,13 @@ class StubProductIntelligenceAdapter:
         )
 
 
-def install_stub_product_intelligence_provider(db_session, monkeypatch) -> None:
+def install_stub_product_intelligence_provider(
+    db_session,
+    monkeypatch,
+    *,
+    adapter: StubProductIntelligenceAdapter | None = None,
+) -> StubProductIntelligenceAdapter:
+    stub_adapter = adapter or StubProductIntelligenceAdapter()
     platform_admin = create_platform_admin(
         db_session,
         email="platform-admin@example.com",
@@ -212,7 +251,7 @@ def install_stub_product_intelligence_provider(db_session, monkeypatch) -> None:
         is_enabled=True,
     )
     monkeypatch.setattr(
-        "app.services.product_intelligence.refresh_provider_health",
+        "app.services.product_intelligence_runs.refresh_provider_health",
         lambda db, config: AIProviderHealth(
             is_healthy=True,
             status="healthy",
@@ -222,9 +261,10 @@ def install_stub_product_intelligence_provider(db_session, monkeypatch) -> None:
         ),
     )
     monkeypatch.setattr(
-        "app.services.product_intelligence.build_ai_provider_adapter",
-        lambda runtime: StubProductIntelligenceAdapter(),
+        "app.services.product_intelligence_runs.build_ai_provider_adapter",
+        lambda runtime: stub_adapter,
     )
+    return stub_adapter
 
 
 def test_pantry_overview_aggregates_and_supports_search_and_filters(client, db_session):
@@ -360,7 +400,7 @@ def test_product_intelligence_run_supports_product_and_unclassified_modes(client
         household_name="Classification Household",
         role_code=HOUSEHOLD_ADMIN_ROLE,
     )
-    install_stub_product_intelligence_provider(db_session, monkeypatch)
+    stub_adapter = install_stub_product_intelligence_provider(db_session, monkeypatch)
     login(client, email="classification@example.com")
 
     sauce = create_product(
@@ -396,10 +436,27 @@ def test_product_intelligence_run_supports_product_and_unclassified_modes(client
     )
     assert product_run.status_code == 200
     product_run_payload = product_run.json()
-    assert product_run_payload["classified_count"] == 1
-    assert product_run_payload["skipped_count"] == 0
-    assert product_run_payload["items"][0]["status"] == "classified"
-    assert product_run_payload["items"][0]["intelligence"]["food_category"] == "Condiment"
+    assert product_run_payload["status"] == "queued"
+    assert product_run_payload["total_candidates"] == 1
+    assert product_run_payload["processed_count"] == 0
+    assert product_run_payload["created"] is True
+
+    queued_run = db_session.scalar(select(ProductIntelligenceRun))
+    assert queued_run is not None
+    assert queued_run.status == "queued"
+
+    assert process_next_product_intelligence_run() is True
+    assert stub_adapter.batches == [[sauce["external_id"]]]
+
+    product_run_detail = client.get(
+        f"/api/households/{household.external_id}/product-intelligence/runs/{product_run_payload['external_id']}"
+    )
+    assert product_run_detail.status_code == 200
+    product_run_detail_payload = product_run_detail.json()
+    assert product_run_detail_payload["status"] == "completed"
+    assert product_run_detail_payload["classified_count"] == 1
+    assert product_run_detail_payload["items"][0]["status"] == "classified"
+    assert product_run_detail_payload["items"][0]["intelligence"]["food_category"] == "Condiment"
 
     intelligence_record = db_session.scalar(select(ProductIntelligence).where(ProductIntelligence.product_id.is_not(None)))
     assert intelligence_record is not None
@@ -411,10 +468,22 @@ def test_product_intelligence_run_supports_product_and_unclassified_modes(client
     )
     assert unclassified_run.status_code == 200
     unclassified_payload = unclassified_run.json()
+    assert unclassified_payload["status"] == "queued"
     assert unclassified_payload["total_candidates"] == 2
-    assert unclassified_payload["classified_count"] == 1
-    assert unclassified_payload["skipped_count"] == 1
-    assert {item["status"] for item in unclassified_payload["items"]} == {"classified", "skipped"}
+
+    assert process_next_product_intelligence_run() is True
+    assert stub_adapter.batches[-1] == [pasta["external_id"]]
+
+    unclassified_detail = client.get(
+        f"/api/households/{household.external_id}/product-intelligence/runs/{unclassified_payload['external_id']}"
+    )
+    assert unclassified_detail.status_code == 200
+    unclassified_detail_payload = unclassified_detail.json()
+    assert unclassified_detail_payload["status"] == "completed"
+    assert unclassified_detail_payload["processed_count"] == 2
+    assert unclassified_detail_payload["classified_count"] == 1
+    assert unclassified_detail_payload["skipped_count"] == 1
+    assert {item["status"] for item in unclassified_detail_payload["items"]} == {"classified", "skipped"}
 
     overview = client.get(f"/api/households/{household.external_id}/pantry/overview")
     assert overview.status_code == 200
@@ -422,6 +491,10 @@ def test_product_intelligence_run_supports_product_and_unclassified_modes(client
     intelligence_by_name = {item["product_name"]: item["intelligence"] for item in products}
     assert intelligence_by_name["Brown sauce"]["food_category"] == "Condiment"
     assert intelligence_by_name["Pasta"]["food_category"] == "Dry pasta"
+
+    refreshed_status = client.get(f"/api/households/{household.external_id}/product-intelligence/status")
+    assert refreshed_status.status_code == 200
+    assert refreshed_status.json()["latest_run"]["external_id"] == unclassified_payload["external_id"]
 
 
 def test_product_intelligence_marks_stale_after_material_product_update(client, db_session, monkeypatch):
@@ -449,6 +522,7 @@ def test_product_intelligence_marks_stale_after_material_product_update(client, 
         json={"mode": "product", "product_external_id": product["external_id"]},
     )
     assert classify.status_code == 200
+    assert process_next_product_intelligence_run() is True
 
     updated = update_product(
         client,
@@ -469,6 +543,235 @@ def test_product_intelligence_marks_stale_after_material_product_update(client, 
     intelligence = overview.json()["catalog_products"][0]["intelligence"]
     assert intelligence["is_stale"] is True
     assert "source_product_data_changed" in intelligence["stale_reasons"]
+
+
+def test_product_intelligence_worker_batches_requests_and_recovers_from_429s(client, db_session, monkeypatch):
+    _, household = create_household_with_role(
+        db_session,
+        email="classification-batch@example.com",
+        household_name="Classification Batch Household",
+        role_code=HOUSEHOLD_ADMIN_ROLE,
+    )
+    stub_adapter = install_stub_product_intelligence_provider(
+        db_session,
+        monkeypatch,
+        adapter=StubProductIntelligenceAdapter(fail_attempts=2),
+    )
+    sleep_calls: list[float] = []
+    monkeypatch.setattr(
+        "app.services.product_intelligence_runs.time.sleep",
+        lambda seconds: sleep_calls.append(round(float(seconds), 2)),
+    )
+    login(client, email="classification-batch@example.com")
+
+    for index in range(7):
+        create_product(
+            client,
+            household.external_id,
+            name=f"Pasta {index}",
+            default_unit="pack",
+            aliases=[],
+            barcodes=[],
+            notes="Long pantry note " * 20,
+        )
+
+    queued = client.post(
+        f"/api/households/{household.external_id}/product-intelligence/classify",
+        json={"mode": "all"},
+    )
+    assert queued.status_code == 200
+
+    assert process_next_product_intelligence_run() is True
+
+    run_detail = client.get(
+        f"/api/households/{household.external_id}/product-intelligence/runs/{queued.json()['external_id']}"
+    )
+    assert run_detail.status_code == 200
+    payload = run_detail.json()
+    assert payload["status"] == "completed"
+    assert payload["classified_count"] == 7
+    assert payload["failed_count"] == 0
+    assert len(stub_adapter.batches) == 3
+    assert all(len(batch) <= 3 for batch in stub_adapter.batches)
+    assert any("Retrying batch" in event["message"] for event in payload["events"])
+    assert len(sleep_calls) >= 2
+
+
+def test_product_intelligence_run_reports_partial_success_when_batch_output_omits_a_product(
+    client, db_session, monkeypatch
+):
+    _, household = create_household_with_role(
+        db_session,
+        email="classification-partial@example.com",
+        household_name="Classification Partial Household",
+        role_code=HOUSEHOLD_ADMIN_ROLE,
+    )
+    login(client, email="classification-partial@example.com")
+    sauce = create_product(
+        client,
+        household.external_id,
+        name="Brown sauce",
+        default_unit="bottle",
+        aliases=[],
+        barcodes=["5000111046244"],
+    )
+    pasta = create_product(
+        client,
+        household.external_id,
+        name="Pasta",
+        default_unit="pack",
+        aliases=[],
+        barcodes=[],
+    )
+    install_stub_product_intelligence_provider(
+        db_session,
+        monkeypatch,
+        adapter=StubProductIntelligenceAdapter(omitted_product_external_ids={pasta["external_id"]}),
+    )
+
+    queued = client.post(
+        f"/api/households/{household.external_id}/product-intelligence/classify",
+        json={"mode": "all"},
+    )
+    assert queued.status_code == 200
+
+    assert process_next_product_intelligence_run() is True
+
+    run_detail = client.get(
+        f"/api/households/{household.external_id}/product-intelligence/runs/{queued.json()['external_id']}"
+    )
+    assert run_detail.status_code == 200
+    payload = run_detail.json()
+    assert payload["status"] == "partially_completed"
+    assert payload["classified_count"] == 1
+    assert payload["failed_count"] == 1
+    assert {item["status"] for item in payload["items"]} == {"classified", "failed"}
+    assert sauce["external_id"] in {item["product_external_id"] for item in payload["items"]}
+
+
+def test_product_intelligence_run_surfaces_friendly_openai_errors(client, db_session, monkeypatch):
+    _, household = create_household_with_role(
+        db_session,
+        email="classification-openai-error@example.com",
+        household_name="Classification OpenAI Error Household",
+        role_code=HOUSEHOLD_ADMIN_ROLE,
+    )
+    platform_admin = create_platform_admin(
+        db_session,
+        email="classification-openai-admin@example.com",
+        password=PASSWORD,
+        display_name="OpenAI Classification Admin",
+    )
+    upsert_instance_provider_config(
+        db_session,
+        actor=platform_admin,
+        provider_type=AI_PROVIDER_OPENAI,
+        base_url="https://api.openai.com/v1",
+        default_model="gpt-4.1-mini",
+        api_key="openai-secret",
+        is_enabled=True,
+    )
+    monkeypatch.setattr(
+        "app.services.product_intelligence_runs.refresh_provider_health",
+        lambda db, config: AIProviderHealth(
+            is_healthy=True,
+            status="healthy",
+            message=None,
+            models=["gpt-4.1-mini"],
+            capabilities={"supports_structured_output": True},
+        ),
+    )
+
+    class FailingOpenAIClassificationAdapter(StubProductIntelligenceAdapter):
+        def generate_structured_output(self, request) -> StructuredCompletionResult:
+            request_obj = httpx.Request("POST", "https://api.openai.com/v1/chat/completions")
+            response = httpx.Response(
+                400,
+                request=request_obj,
+                text='{"error":{"message":"Invalid schema for response_format json_schema"}}',
+            )
+            raise httpx.HTTPStatusError("400 Client Error", request=request_obj, response=response)
+
+    monkeypatch.setattr(
+        "app.services.product_intelligence_runs.build_ai_provider_adapter",
+        lambda runtime: FailingOpenAIClassificationAdapter(),
+    )
+
+    login(client, email="classification-openai-error@example.com")
+    create_product(
+        client,
+        household.external_id,
+        name="Pasta",
+        default_unit="pack",
+        aliases=[],
+        barcodes=[],
+    )
+
+    queued = client.post(
+        f"/api/households/{household.external_id}/product-intelligence/classify",
+        json={"mode": "all"},
+    )
+    assert queued.status_code == 200
+
+    assert process_next_product_intelligence_run() is True
+
+    run_detail = client.get(
+        f"/api/households/{household.external_id}/product-intelligence/runs/{queued.json()['external_id']}"
+    )
+    assert run_detail.status_code == 200
+    payload = run_detail.json()
+    assert payload["status"] == "failed"
+    assert "gpt-4.1-mini" in payload["last_error"]
+    assert "gpt-4o-mini" in payload["last_error"]
+
+
+def test_product_intelligence_profiles_choose_gemini_default_and_token_aware_batches(db_session):
+    actor, household = create_household_with_role(
+        db_session,
+        email="classification-profiles@example.com",
+        household_name="Classification Profiles Household",
+        role_code=HOUSEHOLD_ADMIN_ROLE,
+    )
+    large_product = create_product_record(
+        db_session,
+        household=household,
+        actor=actor,
+        name="Large pantry product",
+        default_unit="pack",
+        aliases=[],
+        barcodes=[],
+    )
+
+    profile = resolve_product_intelligence_profile("gemini", "gemini-2.5-flash")
+    assert profile.profile_label == "gemini_2_5_flash"
+    assert get_default_supported_model("gemini") == "gemini-2.5-flash"
+
+    large_candidate = PreparedClassificationCandidate(
+        product=large_product,
+        payload={"product_external_id": large_product.external_id},
+        approx_input_tokens=4_000,
+        staleness=ProductIntelligenceStaleness(is_stale=False, reasons=[]),
+        existing_intelligence=None,
+    )
+    second_candidate = PreparedClassificationCandidate(
+        product=large_product,
+        payload={"product_external_id": "second"},
+        approx_input_tokens=2_800,
+        staleness=ProductIntelligenceStaleness(is_stale=False, reasons=[]),
+        existing_intelligence=None,
+    )
+    third_candidate = PreparedClassificationCandidate(
+        product=large_product,
+        payload={"product_external_id": "third"},
+        approx_input_tokens=1_000,
+        staleness=ProductIntelligenceStaleness(is_stale=False, reasons=[]),
+        existing_intelligence=None,
+    )
+
+    batches = _build_batches([large_candidate, second_candidate, third_candidate], profile=profile)
+    assert len(batches) == 2
+    assert [candidate.approx_input_tokens for candidate in batches[0]] == [4_000]
+    assert [candidate.approx_input_tokens for candidate in batches[1]] == [2_800, 1_000]
 
 
 def test_pantry_overview_supports_product_pagination_metadata(client, db_session):

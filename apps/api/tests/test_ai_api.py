@@ -3,9 +3,10 @@ from __future__ import annotations
 from datetime import date, timedelta
 from decimal import Decimal
 
+import httpx
 from sqlalchemy import select
 
-from app.domain.ai import AI_PROVIDER_OLLAMA
+from app.domain.ai import AI_PROVIDER_OLLAMA, AI_PROVIDER_OPENAI
 from app.domain.roles import HOUSEHOLD_ADMIN_ROLE
 from app.models.audit_event import AuditEvent
 from app.models.product import Product
@@ -631,14 +632,155 @@ def test_household_ai_generation_failures_degrade_cleanly_and_update_status(
         json={"kind": "meal_suggestions", "limit": 2},
     )
     assert suggestion_response.status_code == 503
-    assert "AI suggestion generation failed" in suggestion_response.json()["detail"]
+    assert "temporarily unavailable" in suggestion_response.json()["detail"].lower()
 
     status_response = client.get(f"/api/households/{household.external_id}/ai/status")
     assert status_response.status_code == 200
     payload = status_response.json()
     assert payload["available"] is False
     assert payload["health_status"] == "unhealthy"
-    assert "Provider request timed out." in payload["reason"]
+    assert "temporarily unavailable" in payload["reason"].lower()
+
+
+def test_ai_meal_suggestions_support_openai_provider_configs(client, db_session, monkeypatch):
+    member, household = create_member_household(
+        db_session,
+        email="openai-meals@example.com",
+        household_name="OpenAI Meals Household",
+    )
+    admin = create_platform_admin(
+        db_session,
+        email="openai-meals-admin@example.com",
+        password=PASSWORD,
+        display_name="OpenAI Meals Admin",
+    )
+    upsert_instance_provider_config(
+        db_session,
+        actor=admin,
+        provider_type=AI_PROVIDER_OPENAI,
+        base_url="https://api.openai.com/v1",
+        default_model="gpt-4.1-mini",
+        api_key="openai-test-secret",
+        is_enabled=True,
+    )
+
+    captured_provider_types: list[str] = []
+
+    class StubOpenAIMealAdapter(StubAIProviderAdapter):
+        def generate_structured_output(self, request) -> StructuredCompletionResult:
+            assert request.model == "gpt-4.1-mini"
+            return StructuredCompletionResult(
+                output_text='{"suggestions":[{"title":"Simple toast","short_summary":"Fast pantry meal.","why_it_matches":"Uses what is already available.","dietary_fit_summary":"Fits the selected preferences.","source":{"kind":"ai_generated","label":"AI-generated"},"ingredients":[],"steps":["Toast the bread."]}]}',
+                parsed_output={
+                    "suggestions": [
+                        {
+                            "title": "Simple toast",
+                            "short_summary": "Fast pantry meal.",
+                            "why_it_matches": "Uses what is already available.",
+                            "dietary_fit_summary": "Fits the selected preferences.",
+                            "source": {
+                                "kind": "ai_generated",
+                                "label": "AI-generated",
+                            },
+                            "ingredients": [],
+                            "steps": ["Toast the bread."],
+                        }
+                    ]
+                },
+                provider_request_id="openai_meal_req_123",
+            )
+
+    def build_stub_adapter(config):
+        captured_provider_types.append(config.provider_type)
+        return StubOpenAIMealAdapter()
+
+    monkeypatch.setattr("app.services.ai_config.build_ai_provider_adapter", build_stub_adapter)
+    monkeypatch.setattr("app.services.ai_meal_suggestions.build_ai_provider_adapter", build_stub_adapter)
+
+    login(client, email="openai-meals@example.com")
+
+    response = client.post(
+        f"/api/households/{household.external_id}/ai/meal-suggestions",
+        json={
+            "people_count": 1,
+            "selected_user_external_ids": [member.external_id],
+            "meal_type": "dinner",
+            "extra_portion_count": 0,
+            "max_total_minutes": 20,
+            "prioritize_near_expiry": False,
+            "allow_extra_ingredients": True,
+            "pantry_only": False,
+            "temporary_include_preferences": [],
+            "temporary_exclude_preferences": [],
+            "removed_preference_pills": [],
+        },
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["feature"]["provider_type"] == "openai"
+    assert payload["suggestions"][0]["title"] == "Simple toast"
+    assert "openai" in captured_provider_types
+
+
+def test_ai_meal_suggestions_surface_friendly_openai_errors(client, db_session, monkeypatch):
+    member, household = create_member_household(
+        db_session,
+        email="openai-meal-error@example.com",
+        household_name="OpenAI Error Household",
+    )
+    admin = create_platform_admin(
+        db_session,
+        email="openai-meal-error-admin@example.com",
+        password=PASSWORD,
+        display_name="OpenAI Error Admin",
+    )
+    upsert_instance_provider_config(
+        db_session,
+        actor=admin,
+        provider_type=AI_PROVIDER_OPENAI,
+        base_url="https://api.openai.com/v1",
+        default_model="gpt-4.1-mini",
+        api_key="openai-test-secret",
+        is_enabled=True,
+    )
+
+    class FailingOpenAIAdapter(StubAIProviderAdapter):
+        def generate_structured_output(self, request) -> StructuredCompletionResult:
+            request_obj = httpx.Request("POST", "https://api.openai.com/v1/chat/completions")
+            response = httpx.Response(
+                400,
+                request=request_obj,
+                text='{"error":{"message":"Invalid schema for response_format json_schema"}}',
+            )
+            raise httpx.HTTPStatusError("400 Client Error", request=request_obj, response=response)
+
+    monkeypatch.setattr("app.services.ai_config.build_ai_provider_adapter", lambda config: FailingOpenAIAdapter())
+    monkeypatch.setattr(
+        "app.services.ai_meal_suggestions.build_ai_provider_adapter",
+        lambda config: FailingOpenAIAdapter(),
+    )
+
+    login(client, email="openai-meal-error@example.com")
+
+    response = client.post(
+        f"/api/households/{household.external_id}/ai/meal-suggestions",
+        json={
+            "people_count": 1,
+            "selected_user_external_ids": [member.external_id],
+            "meal_type": "dinner",
+            "extra_portion_count": 0,
+            "max_total_minutes": 20,
+            "prioritize_near_expiry": False,
+            "allow_extra_ingredients": True,
+            "pantry_only": False,
+            "temporary_include_preferences": [],
+            "temporary_exclude_preferences": [],
+            "removed_preference_pills": [],
+        },
+    )
+    assert response.status_code == 503
+    assert "gpt-4.1-mini" in response.json()["detail"]
+    assert "gpt-4o-mini" in response.json()["detail"]
 
 
 def test_household_ai_feature_flag_can_disable_household_access(client, db_session):

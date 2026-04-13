@@ -36,6 +36,7 @@ from app.services.ai_config import (
 from app.services.ai_meal_context import build_ai_meal_context, build_meal_planner_response
 from app.services.ai_meal_prompts import build_ai_meal_prompt_plan
 from app.services.ai_providers import StructuredCompletionRequest, build_ai_provider_adapter
+from app.services.ai_runtime import normalize_ai_error
 from app.services.ai_suggestions import build_household_ai_feature_status
 from app.services.audit import record_audit_event
 from app.services.pantry_normalization import lookup_token_overlap, normalize_lookup_name, normalize_unit
@@ -362,11 +363,15 @@ def generate_ai_meal_suggestions(
         )
         parsed = AIProviderMealSuggestionOutput.model_validate(completion.parsed_output)
     except Exception as exc:
-        error_message = f"AI meal suggestion generation failed: {exc}"
+        ai_error = normalize_ai_error(
+            exc,
+            provider_type=resolved.record.provider_type,
+            model=resolved.record.default_model,
+        )
         record_provider_runtime_failure(
             db,
             config=resolved.record,
-            error_message=error_message,
+            error_message=str(ai_error),
         )
         logger.exception(
             "ai.meal_suggestion.request.failed",
@@ -374,6 +379,7 @@ def generate_ai_meal_suggestions(
             provider_config_external_id=resolved.record.external_id,
             provider_type=resolved.record.provider_type,
             model=resolved.record.default_model,
+            error=ai_error.technical_message,
         )
         record_audit_event(
             db,
@@ -386,11 +392,11 @@ def generate_ai_meal_suggestions(
                 "provider_config_external_id": resolved.record.external_id,
                 "provider_type": resolved.record.provider_type,
                 "default_model": resolved.record.default_model,
-                "error": error_message,
+                "error": ai_error.technical_message,
             },
         )
         db.commit()
-        raise ValueError(error_message) from exc
+        raise ai_error from exc
 
     active_lots = _load_active_lots(db, household=access.household)
     recipe_external_ids = {

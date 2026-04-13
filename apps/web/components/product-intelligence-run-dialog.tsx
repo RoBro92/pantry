@@ -6,6 +6,10 @@ import type {
   ProductIntelligenceRunResponse,
   ProductIntelligenceStatusResponse
 } from "../lib/api-types";
+import {
+  getAIProviderSupport,
+  normalizeAIProviderType,
+} from "../lib/ai-provider-config";
 import { getFromApi, postToApi } from "../lib/client-api";
 import { ModalShell } from "./modal-shell";
 
@@ -17,11 +21,35 @@ type ProductIntelligenceRunDialogProps = {
 
 type RunMode = "all" | "product" | "unclassified";
 
-function formatRunDate(value: string) {
+const ACTIVE_RUN_STATUSES = new Set(["queued", "running"]);
+
+function formatRunDate(value: string | null) {
+  if (!value) {
+    return "Waiting for worker";
+  }
   return new Date(value).toLocaleString("en-GB", {
     dateStyle: "medium",
     timeStyle: "short"
   });
+}
+
+function formatRunLabel(status: string) {
+  if (status === "queued") {
+    return "Queued";
+  }
+  if (status === "running") {
+    return "Running";
+  }
+  if (status === "partially_completed") {
+    return "Partially completed";
+  }
+  if (status === "completed") {
+    return "Completed";
+  }
+  if (status === "failed") {
+    return "Failed";
+  }
+  return status;
 }
 
 export function ProductIntelligenceRunDialog({
@@ -30,13 +58,44 @@ export function ProductIntelligenceRunDialog({
   onClose
 }: ProductIntelligenceRunDialogProps) {
   const [status, setStatus] = useState<ProductIntelligenceStatusResponse | null>(null);
-  const [result, setResult] = useState<ProductIntelligenceRunResponse | null>(null);
+  const [currentRun, setCurrentRun] = useState<ProductIntelligenceRunResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<RunMode>("unclassified");
   const [query, setQuery] = useState("");
   const [selectedProductExternalId, setSelectedProductExternalId] = useState("");
   const [isLoadingStatus, setIsLoadingStatus] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const filteredProducts = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    if (!normalizedQuery) {
+      return catalogProducts;
+    }
+    return catalogProducts.filter((product) =>
+      [
+        product.name,
+        ...product.aliases,
+        ...product.barcodes,
+        ...(product.intelligence?.ingredient_families ?? [])
+      ].some((value) => value.toLowerCase().includes(normalizedQuery))
+    );
+  }, [catalogProducts, query]);
+
+  const progressPercent = useMemo(() => {
+    if (!currentRun || currentRun.total_candidates <= 0) {
+      return 0;
+    }
+    const run = currentRun;
+    return Math.min(
+      Math.round((run.processed_count / run.total_candidates) * 100),
+      100
+    );
+  }, [currentRun]);
+
+  const activeRunInProgress = currentRun ? ACTIVE_RUN_STATUSES.has(currentRun.status) : false;
+  const normalizedProviderType = normalizeAIProviderType(status?.provider_type);
+  const providerSupport = normalizedProviderType ? getAIProviderSupport(normalizedProviderType) : null;
+  const runDetails = currentRun;
 
   useEffect(() => {
     let isCancelled = false;
@@ -48,9 +107,26 @@ export function ProductIntelligenceRunDialog({
         const payload = await getFromApi<ProductIntelligenceStatusResponse>(
           `/api/households/${householdExternalId}/product-intelligence/status`
         );
-        if (!isCancelled) {
-          setStatus(payload);
+        if (isCancelled) {
+          return;
         }
+        setStatus(payload);
+        setCurrentRun((current) => {
+          if (!payload.latest_run) {
+            return current && ACTIVE_RUN_STATUSES.has(current.status) ? current : null;
+          }
+          const latestRun = { ...payload.latest_run, created: false };
+          if (!current) {
+            return latestRun;
+          }
+          if (current.external_id === latestRun.external_id) {
+            return { ...current, ...latestRun };
+          }
+          if (ACTIVE_RUN_STATUSES.has(current.status)) {
+            return current;
+          }
+          return latestRun;
+        });
       } catch (loadError) {
         if (!isCancelled) {
           setError(loadError instanceof Error ? loadError.message : "Status request failed.");
@@ -68,20 +144,47 @@ export function ProductIntelligenceRunDialog({
     };
   }, [householdExternalId]);
 
-  const filteredProducts = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-    if (!normalizedQuery) {
-      return catalogProducts;
+  useEffect(() => {
+    const activeRun = currentRun;
+    if (!activeRun || !ACTIVE_RUN_STATUSES.has(activeRun.status)) {
+      return undefined;
     }
-    return catalogProducts.filter((product) =>
-      [
-        product.name,
-        ...product.aliases,
-        ...product.barcodes,
-        ...(product.intelligence?.ingredient_families ?? [])
-      ].some((value) => value.toLowerCase().includes(normalizedQuery))
-    );
-  }, [catalogProducts, query]);
+
+    const runExternalId = activeRun.external_id;
+    let isCancelled = false;
+
+    async function pollRun() {
+      try {
+        const [runPayload, statusPayload] = await Promise.all([
+          getFromApi<ProductIntelligenceRunResponse>(
+            `/api/households/${householdExternalId}/product-intelligence/runs/${runExternalId}`
+          ),
+          getFromApi<ProductIntelligenceStatusResponse>(
+            `/api/households/${householdExternalId}/product-intelligence/status`
+          )
+        ]);
+        if (isCancelled) {
+          return;
+        }
+        setCurrentRun(runPayload);
+        setStatus(statusPayload);
+      } catch (pollError) {
+        if (!isCancelled) {
+          setError(pollError instanceof Error ? pollError.message : "Run status request failed.");
+        }
+      }
+    }
+
+    const intervalId = window.setInterval(() => {
+      void pollRun();
+    }, 3000);
+    void pollRun();
+
+    return () => {
+      isCancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [currentRun?.external_id, currentRun?.status, householdExternalId]);
 
   async function handleRun() {
     setIsSubmitting(true);
@@ -94,7 +197,7 @@ export function ProductIntelligenceRunDialog({
           product_external_id: mode === "product" ? selectedProductExternalId : null
         }
       );
-      setResult(payload);
+      setCurrentRun(payload);
       const nextStatus = await getFromApi<ProductIntelligenceStatusResponse>(
         `/api/households/${householdExternalId}/product-intelligence/status`
       );
@@ -109,7 +212,7 @@ export function ProductIntelligenceRunDialog({
   return (
     <ModalShell
       title="AI Product Intelligence"
-      description="Run compact, structured AI classification without adding noise to the main pantry view."
+      description="Run compact, structured AI classification in the background without cluttering the pantry workspace."
       onClose={onClose}
       panelClassName="modal-panel modal-panel-wide"
     >
@@ -143,16 +246,29 @@ export function ProductIntelligenceRunDialog({
                 <span className="tag">{status.provider_type ?? "No provider"}</span>
                 <span className="tag subtle-tag">{status.default_model ?? "No model"}</span>
                 <span className="tag subtle-tag">{status.health_status ?? "unknown"}</span>
+                {status.latest_run ? (
+                  <span className="tag subtle-tag">{formatRunLabel(status.latest_run.status)}</span>
+                ) : null}
               </div>
               <p className="helper-text">
                 {status.available
                   ? `Scope ${status.classification_scope} · classifier ${status.classification_version} · schema ${status.schema_version}`
                   : status.reason ?? "AI classification is unavailable."}
               </p>
+              {providerSupport && !providerSupport.isCurrentlySupported ? (
+                <p className="helper-text is-error">{providerSupport.description}</p>
+              ) : null}
             </div>
 
             <section className="modal-form-section">
-              <h3 className="modal-section-title">Run classification</h3>
+              <div className="stack compact-stack">
+                <h3 className="modal-section-title">Queue classification</h3>
+                <p className="helper-text">
+                  Classification runs through the worker, stores results batch by batch, and keeps
+                  progress visible if you leave the page.
+                </p>
+              </div>
+
               <div className="split-fields">
                 <label className="field">
                   <span>Mode</span>
@@ -192,6 +308,13 @@ export function ProductIntelligenceRunDialog({
                 </label>
               ) : null}
 
+              {activeRunInProgress ? (
+                <p className="helper-text">
+                  A classification run is already {currentRun?.status}. Use the run monitor below to
+                  follow progress.
+                </p>
+              ) : null}
+
               <div className="page-actions">
                 <button
                   type="button"
@@ -199,49 +322,92 @@ export function ProductIntelligenceRunDialog({
                   disabled={
                     isSubmitting ||
                     !status.available ||
+                    activeRunInProgress ||
                     (mode === "product" && !selectedProductExternalId)
                   }
                   onClick={handleRun}
                 >
-                  {isSubmitting ? "Running…" : "Run classification"}
+                  {isSubmitting ? "Queueing…" : "Queue classification"}
                 </button>
               </div>
             </section>
           </>
         ) : null}
 
-        {result ? (
+        {runDetails ? (
           <section className="modal-form-section">
-            <h3 className="modal-section-title">Last run</h3>
-            <div className="inline-status-card">
+            <div className="stack compact-stack">
+              <h3 className="modal-section-title">
+                {activeRunInProgress ? "Active run" : "Latest run"}
+              </h3>
               <p className="helper-text">
-                Started {formatRunDate(result.started_at)} · completed {formatRunDate(result.completed_at)}
+                Requested {formatRunDate(runDetails.created_at)} · started{" "}
+                {formatRunDate(runDetails.started_at)} · completed {formatRunDate(runDetails.completed_at)}
               </p>
-              <div className="tag-row">
-                <span className="tag">classified {result.classified_count}</span>
-                <span className="tag subtle-tag">skipped {result.skipped_count}</span>
-                <span className="tag subtle-tag">failed {result.failed_count}</span>
-                {result.stale_reclassified_count > 0 ? (
-                  <span className="tag subtle-tag">
-                    stale reclassified {result.stale_reclassified_count}
-                  </span>
-                ) : null}
-              </div>
             </div>
 
-            <div className="stack intelligence-run-list">
-              {result.items.map((item) => (
-                <div key={`${item.product_external_id}-${item.status}`} className="intelligence-run-item">
-                  <strong>{item.product_name}</strong>
-                  <span>
-                    {item.status}
-                    {item.intelligence?.food_category ? ` · ${item.intelligence.food_category}` : ""}
-                    {item.stale_before_run ? " · stale before run" : ""}
-                  </span>
-                  <span>{item.message}</span>
-                </div>
-              ))}
+            <div className="inline-status-card">
+              <div className="tag-row">
+                <span className="tag">{formatRunLabel(runDetails.status)}</span>
+                <span className="tag subtle-tag">processed {runDetails.processed_count}</span>
+                <span className="tag subtle-tag">classified {runDetails.classified_count}</span>
+                <span className="tag subtle-tag">skipped {runDetails.skipped_count}</span>
+                <span className="tag subtle-tag">failed {runDetails.failed_count}</span>
+                <span className="tag subtle-tag">
+                  batches {runDetails.completed_batch_count}/{runDetails.batch_count}
+                </span>
+              </div>
+              <div className="run-progress-meter" aria-hidden="true">
+                <div className="run-progress-fill" style={{ width: `${progressPercent}%` }} />
+              </div>
+              <p className="helper-text">
+                {progressPercent}% complete · {runDetails.total_candidates} targeted product
+                {runDetails.total_candidates === 1 ? "" : "s"}
+              </p>
+              {runDetails.last_error ? <p className="error-text">{runDetails.last_error}</p> : null}
             </div>
+
+            {runDetails.events.length > 0 ? (
+              <div className="stack intelligence-run-list">
+                {runDetails.events
+                  .slice()
+                  .reverse()
+                  .map((event, index) => (
+                    <div
+                      key={`${event.occurred_at}-${event.message}-${index}`}
+                      className="intelligence-run-item"
+                    >
+                      <strong>{event.message}</strong>
+                      <span>
+                        {event.level}
+                        {event.batch_index ? ` · batch ${event.batch_index}` : ""}
+                      </span>
+                      <span>{formatRunDate(event.occurred_at)}</span>
+                    </div>
+                  ))}
+              </div>
+            ) : null}
+
+            {runDetails.items.length > 0 ? (
+              <div className="stack intelligence-run-list">
+                {runDetails.items
+                  .slice()
+                  .reverse()
+                  .slice(0, 10)
+                  .map((item) => (
+                    <div key={`${item.product_external_id}-${item.status}`} className="intelligence-run-item">
+                      <strong>{item.product_name}</strong>
+                      <span>
+                        {item.status}
+                        {item.batch_index ? ` · batch ${item.batch_index}` : ""}
+                        {item.intelligence?.food_category ? ` · ${item.intelligence.food_category}` : ""}
+                        {item.stale_before_run ? " · stale before run" : ""}
+                      </span>
+                      <span>{item.message}</span>
+                    </div>
+                  ))}
+              </div>
+            ) : null}
           </section>
         ) : null}
       </div>

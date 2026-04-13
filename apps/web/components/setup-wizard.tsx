@@ -15,6 +15,7 @@ import {
   AI_PROVIDER_API_KEY_REQUIRED,
   AI_PROVIDER_OPTIONS,
   type AIProviderType,
+  getAIProviderSupport,
   getDefaultBaseUrl,
   getDefaultModel,
   normalizeAIProviderType,
@@ -90,7 +91,7 @@ function createStageId() {
 }
 
 function getSetupAIProviderType(providerType: string | null | undefined): AIProviderType {
-  return normalizeAIProviderType(providerType) ?? "ollama";
+  return normalizeAIProviderType(providerType) ?? "openai";
 }
 
 function createEmptyRoom(stageId = createStageId()): SetupWizardRoomSummary {
@@ -1683,6 +1684,8 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
     }
 
     if (currentStep === "ai") {
+      const selectedProviderType = getSetupAIProviderType(wizard.ai_config.provider_type);
+      const providerSupport = getAIProviderSupport(selectedProviderType);
       return (
         <section className="setup-step-card">
           <p className="eyebrow">Step {stepOrder.indexOf("ai") + 1}</p>
@@ -1690,6 +1693,9 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
           <p className="step-copy">
             Optional. Configure Pantry’s instance level AI provider now if you want meal and pantry
             suggestions ready after setup.
+          </p>
+          <p className={`helper-text${providerSupport.isCurrentlySupported ? "" : " is-error"}`}>
+            {providerSupport.statusLabel}. {providerSupport.description}
           </p>
           <label className="checkbox-row">
             <input
@@ -1713,7 +1719,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
               <span>Provider type</span>
               <select
                 name="setup_ai_provider_type"
-                value={getSetupAIProviderType(wizard.ai_config.provider_type)}
+                value={selectedProviderType}
                 onChange={(event) => {
                   const nextProviderType = event.target.value as AIProviderType;
                   setWizard((current) => {
@@ -1764,7 +1770,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                     ai_config: { ...current.ai_config, base_url: event.target.value }
                   }))
                 }
-                placeholder={getDefaultBaseUrl(getSetupAIProviderType(wizard.ai_config.provider_type))}
+                placeholder={getDefaultBaseUrl(selectedProviderType)}
               />
             </label>
             <label className="field">
@@ -1786,9 +1792,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                     ai_config: { ...current.ai_config, default_model: event.target.value }
                   }))
                 }
-                placeholder={
-                  getDefaultModel(getSetupAIProviderType(wizard.ai_config.provider_type))
-                }
+                placeholder={getDefaultModel(selectedProviderType)}
               />
             </label>
             <label className="field">
@@ -1805,15 +1809,20 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                 placeholder={
                   wizard.ai_config.has_api_key
                     ? "Saved. Enter a new key to replace it."
-                    : AI_PROVIDER_API_KEY_REQUIRED[
-                          getSetupAIProviderType(wizard.ai_config.provider_type)
-                        ]
+                    : AI_PROVIDER_API_KEY_REQUIRED[selectedProviderType]
                       ? "Required for this provider"
                       : "Not required for Ollama"
                 }
               />
             </label>
           </div>
+          {!providerSupport.isCurrentlySupported ? (
+            <p className="helper-text">
+              Finish setup with OpenAI if you want Pantry’s AI classification and guided meal
+              suggestions ready immediately. The other providers remain visible for future
+              validation work.
+            </p>
+          ) : null}
         </section>
       );
     }

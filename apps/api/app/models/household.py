@@ -22,6 +22,7 @@ class Household(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     products = relationship("Product", back_populates="household")
     product_enrichments = relationship("ProductEnrichment", back_populates="household")
     product_intelligence_records = relationship("ProductIntelligence", back_populates="household")
+    product_intelligence_runs = relationship("ProductIntelligenceRun", back_populates="household")
     product_aliases = relationship("ProductAlias", back_populates="household")
     barcodes = relationship("Barcode", back_populates="household")
     stock_lots = relationship("StockLot", back_populates="household")

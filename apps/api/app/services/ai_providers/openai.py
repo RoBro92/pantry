@@ -13,7 +13,8 @@ from app.services.ai_providers.base import (
     StructuredCompletionRequest,
     StructuredCompletionResult,
 )
-from app.services.ai_providers.common import parse_json_output
+from app.services.ai_providers.common import parse_json_output, sanitize_openai_json_schema
+from app.services.ai_runtime import PantryAIError, normalize_ai_error
 
 
 class OpenAIProviderAdapter:
@@ -56,10 +57,15 @@ class OpenAIProviderAdapter:
                 },
             )
         except Exception as exc:
+            error = normalize_ai_error(
+                exc,
+                provider_type=self._config.provider_type,
+                model=self._config.default_model,
+            )
             return AIProviderHealth(
                 is_healthy=False,
                 status=AI_HEALTH_UNHEALTHY,
-                message=str(exc),
+                message=str(error),
                 models=[],
                 capabilities={
                     "supports_model_listing": True,
@@ -83,23 +89,49 @@ class OpenAIProviderAdapter:
                 "json_schema": {
                     "name": "pantry_ai_response",
                     "strict": True,
-                    "schema": request.output_schema,
+                    "schema": sanitize_openai_json_schema(request.output_schema),
                 },
             },
         }
+        if request.max_output_tokens is not None:
+            payload["max_tokens"] = request.max_output_tokens
 
-        with httpx.Client(timeout=self._config.timeout_seconds, headers=self._headers()) as client:
-            response = client.post(self._url("/chat/completions"), json=payload)
-            response.raise_for_status()
-            body = response.json()
+        try:
+            with httpx.Client(
+                timeout=request.timeout_seconds or self._config.timeout_seconds,
+                headers=self._headers(),
+            ) as client:
+                response = client.post(self._url("/chat/completions"), json=payload)
+                response.raise_for_status()
+                body = response.json()
 
-        choice = (body.get("choices") or [{}])[0]
-        message = choice.get("message") or {}
-        output_text = message.get("content", "")
-        parsed_output = parse_json_output(output_text)
+            choice = (body.get("choices") or [{}])[0]
+            message = choice.get("message") or {}
+            refusal = message.get("refusal")
+            if isinstance(refusal, str) and refusal.strip():
+                raise PantryAIError(
+                    "The AI provider refused this request. Retry, or switch to a supported OpenAI model.",
+                    category="invalid_response",
+                    technical_message=refusal,
+                )
 
-        return StructuredCompletionResult(
-            output_text=output_text,
-            parsed_output=parsed_output,
-            provider_request_id=body.get("id"),
-        )
+            output_text = message.get("content", "")
+            if isinstance(output_text, list):
+                output_text = "".join(
+                    str(part.get("text", ""))
+                    for part in output_text
+                    if isinstance(part, dict) and part.get("type") == "text"
+                )
+            parsed_output = parse_json_output(output_text)
+
+            return StructuredCompletionResult(
+                output_text=output_text,
+                parsed_output=parsed_output,
+                provider_request_id=body.get("id"),
+            )
+        except Exception as exc:
+            raise normalize_ai_error(
+                exc,
+                provider_type=self._config.provider_type,
+                model=request.model,
+            ) from exc

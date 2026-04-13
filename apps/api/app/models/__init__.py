@@ -16,6 +16,7 @@ from app.models.product import Product
 from app.models.product_alias import ProductAlias
 from app.models.product_enrichment import ProductEnrichment
 from app.models.product_intelligence import ProductIntelligence
+from app.models.product_intelligence_run import ProductIntelligenceRun
 from app.models.recipe import Recipe
 from app.models.recipe_ingredient import RecipeIngredient
 from app.models.recipe_url_import import RecipeURLImport
@@ -46,6 +47,7 @@ __all__ = [
     "ProductAlias",
     "ProductEnrichment",
     "ProductIntelligence",
+    "ProductIntelligenceRun",
     "Recipe",
     "RecipeIngredient",
     "RecipeURLImport",

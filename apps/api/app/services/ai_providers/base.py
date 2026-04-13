@@ -29,6 +29,8 @@ class StructuredCompletionRequest:
     user_payload: dict[str, Any]
     output_schema: dict[str, Any]
     temperature: float = 0.2
+    max_output_tokens: int | None = None
+    timeout_seconds: float | None = None
 
 
 @dataclass(frozen=True)
