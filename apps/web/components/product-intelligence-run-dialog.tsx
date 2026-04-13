@@ -85,8 +85,9 @@ export function ProductIntelligenceRunDialog({
     if (!currentRun || currentRun.total_candidates <= 0) {
       return 0;
     }
+    const run = currentRun;
     return Math.min(
-      Math.round((currentRun.processed_count / currentRun.total_candidates) * 100),
+      Math.round((run.processed_count / run.total_candidates) * 100),
       100
     );
   }, [currentRun]);
