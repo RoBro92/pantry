@@ -5,6 +5,7 @@ import type { AIProviderType } from "../lib/ai-provider-config";
 import {
   getAIProviderLabel,
   getRecommendedModels,
+  isRecommendedModel,
   providerSupportsManualModelEntry
 } from "../lib/ai-provider-config";
 import { ModalShell } from "./modal-shell";
@@ -41,6 +42,8 @@ export function AdminAIModelPickerModal({
     [availableModels, providerType]
   );
   const canConfirm = query.trim().length > 0;
+  const selectedModelValue = query.trim();
+  const selectedModelIsRecommended = isRecommendedModel(providerType, selectedModelValue);
 
   async function handleConfirm() {
     if (!canConfirm) {
@@ -53,10 +56,12 @@ export function AdminAIModelPickerModal({
 
   return (
     <ModalShell
-      title={`Choose a ${getAIProviderLabel(providerType)} model`}
-      description="Search fetched models, apply a quick pick, or enter a model name manually if needed."
+      title={`Choose ${getAIProviderLabel(providerType)} model`}
+      description="Pick one of Pantry’s supported models first, or choose another OpenAI model if you want to try an untested option."
       onClose={onClose}
       panelClassName="modal-panel modal-panel-wide"
+      closeOnBackdropClick={false}
+      showCloseButton={false}
     >
       <div className="modal-form-section">
         <label className="field">
@@ -69,13 +74,20 @@ export function AdminAIModelPickerModal({
           />
         </label>
         {errorMessage ? <p className="error-text">{errorMessage}</p> : null}
+        {selectedModelValue ? (
+          <p className="helper-text">
+            {selectedModelIsRecommended
+              ? "Pantry-supported recommendation."
+              : "Selectable, but not one of Pantry’s officially recommended OpenAI models yet."}
+          </p>
+        ) : null}
       </div>
 
       {recommendations.length > 0 ? (
         <div className="modal-form-section">
           <div className="stack compact-stack">
             <h3 className="modal-section-title">Recommended picks</h3>
-            <p className="helper-text">Suggestions for Pantry’s typical admin and household AI tasks.</p>
+            <p className="helper-text">These three OpenAI models are the Pantry-supported choices right now.</p>
           </div>
           <div className="ai-model-recommendations">
             {recommendations.map((pick) => (
@@ -96,13 +108,13 @@ export function AdminAIModelPickerModal({
 
       <div className="modal-form-section">
         <div className="stack compact-stack">
-          <h3 className="modal-section-title">Fetched models</h3>
+          <h3 className="modal-section-title">Other OpenAI models</h3>
           <p className="helper-text">
             {availableModels.length > 0
-              ? "Pick from the provider’s reported models or keep typing a manual value."
+              ? "These remain selectable, but Pantry treats them as untested rather than recommended."
               : providerSupportsManualModelEntry(providerType)
-                ? "No models were listed. You can still enter a model name manually."
-                : "No models were listed. You can still try a manual model name if your provider supports it."}
+                ? "No models were listed. You can still enter another OpenAI model manually if needed."
+                : "No models were listed. You can still try a manual OpenAI model name if your provider supports it."}
           </p>
         </div>
         {filteredModels.length > 0 ? (
@@ -124,8 +136,8 @@ export function AdminAIModelPickerModal({
       </div>
 
       <div className="page-actions">
-        <button type="button" className="ghost-button" onClick={onClose}>
-          Cancel
+        <button type="button" className="ghost-button" disabled={isSaving} onClick={onClose}>
+          Back
         </button>
         <button
           type="button"
@@ -133,7 +145,7 @@ export function AdminAIModelPickerModal({
           disabled={isSaving || !canConfirm}
           onClick={() => void handleConfirm()}
         >
-          {isSaving ? "Saving..." : "Use this model"}
+          {isSaving ? "Saving..." : "Save"}
         </button>
       </div>
     </ModalShell>

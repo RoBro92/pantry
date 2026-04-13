@@ -13,8 +13,6 @@ import type {
 } from "../lib/api-types";
 import {
   AI_PROVIDER_API_KEY_REQUIRED,
-  AI_PROVIDER_OPTIONS,
-  type AIProviderType,
   getDefaultBaseUrl,
   getDefaultModel,
   normalizeAIProviderType,
@@ -89,8 +87,9 @@ function createStageId() {
   return `stage-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-function getSetupAIProviderType(providerType: string | null | undefined): AIProviderType {
-  return normalizeAIProviderType(providerType) ?? "ollama";
+function getSetupAIProviderType(providerType: string | null | undefined): "openai" {
+  const normalizedProviderType = normalizeAIProviderType(providerType);
+  return normalizedProviderType === "openai" ? "openai" : "openai";
 }
 
 function createEmptyRoom(stageId = createStageId()): SetupWizardRoomSummary {
@@ -208,6 +207,15 @@ function getPersistablePassword(draft: PasswordDraft | undefined) {
     return null;
   }
   return draft.password ? draft.password : null;
+}
+
+function ensureSetupOpenAIConfig(aiConfig: SetupWizardStateResponse["ai_config"]) {
+  return {
+    ...aiConfig,
+    provider_type: "openai" as const,
+    base_url: aiConfig.base_url || getDefaultBaseUrl("openai"),
+    default_model: aiConfig.default_model || getDefaultModel("openai")
+  };
 }
 
 function getRestoreValidationIssues(wizard: SetupWizardStateResponse) {
@@ -1702,7 +1710,9 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                   skipped_optional_steps: current.skipped_optional_steps.filter(
                     (step) => step !== "ai"
                   ),
-                  ai_config: { ...current.ai_config, is_enabled: event.target.checked }
+                  ai_config: event.target.checked
+                    ? { ...ensureSetupOpenAIConfig(current.ai_config), is_enabled: true }
+                    : { ...current.ai_config, is_enabled: false, provider_type: "openai" }
                 }))
               }
             />
@@ -1710,39 +1720,10 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
           </label>
           <div className="content-grid">
             <label className="field">
-              <span>Provider type</span>
-              <select
-                name="setup_ai_provider_type"
-                value={getSetupAIProviderType(wizard.ai_config.provider_type)}
-                onChange={(event) => {
-                  const nextProviderType = event.target.value as AIProviderType;
-                  setWizard((current) => {
-                    const previousProviderType = getSetupAIProviderType(current.ai_config.provider_type);
-                    const previousDefaultBaseUrl = getDefaultBaseUrl(previousProviderType);
-                    const nextBaseUrl =
-                      !current.ai_config.base_url || current.ai_config.base_url === previousDefaultBaseUrl
-                        ? getDefaultBaseUrl(nextProviderType)
-                        : current.ai_config.base_url;
-                    return {
-                      ...current,
-                      skipped_optional_steps: current.skipped_optional_steps.filter(
-                        (step) => step !== "ai"
-                      ),
-                      ai_config: {
-                        ...current.ai_config,
-                        provider_type: nextProviderType,
-                        base_url: nextBaseUrl
-                      }
-                    };
-                  });
-                }}
-              >
-                {AI_PROVIDER_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+              <span>Provider</span>
+              <div className="ai-provider-readonly-value" aria-label="Provider type">
+                OpenAI
+              </div>
             </label>
             <label className="field">
               <span>Base URL</span>
@@ -1761,7 +1742,10 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                     skipped_optional_steps: current.skipped_optional_steps.filter(
                       (step) => step !== "ai"
                     ),
-                    ai_config: { ...current.ai_config, base_url: event.target.value }
+                    ai_config: {
+                      ...ensureSetupOpenAIConfig(current.ai_config),
+                      base_url: event.target.value
+                    }
                   }))
                 }
                 placeholder={getDefaultBaseUrl(getSetupAIProviderType(wizard.ai_config.provider_type))}
@@ -1783,13 +1767,21 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                     skipped_optional_steps: current.skipped_optional_steps.filter(
                       (step) => step !== "ai"
                     ),
-                    ai_config: { ...current.ai_config, default_model: event.target.value }
+                    ai_config: {
+                      ...ensureSetupOpenAIConfig(current.ai_config),
+                      default_model: event.target.value
+                    }
                   }))
                 }
                 placeholder={
                   getDefaultModel(getSetupAIProviderType(wizard.ai_config.provider_type))
                 }
               />
+              <p className="helper-text">
+                Recommended: <code>gpt-4.1-mini</code> for fastest low-cost runs,{" "}
+                <code>gpt-5.4-mini</code> as Pantry&apos;s default balance, or <code>gpt-5.4</code>{" "}
+                for the strongest quality.
+              </p>
             </label>
             <label className="field">
               <span>API key</span>
@@ -1809,7 +1801,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                           getSetupAIProviderType(wizard.ai_config.provider_type)
                         ]
                       ? "Required for this provider"
-                      : "Not required for Ollama"
+                      : "Not required for this provider"
                 }
               />
             </label>
