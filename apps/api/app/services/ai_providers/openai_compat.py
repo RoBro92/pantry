@@ -8,13 +8,12 @@ import httpx
 from app.services.ai_providers.errors import AIProviderError, OpenAISchemaCompatibilityError
 
 OPENAI_PROFILED_MODEL_PREFIXES = (
-    "gpt-4o",
     "gpt-4.1",
     "gpt-5",
     "o3-mini",
     "o4-mini",
 )
-OPENAI_RECOMMENDED_MODELS = ("gpt-4o-mini", "gpt-4.1")
+OPENAI_RECOMMENDED_MODELS = ("gpt-4.1-mini", "gpt-5.4-mini", "gpt-5.4")
 
 _OPENAI_UNSUPPORTED_VALIDATION_KEYS = {
     "default",

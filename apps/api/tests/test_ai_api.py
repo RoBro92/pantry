@@ -950,7 +950,7 @@ def test_ai_meal_suggestions_hide_raw_openai_400_details(client, db_session, mon
         actor=admin,
         provider_type="openai",
         base_url="https://api.openai.com/v1",
-        default_model="gpt-4o-mini",
+        default_model="gpt-5.4-mini",
         api_key="openai-test-secret",
         is_enabled=True,
     )
@@ -959,9 +959,9 @@ def test_ai_meal_suggestions_hide_raw_openai_400_details(client, db_session, mon
         def generate_structured_output(self, request) -> StructuredCompletionResult:
             raise AIProviderError(
                 (
-                    "The selected OpenAI model (gpt-4o-mini) is not compatible with Pantry's "
+                    "The selected OpenAI model (gpt-5.4-mini) is not compatible with Pantry's "
                     "structured AI requests on Chat Completions. Choose a recommended OpenAI "
-                    "model such as gpt-4o-mini, gpt-4.1."
+                    "model such as gpt-4.1-mini, gpt-5.4-mini, gpt-5.4."
                 ),
                 diagnostic_message=(
                     "Client error '400 Bad Request' for url "
@@ -976,7 +976,7 @@ def test_ai_meal_suggestions_hide_raw_openai_400_details(client, db_session, mon
             is_healthy=True,
             status="healthy",
             message=None,
-            models=["gpt-4o-mini"],
+            models=["gpt-5.4-mini"],
             capabilities={"supports_structured_output": True},
         ),
     )

@@ -42,7 +42,7 @@ class FakeHTTPXClient:
         return self._handler(method, url, json)
 
 
-def _runtime_config(*, model: str = "gpt-4o-mini") -> AIProviderRuntimeConfig:
+def _runtime_config(*, model: str = "gpt-5.4-mini") -> AIProviderRuntimeConfig:
     return AIProviderRuntimeConfig(
         provider_type="openai",
         base_url="https://api.openai.com/v1",
@@ -135,7 +135,7 @@ def test_openai_adapter_posts_compact_payload_and_normalized_schema_for_structur
     adapter = OpenAIProviderAdapter(_runtime_config())
     result = adapter.generate_structured_output(
         StructuredCompletionRequest(
-            model="gpt-4o-mini",
+            model="gpt-5.4-mini",
             schema_name="pantry_meal_suggestion",
             system_prompt="Return valid JSON only.",
             user_payload={"request": {"pantry_only": True}, "context": {"items": ["pasta"]}},
@@ -159,7 +159,7 @@ def test_openai_health_check_marks_provider_unhealthy_when_models_list_but_struc
             return _json_response(
                 method,
                 url,
-                {"data": [{"id": "gpt-4o-mini"}, {"id": "gpt-4.1"}]},
+                {"data": [{"id": "gpt-4.1-mini"}, {"id": "gpt-5.4-mini"}, {"id": "gpt-5.4"}]},
             )
         return _error_response(
             method,
@@ -180,11 +180,12 @@ def test_openai_health_check_marks_provider_unhealthy_when_models_list_but_struc
         lambda *args, **kwargs: FakeHTTPXClient(handler, *args, **kwargs),
     )
 
-    adapter = OpenAIProviderAdapter(_runtime_config(model="gpt-4o-mini"))
+    adapter = OpenAIProviderAdapter(_runtime_config(model="gpt-5.4-mini"))
     health = adapter.check_health()
 
     assert health.is_healthy is False
-    assert health.models == ["gpt-4.1", "gpt-4o-mini"]
+    assert health.models == ["gpt-4.1-mini", "gpt-5.4", "gpt-5.4-mini"]
+    assert health.capabilities["recommended_models"] == ["gpt-4.1-mini", "gpt-5.4-mini", "gpt-5.4"]
     assert "not compatible with Pantry's structured AI requests" in (health.message or "")
     assert "400 Bad Request" not in (health.message or "")
 
@@ -248,7 +249,7 @@ def test_openai_adapter_parses_text_content_arrays(monkeypatch):
     adapter = OpenAIProviderAdapter(_runtime_config())
     result = adapter.generate_structured_output(
         StructuredCompletionRequest(
-            model="gpt-4o-mini",
+            model="gpt-5.4-mini",
             system_prompt="Return valid JSON only.",
             user_payload={"task": "test"},
             output_schema=AIProviderMealSuggestionOutput.model_json_schema(),

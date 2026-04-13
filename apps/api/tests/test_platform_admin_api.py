@@ -47,7 +47,7 @@ def login(client, *, email: str, password: str = PASSWORD) -> None:
 @pytest.mark.parametrize(
     ("provider_type", "base_url", "default_model", "api_key"),
     [
-        ("openai", "https://api.openai.com/v1", "gpt-4o-mini", "openai-secret"),
+        ("openai", "https://api.openai.com/v1", "gpt-5.4-mini", "openai-secret"),
         ("claude", "https://api.anthropic.com", "claude-3-5-haiku-latest", "claude-secret"),
         ("gemini", "https://generativelanguage.googleapis.com", "gemini-2.0-flash", "gemini-secret"),
         ("ollama", "http://localhost:11434", "llama3.2", None),
@@ -93,7 +93,7 @@ def test_platform_admin_ai_provider_config_saves_supported_providers(
 @pytest.mark.parametrize(
     ("provider_type", "base_url", "default_model", "api_key"),
     [
-        ("openai", "https://api.openai.com/v1", "gpt-4o-mini", "openai-secret"),
+        ("openai", "https://api.openai.com/v1", "gpt-5.4-mini", "openai-secret"),
         ("claude", "https://api.anthropic.com", "claude-3-5-haiku-latest", "claude-secret"),
         ("gemini", "https://generativelanguage.googleapis.com", "gemini-2.0-flash", "gemini-secret"),
         ("ollama", "http://localhost:11434", "llama3.2", None),
@@ -164,7 +164,7 @@ def test_platform_admin_ai_provider_config_normalizes_legacy_openai_compatible_r
             scope_key="instance",
             provider_type="openai_compatible",
             base_url="https://api.openai.com/v1",
-            default_model="gpt-4o-mini",
+            default_model="gpt-5.4-mini",
             encrypted_api_key=encrypt_secret("legacy-openai-key"),
             is_enabled=True,
         )
@@ -187,7 +187,7 @@ def test_platform_admin_ai_provider_config_normalizes_legacy_openai_compatible_r
                 is_healthy=True,
                 status=AI_HEALTH_HEALTHY,
                 message=None,
-                models=["gpt-4o-mini"],
+                models=["gpt-5.4-mini"],
                 capabilities={"supports_model_listing": True, "supports_structured_output": True},
             )
 
