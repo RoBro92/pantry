@@ -94,7 +94,7 @@ bootstrap_mode() {
 }
 
 start_stack() {
-  compose down --remove-orphans
+  compose down --remove-orphans --volumes
   compose up -d --remove-orphans --force-recreate
   wait_for_api
 }
