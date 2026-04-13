@@ -24,6 +24,7 @@ Pantry is a small repo for a self hosted product with three runtime services and
 - AI support is optional, provider-abstracted, and currently focused on guided pantry-aware meal suggestions plus explicit recipe-completion pantry writeback
 - AI provider configuration is stored at installation scope today, with routing kept self-hosted and operator managed
 - The admin AI flow supports guided setup for OpenAI, Claude, Ollama, and a manual custom OpenAI-compatible path
+- OpenAI runtime requests use Chat Completions with strict JSON Schema response formatting, plus a Pantry-owned schema normalization and compatibility probe layer before the provider is treated as healthy
 - Uploaded files and restore bundles are treated as hostile input
 - Updates are advisory and operator triggered; Pantry does not auto-update
 
