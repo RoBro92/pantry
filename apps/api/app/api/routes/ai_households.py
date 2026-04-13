@@ -22,6 +22,7 @@ from app.services.ai_meal_suggestions import (
     generate_ai_meal_suggestions,
     get_ai_meal_planner,
 )
+from app.services.ai_runtime_errors import AIUserFacingError
 from app.services.ai_suggestions import build_household_ai_feature_status, generate_household_ai_suggestions
 from app.services.tenancy import HouseholdAccess
 
@@ -37,6 +38,8 @@ def get_ai_status(
 
 
 def _http_error_from_value_error(exc: ValueError) -> HTTPException:
+    if isinstance(exc, AIUserFacingError):
+        return HTTPException(status_code=exc.status_code, detail=str(exc))
     message = str(exc)
     if "disabled for this household" in message.lower():
         status_code = status.HTTP_403_FORBIDDEN

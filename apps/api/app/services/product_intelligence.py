@@ -26,6 +26,7 @@ from app.schemas.pantry import (
 )
 from app.services.ai_config import get_ai_feature_enabled, refresh_provider_health, resolve_provider_config
 from app.services.ai_providers import StructuredCompletionRequest, build_ai_provider_adapter
+from app.services.ai_runtime_errors import AIUserFacingError, summarize_ai_failure
 from app.services.audit import record_audit_event
 from app.services.pantry_normalization import normalize_text_tags, require_text
 from app.services.product_enrichment import get_primary_enrichment
@@ -161,7 +162,7 @@ def run_product_intelligence_classification(
 
     health = refresh_provider_health(db, config=resolved.record)
     if not health.is_healthy:
-        raise ValueError(health.message or "The AI provider is unavailable.")
+        raise AIUserFacingError(health.message or "The AI provider is unavailable.", status_code=503)
 
     products = _load_target_products(db, household=household, request=request)
     adapter = build_ai_provider_adapter(resolved.runtime)
@@ -205,12 +206,16 @@ def run_product_intelligence_classification(
         except Exception as exc:
             db.rollback()
             failed_count += 1
+            user_message, _, _ = summarize_ai_failure(
+                exc,
+                fallback_message="The AI provider could not classify this product.",
+            )
             items.append(
                 ProductIntelligenceRunItem(
                     product_external_id=product.external_id,
                     product_name=product.name,
                     status="failed",
-                    message=str(exc),
+                    message=user_message,
                     stale_before_run=staleness.is_stale,
                 )
             )

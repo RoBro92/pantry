@@ -28,6 +28,7 @@ from app.services.ai_context import build_household_ai_context
 from app.services.platform_features import FLAG_AI_SUGGESTIONS, get_effective_feature_flag, require_feature_enabled
 from app.services.ai_prompts import build_suggestion_prompt_plan
 from app.services.ai_providers import StructuredCompletionRequest, build_ai_provider_adapter
+from app.services.ai_runtime_errors import AIUserFacingError, summarize_ai_failure
 from app.services.audit import record_audit_event
 from app.services.tenancy import HouseholdAccess
 from app.services.usage_counters import check_usage_quota
@@ -208,19 +209,25 @@ def generate_household_ai_suggestions(
         )
         parsed = AIProviderSuggestionOutput.model_validate(completion.parsed_output)
     except Exception as exc:
-        error_message = f"AI suggestion generation failed: {exc}"
+        user_message, diagnostic_message, error_category = summarize_ai_failure(
+            exc,
+            fallback_message="The AI provider could not complete this Pantry AI suggestion request.",
+        )
+        error_message = f"AI suggestion generation failed: {user_message}"
         record_provider_runtime_failure(
             db,
             config=resolved.record,
             error_message=error_message,
         )
-        logger.exception(
+        logger.warning(
             "ai.request.failed",
             household_external_id=access.household.external_id,
             provider_config_external_id=resolved.record.external_id,
             provider_type=resolved.record.provider_type,
             model=resolved.record.default_model,
             suggestion_kind=request.kind,
+            error_category=error_category,
+            error_detail=diagnostic_message,
         )
         record_audit_event(
             db,
@@ -238,7 +245,7 @@ def generate_household_ai_suggestions(
             },
         )
         db.commit()
-        raise ValueError(error_message) from exc
+        raise AIUserFacingError(error_message, status_code=503) from exc
 
     duration_ms = round((perf_counter() - started) * 1000, 2)
     logger.info(
