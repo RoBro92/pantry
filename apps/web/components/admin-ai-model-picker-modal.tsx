@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import type { AIProviderType } from "../lib/ai-provider-config";
 import {
   getAIProviderLabel,
+  getAIProviderSupport,
   getRecommendedModels,
   isRecommendedModel,
   providerSupportsManualModelEntry
@@ -41,6 +42,7 @@ export function AdminAIModelPickerModal({
     () => getRecommendedModels(providerType, availableModels),
     [availableModels, providerType]
   );
+  const providerSupport = getAIProviderSupport(providerType);
   const canConfirm = query.trim().length > 0;
   const selectedModelValue = query.trim();
   const selectedModelIsRecommended = isRecommendedModel(providerType, selectedModelValue);
@@ -64,6 +66,9 @@ export function AdminAIModelPickerModal({
       showCloseButton={false}
     >
       <div className="modal-form-section">
+        <p className={`helper-text${providerSupport.isCurrentlySupported ? "" : " is-error"}`}>
+          {providerSupport.statusLabel}. {providerSupport.description}
+        </p>
         <label className="field">
           <span>Model name</span>
           <input

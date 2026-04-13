@@ -13,6 +13,7 @@ from app.services.ai_providers.base import (
     StructuredCompletionResult,
 )
 from app.services.ai_providers.common import parse_json_output
+from app.services.ai_runtime import normalize_ai_error
 
 
 class GeminiProviderAdapter:
@@ -55,10 +56,15 @@ class GeminiProviderAdapter:
                 },
             )
         except Exception as exc:
+            error = normalize_ai_error(
+                exc,
+                provider_type=self._config.provider_type,
+                model=self._config.default_model,
+            )
             return AIProviderHealth(
                 is_healthy=False,
                 status=AI_HEALTH_UNHEALTHY,
-                message=str(exc),
+                message=str(error),
                 models=[],
                 capabilities={
                     "supports_model_listing": True,
@@ -102,8 +108,13 @@ class GeminiProviderAdapter:
                 "responseMimeType": "application/json",
             },
         }
+        if request.max_output_tokens is not None:
+            payload["generationConfig"]["maxOutputTokens"] = request.max_output_tokens
 
-        with httpx.Client(timeout=self._config.timeout_seconds, headers=self._headers()) as client:
+        with httpx.Client(
+            timeout=request.timeout_seconds or self._config.timeout_seconds,
+            headers=self._headers(),
+        ) as client:
             response = client.post(
                 self._url(f"/v1beta/models/{quote(model, safe='')}:generateContent"),
                 json=payload,

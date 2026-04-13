@@ -13,6 +13,7 @@ import type {
 } from "../lib/api-types";
 import {
   AI_PROVIDER_API_KEY_REQUIRED,
+  getAIProviderSupport,
   getDefaultBaseUrl,
   getDefaultModel,
   normalizeAIProviderType,
@@ -1691,6 +1692,8 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
     }
 
     if (currentStep === "ai") {
+      const selectedProviderType = getSetupAIProviderType(wizard.ai_config.provider_type);
+      const providerSupport = getAIProviderSupport(selectedProviderType);
       return (
         <section className="setup-step-card">
           <p className="eyebrow">Step {stepOrder.indexOf("ai") + 1}</p>
@@ -1698,6 +1701,9 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
           <p className="step-copy">
             Optional. Configure Pantry’s instance level AI provider now if you want meal and pantry
             suggestions ready after setup.
+          </p>
+          <p className={`helper-text${providerSupport.isCurrentlySupported ? "" : " is-error"}`}>
+            {providerSupport.statusLabel}. {providerSupport.description}
           </p>
           <label className="checkbox-row">
             <input
@@ -1748,7 +1754,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                     }
                   }))
                 }
-                placeholder={getDefaultBaseUrl(getSetupAIProviderType(wizard.ai_config.provider_type))}
+                placeholder={getDefaultBaseUrl(selectedProviderType)}
               />
             </label>
             <label className="field">
@@ -1773,9 +1779,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                     }
                   }))
                 }
-                placeholder={
-                  getDefaultModel(getSetupAIProviderType(wizard.ai_config.provider_type))
-                }
+                placeholder={getDefaultModel(selectedProviderType)}
               />
               <p className="helper-text">
                 Recommended: <code>gpt-4.1-mini</code> for fastest low-cost runs,{" "}
@@ -1797,15 +1801,20 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                 placeholder={
                   wizard.ai_config.has_api_key
                     ? "Saved. Enter a new key to replace it."
-                    : AI_PROVIDER_API_KEY_REQUIRED[
-                          getSetupAIProviderType(wizard.ai_config.provider_type)
-                        ]
+                    : AI_PROVIDER_API_KEY_REQUIRED[selectedProviderType]
                       ? "Required for this provider"
                       : "Not required for this provider"
                 }
               />
             </label>
           </div>
+          {!providerSupport.isCurrentlySupported ? (
+            <p className="helper-text">
+              Finish setup with OpenAI if you want Pantry’s AI classification and guided meal
+              suggestions ready immediately. The other providers remain visible for future
+              validation work.
+            </p>
+          ) : null}
         </section>
       );
     }

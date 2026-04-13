@@ -7,6 +7,7 @@ from uuid import uuid4
 import structlog
 
 from app.services.import_processing import process_next_import_job
+from app.services.product_intelligence_runs import process_next_product_intelligence_run
 from app.services.recipe_url_imports import process_next_recipe_url_import
 from app.services.runtime_status import publish_worker_heartbeat
 from worker.core.config import get_settings
@@ -60,7 +61,11 @@ def main() -> None:
     )
 
     if args.once or settings.run_once:
-        processed = process_next_import_job() or process_next_recipe_url_import()
+        processed = (
+            process_next_import_job()
+            or process_next_recipe_url_import()
+            or process_next_product_intelligence_run()
+        )
         publish_worker_heartbeat(
             service=settings.service_name,
             environment=settings.environment,
@@ -73,7 +78,11 @@ def main() -> None:
         return
 
     while True:
-        processed = process_next_import_job() or process_next_recipe_url_import()
+        processed = (
+            process_next_import_job()
+            or process_next_recipe_url_import()
+            or process_next_product_intelligence_run()
+        )
         publish_worker_heartbeat(
             service=settings.service_name,
             environment=settings.environment,

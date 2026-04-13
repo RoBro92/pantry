@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from dataclasses import dataclass
 from typing import cast
 
@@ -16,17 +17,14 @@ from app.models.product import Product
 from app.models.product_intelligence import ProductIntelligence
 from app.models.user import User
 from app.schemas.pantry import (
-    ProductIntelligenceRunItem,
-    ProductIntelligenceRunRequest,
-    ProductIntelligenceRunResponse,
     ProductIntelligenceStatusCounts,
     ProductIntelligenceStatusResponse,
     ProductIntelligenceStructuredMetadata,
     ProductIntelligenceSummary,
 )
-from app.services.ai_config import get_ai_feature_enabled, refresh_provider_health, resolve_provider_config
-from app.services.ai_providers import StructuredCompletionRequest, build_ai_provider_adapter
-from app.services.ai_runtime_errors import AIUserFacingError, summarize_ai_failure
+from app.services.ai_config import get_ai_feature_enabled, resolve_provider_config
+from app.services.ai_providers import StructuredCompletionRequest
+from app.services.ai_runtime import normalize_ai_error
 from app.services.audit import record_audit_event
 from app.services.pantry_normalization import normalize_text_tags, require_text
 from app.services.product_enrichment import get_primary_enrichment
@@ -67,6 +65,18 @@ class ProductClassificationOutput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class ProductBatchClassificationOutput(ProductClassificationOutput):
+    product_external_id: str
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class ProductClassificationBatchOutput(BaseModel):
+    items: list[ProductBatchClassificationOutput] = Field(default_factory=list)
+
+    model_config = ConfigDict(extra="forbid")
+
+
 @dataclass(frozen=True)
 class ProductIntelligenceStaleness:
     is_stale: bool
@@ -84,6 +94,7 @@ def build_product_intelligence_status(
 ) -> ProductIntelligenceStatusResponse:
     products = _load_household_products(db, household=household)
     counts = _build_status_counts(products)
+    latest_run = _build_latest_run_summary(db, household=household)
 
     if not get_ai_feature_enabled():
         return ProductIntelligenceStatusResponse(
@@ -93,6 +104,7 @@ def build_product_intelligence_status(
             classification_scope=PRODUCT_INTELLIGENCE_SCOPE,
             classification_version=PRODUCT_INTELLIGENCE_CLASSIFICATION_VERSION,
             schema_version=PRODUCT_INTELLIGENCE_SCHEMA_VERSION,
+            latest_run=latest_run,
         )
 
     resolved = resolve_provider_config(db, household=household)
@@ -104,6 +116,7 @@ def build_product_intelligence_status(
             classification_scope=PRODUCT_INTELLIGENCE_SCOPE,
             classification_version=PRODUCT_INTELLIGENCE_CLASSIFICATION_VERSION,
             schema_version=PRODUCT_INTELLIGENCE_SCHEMA_VERSION,
+            latest_run=latest_run,
         )
 
     record = resolved.record
@@ -118,12 +131,19 @@ def build_product_intelligence_status(
             classification_scope=PRODUCT_INTELLIGENCE_SCOPE,
             classification_version=PRODUCT_INTELLIGENCE_CLASSIFICATION_VERSION,
             schema_version=PRODUCT_INTELLIGENCE_SCHEMA_VERSION,
+            latest_run=latest_run,
         )
 
     if record.health_status == AI_HEALTH_UNHEALTHY:
         return ProductIntelligenceStatusResponse(
             available=False,
-            reason=record.health_error or "The configured AI provider is unhealthy.",
+            reason=str(
+                normalize_ai_error(
+                    record.health_error or "The configured AI provider is unhealthy.",
+                    provider_type=record.provider_type,
+                    model=record.default_model,
+                )
+            ),
             provider_type=record.provider_type,
             default_model=record.default_model,
             health_status=record.health_status,
@@ -131,6 +151,7 @@ def build_product_intelligence_status(
             classification_scope=PRODUCT_INTELLIGENCE_SCOPE,
             classification_version=PRODUCT_INTELLIGENCE_CLASSIFICATION_VERSION,
             schema_version=PRODUCT_INTELLIGENCE_SCHEMA_VERSION,
+            latest_run=latest_run,
         )
 
     return ProductIntelligenceStatusResponse(
@@ -142,139 +163,7 @@ def build_product_intelligence_status(
         classification_scope=PRODUCT_INTELLIGENCE_SCOPE,
         classification_version=PRODUCT_INTELLIGENCE_CLASSIFICATION_VERSION,
         schema_version=PRODUCT_INTELLIGENCE_SCHEMA_VERSION,
-    )
-
-
-def run_product_intelligence_classification(
-    db: Session,
-    *,
-    household: Household,
-    actor: User,
-    request: ProductIntelligenceRunRequest,
-) -> ProductIntelligenceRunResponse:
-    status = build_product_intelligence_status(db, household=household)
-    if not status.available:
-        raise ValueError(status.reason or "AI product intelligence is unavailable.")
-
-    resolved = resolve_provider_config(db, household=household)
-    if resolved is None:
-        raise ValueError("No AI provider is configured for this installation.")
-
-    health = refresh_provider_health(db, config=resolved.record)
-    if not health.is_healthy:
-        raise AIUserFacingError(health.message or "The AI provider is unavailable.", status_code=503)
-
-    products = _load_target_products(db, household=household, request=request)
-    adapter = build_ai_provider_adapter(resolved.runtime)
-    started_at = utc_now()
-    items: list[ProductIntelligenceRunItem] = []
-    classified_count = 0
-    skipped_count = 0
-    failed_count = 0
-    stale_reclassified_count = 0
-
-    for product in products:
-        intelligence = get_primary_product_intelligence(product)
-        staleness = get_product_intelligence_staleness(product, intelligence)
-
-        if request.mode == "unclassified" and intelligence is not None:
-            skipped_count += 1
-            items.append(
-                ProductIntelligenceRunItem(
-                    product_external_id=product.external_id,
-                    product_name=product.name,
-                    status="skipped",
-                    message="Product already has AI classification attached.",
-                    stale_before_run=staleness.is_stale,
-                    intelligence=serialize_product_intelligence(intelligence, product=product),
-                )
-            )
-            continue
-
-        try:
-            updated = _classify_product(
-                db,
-                household=household,
-                actor=actor,
-                product=product,
-                adapter=adapter,
-                model=resolved.record.default_model,
-                provider_type=resolved.record.provider_type,
-            )
-            db.commit()
-            db.expire_all()
-        except Exception as exc:
-            db.rollback()
-            failed_count += 1
-            user_message, _, _ = summarize_ai_failure(
-                exc,
-                fallback_message="The AI provider could not classify this product.",
-            )
-            items.append(
-                ProductIntelligenceRunItem(
-                    product_external_id=product.external_id,
-                    product_name=product.name,
-                    status="failed",
-                    message=user_message,
-                    stale_before_run=staleness.is_stale,
-                )
-            )
-            continue
-
-        refreshed = _get_product_by_id(db, household=household, product_id=product.id) or product
-        refreshed_intelligence = get_primary_product_intelligence(refreshed)
-        classified_count += 1
-        if intelligence is not None and staleness.is_stale:
-            stale_reclassified_count += 1
-        items.append(
-            ProductIntelligenceRunItem(
-                product_external_id=refreshed.external_id,
-                product_name=refreshed.name,
-                status="reclassified" if intelligence is not None else "classified",
-                message="AI product intelligence saved.",
-                confidence=refreshed_intelligence.confidence if refreshed_intelligence is not None else None,
-                stale_before_run=staleness.is_stale,
-                intelligence=serialize_product_intelligence(refreshed_intelligence, product=refreshed),
-            )
-        )
-
-    completed_at = utc_now()
-    record_audit_event(
-        db,
-        household=household,
-        actor=actor,
-        action="product.intelligence.run.completed",
-        target_type="household",
-        target_external_id=household.external_id,
-        event_metadata={
-            "mode": request.mode,
-            "provider_type": resolved.record.provider_type,
-            "default_model": resolved.record.default_model,
-            "total_candidates": len(products),
-            "classified_count": classified_count,
-            "skipped_count": skipped_count,
-            "failed_count": failed_count,
-            "stale_reclassified_count": stale_reclassified_count,
-        },
-    )
-    db.commit()
-
-    return ProductIntelligenceRunResponse(
-        mode=request.mode,
-        available=True,
-        provider_type=resolved.record.provider_type,
-        default_model=resolved.record.default_model,
-        classification_scope=PRODUCT_INTELLIGENCE_SCOPE,
-        classification_version=PRODUCT_INTELLIGENCE_CLASSIFICATION_VERSION,
-        schema_version=PRODUCT_INTELLIGENCE_SCHEMA_VERSION,
-        total_candidates=len(products),
-        classified_count=classified_count,
-        skipped_count=skipped_count,
-        failed_count=failed_count,
-        stale_reclassified_count=stale_reclassified_count,
-        items=items,
-        started_at=started_at,
-        completed_at=completed_at,
+        latest_run=latest_run,
     )
 
 
@@ -385,6 +274,69 @@ def build_product_intelligence_source_payload(product: Product) -> dict[str, obj
             else None
         ),
     }
+
+
+def build_product_intelligence_batch_source_payload(
+    product: Product,
+    *,
+    trim_level: int = 0,
+) -> dict[str, object]:
+    enrichment = get_primary_enrichment(product)
+    alias_limit = 8 if trim_level == 0 else 5 if trim_level == 1 else 3
+    barcode_limit = 6 if trim_level == 0 else 4 if trim_level == 1 else 2
+    manual_tag_limit = 10 if trim_level == 0 else 6 if trim_level == 1 else 4
+    ingredient_tag_limit = 12 if trim_level == 0 else 8 if trim_level == 1 else 5
+    ingredient_token_limit = 14 if trim_level == 0 else 8 if trim_level == 1 else 0
+    category_limit = 8 if trim_level == 0 else 5 if trim_level == 1 else 3
+    label_limit = 8 if trim_level == 0 else 5 if trim_level == 1 else 3
+    nutrition_limit = 4 if trim_level == 0 else 2 if trim_level == 1 else 0
+    ingredients_text_limit = 320 if trim_level == 0 else 180 if trim_level == 1 else 0
+    notes_limit = 220 if trim_level == 0 else 120 if trim_level == 1 else 0
+
+    nutrition_summary: list[dict[str, object]] = []
+    if enrichment and enrichment.nutrition_summary and nutrition_limit > 0:
+        for item in enrichment.nutrition_summary[:nutrition_limit]:
+            if isinstance(item, dict):
+                nutrition_summary.append(
+                    {
+                        "label": item.get("label"),
+                        "value": item.get("value"),
+                        "unit": item.get("unit"),
+                    }
+                )
+
+    return {
+        "product_external_id": product.external_id,
+        "product": {
+            "name": product.name,
+            "default_unit": product.default_unit,
+            "aliases": [alias.name for alias in product.aliases][:alias_limit],
+            "barcodes": [barcode.value for barcode in product.barcodes][:barcode_limit],
+            "notes": (product.notes or "")[:notes_limit] or None,
+            "manual_ingredient_tags": list(product.manual_ingredient_tags or [])[:manual_tag_limit],
+        },
+        "enrichment": (
+            {
+                "source_product_name": enrichment.source_product_name,
+                "ingredient_tags": list(enrichment.ingredient_tags or [])[:ingredient_tag_limit],
+                "ingredient_tokens": list(enrichment.ingredient_tokens or [])[:ingredient_token_limit],
+                "ingredients_text": (enrichment.ingredients_text or "")[:ingredients_text_limit] or None,
+                "allergen_tags": list(enrichment.allergen_tags or [])[:8],
+                "trace_tags": list(enrichment.trace_tags or [])[:6],
+                "dietary_tags": list(enrichment.dietary_tags or [])[:8],
+                "labels": list(enrichment.labels or [])[:label_limit],
+                "categories": list(enrichment.categories or [])[:category_limit],
+                "nutrition_summary": nutrition_summary,
+            }
+            if enrichment is not None
+            else None
+        ),
+    }
+
+
+def estimate_product_intelligence_tokens(payload: object) -> int:
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
+    return max(math.ceil(len(encoded) / 4), 1)
 
 
 def _build_status_counts(products: list[Product]) -> ProductIntelligenceStatusCounts:
@@ -521,6 +473,27 @@ def _classify_product(
     )
     parsed = ProductClassificationOutput.model_validate(completion.parsed_output)
 
+    return apply_product_intelligence_classification(
+        db,
+        household=household,
+        actor=actor,
+        product=product,
+        parsed=parsed,
+        model=model,
+        provider_type=provider_type,
+    )
+
+
+def apply_product_intelligence_classification(
+    db: Session,
+    *,
+    household: Household,
+    actor: User,
+    product: Product,
+    parsed: ProductClassificationOutput,
+    model: str,
+    provider_type: str,
+) -> ProductIntelligence:
     intelligence = get_primary_product_intelligence(product)
     if intelligence is None:
         intelligence = ProductIntelligence(
@@ -606,3 +579,9 @@ def _normalize_structured_metadata(payload: ProductClassificationMetadataPayload
             preparation_tags=_normalize_tags(payload.preparation_tags, field_name="Preparation tag"),
         ).model_dump(),
     )
+
+
+def _build_latest_run_summary(db: Session, *, household: Household):
+    from app.services.product_intelligence_runs import get_latest_product_intelligence_run_summary
+
+    return get_latest_product_intelligence_run_summary(db, household=household)

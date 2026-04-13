@@ -13,6 +13,7 @@ from app.services.ai_providers.base import (
     StructuredCompletionRequest,
     StructuredCompletionResult,
 )
+from app.services.ai_runtime import normalize_ai_error
 
 ANTHROPIC_VERSION = "2023-06-01"
 STRUCTURED_OUTPUT_TOOL_NAME = "pantry_structured_output"
@@ -65,10 +66,15 @@ class ClaudeProviderAdapter:
                 },
             )
         except Exception as exc:
+            error = normalize_ai_error(
+                exc,
+                provider_type=self._config.provider_type,
+                model=self._config.default_model,
+            )
             return AIProviderHealth(
                 is_healthy=False,
                 status=AI_HEALTH_UNHEALTHY,
-                message=str(exc),
+                message=str(error),
                 models=[],
                 capabilities={
                     "supports_model_listing": True,
@@ -83,7 +89,7 @@ class ClaudeProviderAdapter:
     ) -> StructuredCompletionResult:
         payload: dict[str, Any] = {
             "model": request.model,
-            "max_tokens": 1200,
+            "max_tokens": request.max_output_tokens or 1200,
             "system": request.system_prompt,
             "messages": [
                 {
@@ -105,7 +111,10 @@ class ClaudeProviderAdapter:
             },
         }
 
-        with httpx.Client(timeout=self._config.timeout_seconds, headers=self._headers()) as client:
+        with httpx.Client(
+            timeout=request.timeout_seconds or self._config.timeout_seconds,
+            headers=self._headers(),
+        ) as client:
             response = client.post(self._url("/messages"), json=payload)
             response.raise_for_status()
             body = response.json()

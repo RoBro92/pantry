@@ -10,6 +10,7 @@ import {
   AI_PROVIDER_API_KEY_REQUIRED,
   AI_PROVIDER_LABELS,
   type AIProviderType,
+  getAIProviderSupport,
   getDefaultBaseUrl,
   getDefaultModel,
   normalizeAIProviderType
@@ -81,6 +82,7 @@ export function AdminAIConfigForm({
 
   const featureEnabled = initialConfigResponse.feature_enabled;
   const providerRequiresApiKey = AI_PROVIDER_API_KEY_REQUIRED[providerType];
+  const providerSupport = getAIProviderSupport(providerType);
   const availableModels = health?.models ?? [];
 
   function buildCurrentDraft(overrides?: Partial<ProviderDraft>): ProviderDraft {
@@ -283,6 +285,9 @@ export function AdminAIConfigForm({
           The self hosted installation uses provider details configured here. Changes save
           automatically, secrets are not shown after save, and secrets are never written to logs.
         </p>
+        <p className={`helper-text${providerSupport.isCurrentlySupported ? "" : " is-error"}`}>
+          {providerSupport.statusLabel}. {providerSupport.description}
+        </p>
         {!featureEnabled ? (
           <p className="error-text">AI features are disabled for this deployment.</p>
         ) : null}
@@ -365,6 +370,11 @@ export function AdminAIConfigForm({
           <p className="status-note">
             Health check uses the current autosaved configuration. Finish autosaving the latest
             changes first.
+          </p>
+        ) : !providerSupport.isCurrentlySupported ? (
+          <p className="status-note">
+            Pantry keeps this provider visible for future validation, but OpenAI is the supported
+            choice for classification and guided meal suggestions right now.
           </p>
         ) : null}
       </section>

@@ -48,9 +48,9 @@ def login(client, *, email: str, password: str = PASSWORD) -> None:
     ("provider_type", "base_url", "default_model", "api_key"),
     [
         ("openai", "https://api.openai.com/v1", "gpt-5.4-mini", "openai-secret"),
-        ("claude", "https://api.anthropic.com", "claude-3-5-haiku-latest", "claude-secret"),
-        ("gemini", "https://generativelanguage.googleapis.com", "gemini-2.0-flash", "gemini-secret"),
-        ("ollama", "http://localhost:11434", "llama3.2", None),
+        ("claude", "https://api.anthropic.com", "claude-sonnet-4-6", "claude-secret"),
+        ("gemini", "https://generativelanguage.googleapis.com", "gemini-2.5-flash", "gemini-secret"),
+        ("ollama", "http://localhost:11434", "qwen3:8b", None),
     ],
 )
 def test_platform_admin_ai_provider_config_saves_supported_providers(
@@ -94,9 +94,9 @@ def test_platform_admin_ai_provider_config_saves_supported_providers(
     ("provider_type", "base_url", "default_model", "api_key"),
     [
         ("openai", "https://api.openai.com/v1", "gpt-5.4-mini", "openai-secret"),
-        ("claude", "https://api.anthropic.com", "claude-3-5-haiku-latest", "claude-secret"),
-        ("gemini", "https://generativelanguage.googleapis.com", "gemini-2.0-flash", "gemini-secret"),
-        ("ollama", "http://localhost:11434", "llama3.2", None),
+        ("claude", "https://api.anthropic.com", "claude-sonnet-4-6", "claude-secret"),
+        ("gemini", "https://generativelanguage.googleapis.com", "gemini-2.5-flash", "gemini-secret"),
+        ("ollama", "http://localhost:11434", "qwen3:8b", None),
     ],
 )
 def test_platform_admin_ai_health_check_supports_all_built_in_providers(

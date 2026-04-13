@@ -30,6 +30,8 @@ class StructuredCompletionRequest:
     output_schema: dict[str, Any]
     temperature: float = 0.2
     schema_name: str = "pantry_ai_response"
+    max_output_tokens: int | None = None
+    timeout_seconds: float | None = None
 
 
 @dataclass(frozen=True)

@@ -47,9 +47,13 @@ class OpenAIProviderAdapter:
         *,
         json_body: dict[str, Any] | None = None,
         model: str | None = None,
+        timeout_seconds: float | None = None,
     ) -> dict[str, Any]:
         try:
-            with httpx.Client(timeout=self._config.timeout_seconds, headers=self._headers()) as client:
+            with httpx.Client(
+                timeout=timeout_seconds or self._config.timeout_seconds,
+                headers=self._headers(),
+            ) as client:
                 response = client.request(method, self._url(path), json=json_body)
                 response.raise_for_status()
                 payload = response.json()
@@ -73,7 +77,7 @@ class OpenAIProviderAdapter:
         return payload
 
     def _build_payload(self, request: StructuredCompletionRequest) -> dict[str, Any]:
-        return {
+        payload = {
             "model": request.model,
             "messages": [
                 {"role": "system", "content": request.system_prompt},
@@ -92,6 +96,9 @@ class OpenAIProviderAdapter:
                 },
             },
         }
+        if request.max_output_tokens is not None:
+            payload["max_tokens"] = request.max_output_tokens
+        return payload
 
     def _parse_completion_response(self, body: dict[str, Any], *, model: str) -> StructuredCompletionResult:
         choice = (body.get("choices") or [{}])[0]
@@ -151,6 +158,7 @@ class OpenAIProviderAdapter:
             "/chat/completions",
             json_body=payload,
             model=request.model,
+            timeout_seconds=request.timeout_seconds,
         )
         return self._parse_completion_response(body, model=request.model)
 

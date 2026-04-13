@@ -6,11 +6,17 @@ type ProviderRecommendation = {
   description: string;
 };
 
+type ProviderSupportMetadata = {
+  isCurrentlySupported: boolean;
+  statusLabel: string;
+  description: string;
+};
+
 export const AI_PROVIDER_OPTIONS: Array<{ value: AIProviderType; label: string }> = [
   { value: "openai", label: "OpenAI" },
-  { value: "claude", label: "Claude" },
-  { value: "gemini", label: "Gemini" },
-  { value: "ollama", label: "Ollama" }
+  { value: "claude", label: "Claude (not currently supported)" },
+  { value: "gemini", label: "Gemini (not currently supported)" },
+  { value: "ollama", label: "Ollama (not currently supported)" }
 ];
 
 export const VISIBLE_AI_PROVIDER_OPTIONS: Array<{ value: AIProviderType; label: string }> = [
@@ -33,9 +39,9 @@ export const AI_PROVIDER_DEFAULT_BASE_URLS: Record<AIProviderType, string> = {
 
 export const AI_PROVIDER_DEFAULT_MODELS: Record<AIProviderType, string> = {
   openai: "gpt-5.4-mini",
-  claude: "claude-3-5-haiku-latest",
-  gemini: "gemini-2.0-flash",
-  ollama: "llama3.2"
+  claude: "claude-sonnet-4-6",
+  gemini: "gemini-2.5-flash",
+  ollama: "qwen3:8b"
 };
 
 export const AI_PROVIDER_API_KEY_REQUIRED: Record<AIProviderType, boolean> = {
@@ -65,26 +71,36 @@ const AI_PROVIDER_RECOMMENDED_MODELS: Record<AIProviderType, ProviderRecommendat
   ],
   claude: [
     {
-      model: "claude-3-5-haiku-latest",
+      model: "claude-haiku-4-5",
       label: "Fast / low cost",
-      description: "Fast and affordable for compact Pantry suggestions."
+      description: "Fast and affordable for compact Pantry suggestions and classifications."
     },
     {
-      model: "claude-sonnet-4-0",
+      model: "claude-sonnet-4-6",
       label: "Balanced",
-      description: "A strong default for quality and responsiveness."
+      description: "Pantry’s default Anthropic option for speed and quality."
+    },
+    {
+      model: "claude-opus-4-6",
+      label: "Higher quality",
+      description: "Use when Pantry should prioritise quality over cost and latency."
     }
   ],
   gemini: [
     {
-      model: "gemini-2.0-flash",
+      model: "gemini-2.5-flash-lite",
       label: "Fast / low cost",
-      description: "Good default for lightweight Pantry suggestions."
+      description: "The lightest Pantry-supported Gemini option."
+    },
+    {
+      model: "gemini-2.5-flash",
+      label: "Balanced",
+      description: "Pantry’s default Gemini choice for classification and suggestions."
     },
     {
       model: "gemini-2.5-pro",
-      label: "Stronger",
-      description: "Use when you want stronger reasoning quality."
+      label: "Higher quality",
+      description: "Use when you want stronger Gemini reasoning quality."
     }
   ],
   ollama: [
@@ -94,11 +110,43 @@ const AI_PROVIDER_RECOMMENDED_MODELS: Record<AIProviderType, ProviderRecommendat
       description: "Good default if it is installed locally."
     },
     {
-      model: "qwen2.5:7b-instruct",
+      model: "qwen3:8b",
       label: "Balanced",
-      description: "A practical local model if available."
+      description: "Pantry’s default local model when it is available."
+    },
+    {
+      model: "llama3.3",
+      label: "Higher quality",
+      description: "Use when a stronger local model is worth the extra latency."
     }
   ]
+};
+
+const AI_PROVIDER_SUPPORT: Record<AIProviderType, ProviderSupportMetadata> = {
+  openai: {
+    isCurrentlySupported: true,
+    statusLabel: "Supported",
+    description:
+      "OpenAI is Pantry’s currently supported provider for product classification and guided meal suggestions."
+  },
+  claude: {
+    isCurrentlySupported: false,
+    statusLabel: "Foundation only",
+    description:
+      "Anthropic groundwork remains in the codebase, but Claude is not currently supported for Pantry’s normal AI flows."
+  },
+  gemini: {
+    isCurrentlySupported: false,
+    statusLabel: "Foundation only",
+    description:
+      "Gemini setup and runtime groundwork remain available, but Gemini is not currently supported for Pantry’s normal AI flows."
+  },
+  ollama: {
+    isCurrentlySupported: false,
+    statusLabel: "Foundation only",
+    description:
+      "Ollama setup and local-model groundwork remain available, but Ollama is not currently supported for Pantry’s normal AI flows."
+  }
 };
 
 export function getDefaultBaseUrl(providerType: AIProviderType) {
@@ -111,6 +159,14 @@ export function getDefaultModel(providerType: AIProviderType) {
 
 export function getAIProviderLabel(providerType: AIProviderType) {
   return AI_PROVIDER_LABELS[providerType];
+}
+
+export function getAIProviderSupport(providerType: AIProviderType) {
+  return AI_PROVIDER_SUPPORT[providerType];
+}
+
+export function isAIProviderCurrentlySupported(providerType: AIProviderType) {
+  return AI_PROVIDER_SUPPORT[providerType].isCurrentlySupported;
 }
 
 export function providerSupportsManualModelEntry(_providerType: AIProviderType) {
@@ -131,6 +187,9 @@ function resolveRecommendedModel(availableModels: string[], desiredModel: string
 }
 
 export function getRecommendedModels(providerType: AIProviderType, availableModels: string[]) {
+  if (!isAIProviderCurrentlySupported(providerType)) {
+    return [];
+  }
   return AI_PROVIDER_RECOMMENDED_MODELS[providerType].map((pick) => ({
     ...pick,
     model: resolveRecommendedModel(availableModels, pick.model)

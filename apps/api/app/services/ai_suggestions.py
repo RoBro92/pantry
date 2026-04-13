@@ -28,7 +28,7 @@ from app.services.ai_context import build_household_ai_context
 from app.services.platform_features import FLAG_AI_SUGGESTIONS, get_effective_feature_flag, require_feature_enabled
 from app.services.ai_prompts import build_suggestion_prompt_plan
 from app.services.ai_providers import StructuredCompletionRequest, build_ai_provider_adapter
-from app.services.ai_runtime_errors import AIUserFacingError, summarize_ai_failure
+from app.services.ai_runtime import normalize_ai_error
 from app.services.audit import record_audit_event
 from app.services.tenancy import HouseholdAccess
 from app.services.usage_counters import check_usage_quota
@@ -100,9 +100,13 @@ def build_household_ai_feature_status(
         )
 
     if config.health_status == AI_HEALTH_UNHEALTHY:
-        reason = "The configured AI provider is unhealthy."
-        if config.health_error:
-            reason = f"{reason} {config.health_error}"
+        reason = str(
+            normalize_ai_error(
+                config.health_error or "The configured AI provider is unhealthy.",
+                provider_type=provider_type,
+                model=config.default_model,
+            )
+        )
         return AIFeatureStatusSummary(
             feature_enabled=True,
             available=False,
@@ -209,15 +213,15 @@ def generate_household_ai_suggestions(
         )
         parsed = AIProviderSuggestionOutput.model_validate(completion.parsed_output)
     except Exception as exc:
-        user_message, diagnostic_message, error_category = summarize_ai_failure(
+        ai_error = normalize_ai_error(
             exc,
-            fallback_message="The AI provider could not complete this Pantry AI suggestion request.",
+            provider_type=resolved.record.provider_type,
+            model=resolved.record.default_model,
         )
-        error_message = f"AI suggestion generation failed: {user_message}"
         record_provider_runtime_failure(
             db,
             config=resolved.record,
-            error_message=error_message,
+            error_message=str(ai_error),
         )
         logger.warning(
             "ai.request.failed",
@@ -226,8 +230,7 @@ def generate_household_ai_suggestions(
             provider_type=resolved.record.provider_type,
             model=resolved.record.default_model,
             suggestion_kind=request.kind,
-            error_category=error_category,
-            error_detail=diagnostic_message,
+            error=ai_error.technical_message,
         )
         record_audit_event(
             db,
@@ -241,11 +244,11 @@ def generate_household_ai_suggestions(
                 "provider_type": resolved.record.provider_type,
                 "default_model": resolved.record.default_model,
                 "kind": request.kind,
-                "error": error_message,
+                "error": ai_error.technical_message,
             },
         )
         db.commit()
-        raise AIUserFacingError(error_message, status_code=503) from exc
+        raise ai_error from exc
 
     duration_ms = round((perf_counter() - started) * 1000, 2)
     logger.info(
