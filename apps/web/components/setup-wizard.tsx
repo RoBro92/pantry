@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { type FormEvent, type ReactNode, useRef, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import type {
   SetupStatusResponse,
   SetupWizardAssignmentSummary,
@@ -379,12 +379,15 @@ function TokenEditor({
   inputMode?: "text" | "search" | "email" | "url" | "numeric" | "decimal";
   spellCheck?: boolean;
 }) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
   return (
     <div className="stack">
       <label className="field">
         <span>{label}</span>
         <div className="token-input-row">
           <input
+            ref={inputRef}
             type={inputType}
             name={inputName}
             value={newValue}
@@ -398,11 +401,15 @@ function TokenEditor({
             onKeyDown={(event) => {
               if (event.key === "Enter") {
                 event.preventDefault();
-                onAddToken(newValue);
+                onAddToken(event.currentTarget.value);
               }
             }}
           />
-          <button type="button" className="ghost-button" onClick={() => onAddToken(newValue)}>
+          <button
+            type="button"
+            className="ghost-button"
+            onClick={() => onAddToken(inputRef.current?.value ?? newValue)}
+          >
             Add
           </button>
         </div>
@@ -486,6 +493,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [wizard, setWizard] = useState(initialState);
+  const wizardRef = useRef(initialState);
   const [currentStep, setCurrentStep] = useState<SetupStepKey>(initialStep);
   const [adminPasswordDraft, setAdminPasswordDraft] = useState<PasswordDraft>(EMPTY_PASSWORD_DRAFT);
   const [userPasswordDrafts, setUserPasswordDrafts] = useState<Record<string, PasswordDraft>>({});
@@ -515,6 +523,10 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
     wizard.installation_mode === "restore_backup" &&
     restoreValidationIssues.length > 0;
 
+  useEffect(() => {
+    wizardRef.current = wizard;
+  }, [wizard]);
+
   function moveToStep(step: SetupStepKey) {
     setCurrentStep(step);
     const params = new URLSearchParams(searchParams.toString());
@@ -533,12 +545,18 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
       }
       latestAppliedSaveIdRef.current = saveId;
     }
+    wizardRef.current = nextState;
     setWizard(nextState);
     if (!nextState.rooms.some((room) => room.stage_id === expandedRoomStageId)) {
       setExpandedRoomStageId(nextState.rooms[0]?.stage_id ?? null);
     }
     setError(null);
     setStatusMessage(savedMessage ?? "Progress saved.");
+  }
+
+  function markLocalDraftChange() {
+    const nextSaveId = ++saveCounterRef.current;
+    latestAppliedSaveIdRef.current = nextSaveId;
   }
 
   async function persistUsersSnapshot(
@@ -601,6 +619,37 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
     } catch {
       // Keep inline interaction resilient; the explicit Next save still surfaces errors.
     }
+  }
+
+  function applyHouseholdWizardUpdate(
+    transform: (current: SetupWizardStateResponse) => SetupWizardStateResponse,
+    options?: {
+      afterUpdate?: (nextState: SetupWizardStateResponse) => void;
+      persist?: boolean;
+    }
+  ) {
+    const nextState = transform(wizardRef.current);
+    wizardRef.current = nextState;
+    setWizard(nextState);
+    options?.afterUpdate?.(nextState);
+    if (options?.persist === false) {
+      markLocalDraftChange();
+      return;
+    }
+    void persistHouseholdSnapshot(nextState);
+  }
+
+  function applyDietaryWizardUpdate(
+    transform: (current: SetupWizardStateResponse) => SetupWizardStateResponse,
+    options?: {
+      afterUpdate?: (nextState: SetupWizardStateResponse) => void;
+    }
+  ) {
+    const nextState = transform(wizardRef.current);
+    wizardRef.current = nextState;
+    setWizard(nextState);
+    options?.afterUpdate?.(nextState);
+    void persistDietarySnapshot(nextState);
   }
 
   async function persistStep(
@@ -868,10 +917,11 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
   }
 
   function addInitialUser() {
+    const current = wizardRef.current;
     const nextWizard = {
-      ...wizard,
+      ...current,
       initial_users: [
-        ...wizard.initial_users,
+        ...current.initial_users,
         {
           stage_id: createStageId(),
           login: "",
@@ -881,6 +931,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
         }
       ]
     };
+    wizardRef.current = nextWizard;
     setWizard(nextWizard);
     void persistStep("users", {
       suppressErrors: true,
@@ -889,16 +940,18 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
   }
 
   function removeInitialUser(stageId: string) {
+    const current = wizardRef.current;
     const nextWizard = {
-      ...wizard,
-      initial_users: wizard.initial_users.filter((user) => user.stage_id !== stageId),
-      household_assignments: wizard.household_assignments.filter(
+      ...current,
+      initial_users: current.initial_users.filter((user) => user.stage_id !== stageId),
+      household_assignments: current.household_assignments.filter(
         (assignment) => assignment.stage_user_id !== stageId
       ),
-      user_dietary_preferences: wizard.user_dietary_preferences.filter(
+      user_dietary_preferences: current.user_dietary_preferences.filter(
         (preference) => preference.stage_user_id !== stageId
       )
     };
+    wizardRef.current = nextWizard;
     setWizard(nextWizard);
     setUserPasswordDrafts((current) => {
       const nextDrafts = { ...current };
@@ -912,15 +965,15 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
   }
 
   function updateHouseholdAssignment(stageUserId: string, role: HouseholdRole | "none") {
-    const nextWizard = {
-      ...wizard,
+    applyHouseholdWizardUpdate((current) => ({
+      ...current,
       household_assignments:
         role === "none"
-          ? wizard.household_assignments.filter(
+          ? current.household_assignments.filter(
               (assignment) => assignment.stage_user_id !== stageUserId
             )
           : [
-              ...wizard.household_assignments.filter(
+              ...current.household_assignments.filter(
                 (assignment) => assignment.stage_user_id !== stageUserId
               ),
               {
@@ -928,9 +981,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                 role
               }
             ]
-    };
-    setWizard(nextWizard);
-    void persistHouseholdSnapshot(nextWizard);
+    }));
   }
 
   async function handleInstallModeChange(mode: SetupWizardStateResponse["installation_mode"]) {
@@ -980,42 +1031,64 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
   }
 
   function addRoom() {
-    const nextWizard = syncWizardRooms(wizard, [...wizard.rooms, createEmptyRoom()]);
-    const nextRoom = nextWizard.rooms[nextWizard.rooms.length - 1];
-    setWizard(nextWizard);
-    setExpandedRoomStageId(nextRoom?.stage_id ?? null);
-    void persistHouseholdSnapshot(nextWizard);
+    applyHouseholdWizardUpdate(
+      (current) => syncWizardRooms(current, [...current.rooms, createEmptyRoom()]),
+      {
+        afterUpdate: (nextState) => {
+          const nextRoom = nextState.rooms[nextState.rooms.length - 1];
+          setExpandedRoomStageId(nextRoom?.stage_id ?? null);
+        },
+        persist: false
+      }
+    );
   }
 
   function removeRoom(stageId: string) {
-    const remainingRooms = wizard.rooms.filter((room) => room.stage_id !== stageId);
-    const nextWizard = syncWizardRooms(wizard, remainingRooms);
-    setWizard(nextWizard);
-    if (expandedRoomStageId === stageId) {
-      setExpandedRoomStageId(nextWizard.rooms[0]?.stage_id ?? null);
-    }
-    setNewRoomLocations((current) => {
-      const nextValues = { ...current };
-      delete nextValues[stageId];
-      return nextValues;
-    });
-    void persistHouseholdSnapshot(nextWizard);
+    applyHouseholdWizardUpdate(
+      (current) => {
+        const remainingRooms = current.rooms.filter((room) => room.stage_id !== stageId);
+        return syncWizardRooms(current, remainingRooms);
+      },
+      {
+        afterUpdate: (nextState) => {
+          if (expandedRoomStageId === stageId) {
+            setExpandedRoomStageId(nextState.rooms[0]?.stage_id ?? null);
+          }
+          setNewRoomLocations((current) => {
+            const nextValues = { ...current };
+            delete nextValues[stageId];
+            return nextValues;
+          });
+        }
+      }
+    );
   }
 
   function updateRoomName(stageId: string, value: string) {
-    setWizard((current) =>
-      syncWizardRooms(
-        current,
-        current.rooms.map((room) =>
-          room.stage_id === stageId
-            ? {
-                ...room,
-                name: value
-              }
-            : room
-        )
+    markLocalDraftChange();
+    const nextState = syncWizardRooms(
+      wizardRef.current,
+      wizardRef.current.rooms.map((room) =>
+        room.stage_id === stageId
+          ? {
+              ...room,
+              name: value
+            }
+          : room
       )
     );
+    wizardRef.current = nextState;
+    setWizard(nextState);
+  }
+
+  function updateHouseholdName(value: string) {
+    markLocalDraftChange();
+    const nextState = {
+      ...wizardRef.current,
+      household_name: value
+    };
+    wizardRef.current = nextState;
+    setWizard(nextState);
   }
 
   function addStorageLocation(stageId: string, value: string) {
@@ -1023,36 +1096,41 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
     if (!trimmed) {
       return;
     }
-    const nextWizard = syncWizardRooms(
-      wizard,
-      wizard.rooms.map((room) =>
-        room.stage_id === stageId
-          ? {
-              ...room,
-              storage_locations: Array.from(new Set([...room.storage_locations, trimmed]))
-            }
-          : room
-      )
+    applyHouseholdWizardUpdate(
+      (current) =>
+        syncWizardRooms(
+          current,
+          current.rooms.map((room) =>
+            room.stage_id === stageId
+              ? {
+                  ...room,
+                  storage_locations: Array.from(new Set([...room.storage_locations, trimmed]))
+                }
+              : room
+          )
+        ),
+      {
+        afterUpdate: () => {
+          setNewRoomLocations((current) => ({ ...current, [stageId]: "" }));
+        }
+      }
     );
-    setWizard(nextWizard);
-    setNewRoomLocations((current) => ({ ...current, [stageId]: "" }));
-    void persistHouseholdSnapshot(nextWizard);
   }
 
   function removeStorageLocation(stageId: string, location: string) {
-    const nextWizard = syncWizardRooms(
-      wizard,
-      wizard.rooms.map((room) =>
-        room.stage_id === stageId
-          ? {
-              ...room,
-              storage_locations: room.storage_locations.filter((item) => item !== location)
-            }
-          : room
+    applyHouseholdWizardUpdate((current) =>
+      syncWizardRooms(
+        current,
+        current.rooms.map((room) =>
+          room.stage_id === stageId
+            ? {
+                ...room,
+                storage_locations: room.storage_locations.filter((item) => item !== location)
+              }
+            : room
+        )
       )
     );
-    setWizard(nextWizard);
-    void persistHouseholdSnapshot(nextWizard);
   }
 
   function addHouseholdDietaryPreference(value: string) {
@@ -1060,28 +1138,30 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
     if (!trimmed) {
       return;
     }
-    const nextWizard = {
-      ...wizard,
-      skipped_optional_steps: wizard.skipped_optional_steps.filter((step) => step !== "dietary"),
-      household_dietary_preferences: normalizeDietarySelection([
-        ...wizard.household_dietary_preferences,
-        trimmed
-      ])
-    };
-    setWizard(nextWizard);
-    setNewHouseholdDietaryPreference("");
-    void persistDietarySnapshot(nextWizard);
+    applyDietaryWizardUpdate(
+      (current) => ({
+        ...current,
+        skipped_optional_steps: current.skipped_optional_steps.filter((step) => step !== "dietary"),
+        household_dietary_preferences: normalizeDietarySelection([
+          ...current.household_dietary_preferences,
+          trimmed
+        ])
+      }),
+      {
+        afterUpdate: () => {
+          setNewHouseholdDietaryPreference("");
+        }
+      }
+    );
   }
 
   function removeHouseholdDietaryPreference(value: string) {
-    const nextWizard = {
-      ...wizard,
-      household_dietary_preferences: wizard.household_dietary_preferences.filter(
+    applyDietaryWizardUpdate((current) => ({
+      ...current,
+      household_dietary_preferences: current.household_dietary_preferences.filter(
         (item) => item !== value
       )
-    };
-    setWizard(nextWizard);
-    void persistDietarySnapshot(nextWizard);
+    }));
   }
 
   function addUserDietaryPreference(stageUserId: string, value: string) {
@@ -1089,31 +1169,39 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
     if (!trimmed) {
       return;
     }
-    const existing = findUserPreferences(wizard.user_dietary_preferences, stageUserId);
-    const nextPreferences = normalizeDietarySelection([...existing, trimmed]);
-    const others = wizard.user_dietary_preferences.filter(
-      (item) => item.stage_user_id !== stageUserId
-    );
-    const nextWizard = {
-      ...wizard,
-      skipped_optional_steps: wizard.skipped_optional_steps.filter((step) => step !== "dietary"),
-      user_dietary_preferences: [
-        ...others,
-        {
-          stage_user_id: stageUserId,
-          preferences: nextPreferences
+    applyDietaryWizardUpdate(
+      (current) => {
+        const existing = findUserPreferences(current.user_dietary_preferences, stageUserId);
+        const nextPreferences = normalizeDietarySelection([...existing, trimmed]);
+        const others = current.user_dietary_preferences.filter(
+          (item) => item.stage_user_id !== stageUserId
+        );
+        return {
+          ...current,
+          skipped_optional_steps: current.skipped_optional_steps.filter(
+            (step) => step !== "dietary"
+          ),
+          user_dietary_preferences: [
+            ...others,
+            {
+              stage_user_id: stageUserId,
+              preferences: nextPreferences
+            }
+          ]
+        };
+      },
+      {
+        afterUpdate: () => {
+          setNewUserDietaryPreference((current) => ({ ...current, [stageUserId]: "" }));
         }
-      ]
-    };
-    setWizard(nextWizard);
-    setNewUserDietaryPreference((current) => ({ ...current, [stageUserId]: "" }));
-    void persistDietarySnapshot(nextWizard);
+      }
+    );
   }
 
   function removeUserDietaryPreference(stageUserId: string, value: string) {
-    const nextWizard = {
-      ...wizard,
-      user_dietary_preferences: wizard.user_dietary_preferences
+    applyDietaryWizardUpdate((current) => ({
+      ...current,
+      user_dietary_preferences: current.user_dietary_preferences
         .map((item) =>
           item.stage_user_id === stageUserId
             ? {
@@ -1123,9 +1211,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
             : item
         )
         .filter((item) => item.preferences.length > 0)
-    };
-    setWizard(nextWizard);
-    void persistDietarySnapshot(nextWizard);
+    }));
   }
 
   const renderStep = () => {
@@ -1436,9 +1522,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
               autoCapitalize="words"
               autoCorrect="off"
               spellCheck={false}
-              onChange={(event) =>
-                setWizard((current) => ({ ...current, household_name: event.target.value }))
-              }
+              onChange={(event) => updateHouseholdName(event.target.value)}
               onBlur={() => void persistStep("household", { suppressErrors: true })}
               placeholder="Your House"
             />

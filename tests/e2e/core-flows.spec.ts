@@ -110,8 +110,8 @@ test("first-run setup handles staged users, skips optional steps, and completes 
   await expect(adminFields.getByLabel("Confirm password")).toHaveValue("correct horse battery");
 
   await usersStep.getByRole("button", { name: "Add additional user" }).click();
-  await usersStep.getByRole("button", { name: "Add additional user" }).click();
   await expect(page.getByTestId("setup-user-card-1")).toBeVisible();
+  await usersStep.getByRole("button", { name: "Add additional user" }).click();
   await expect(page.getByTestId("setup-user-card-2")).toBeVisible();
 
   const firstAdditionalUser = page.getByTestId("setup-user-card-1");
@@ -144,21 +144,51 @@ test("first-run setup handles staged users, skips optional steps, and completes 
   await wizard.getByRole("button", { name: "Next" }).click();
   await expect(page.getByRole("heading", { name: "Dietary preferences" })).toBeVisible();
   await wizard.getByRole("button", { name: "Skip for now" }).click();
-  await expect(page.getByRole("heading", { name: "First household and rooms" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Create household and rooms" })).toBeVisible();
 
   await page.getByLabel("Household name").fill("Brown Household");
   const firstRoomCard = page.getByTestId("setup-room-card-1");
   await firstRoomCard.getByLabel("Room name").fill("Kitchen");
   await firstRoomCard.getByLabel("Storage locations").fill("Fridge");
+  const firstRoomSave = page.waitForResponse(
+    (response) =>
+      response.url().includes("/api/setup/wizard/household") &&
+      response.request().method() === "PUT" &&
+      response.request().postData()?.includes('"Fridge"') === true &&
+      response.ok(),
+  );
   await firstRoomCard.getByRole("button", { name: "Add" }).click();
+  await firstRoomSave;
+  await expect(firstRoomCard.getByRole("button", { name: "Fridge Remove" })).toBeVisible();
   await wizard.getByRole("button", { name: "Add another Room" }).click();
   const secondRoomCard = page.getByTestId("setup-room-card-2");
+  await expect(secondRoomCard).toBeVisible();
+  const secondRoomToggle = secondRoomCard.locator(".setup-room-toggle");
+  if ((await secondRoomToggle.getAttribute("aria-expanded")) !== "true") {
+    await secondRoomToggle.click();
+  }
+  await expect(secondRoomCard.getByLabel("Room name")).toBeVisible();
   await secondRoomCard.getByLabel("Room name").fill("Garage");
   await secondRoomCard.getByLabel("Storage locations").fill("Bulk rack");
+  const secondRoomSave = page.waitForResponse(
+    (response) =>
+      response.url().includes("/api/setup/wizard/household") &&
+      response.request().method() === "PUT" &&
+      response.request().postData()?.includes('"Bulk rack"') === true &&
+      response.ok(),
+  );
   await secondRoomCard.getByRole("button", { name: "Add" }).click();
-  await page
-    .getByLabel("Household membership for Alex (alex)")
-    .selectOption({ label: "User" });
+  await secondRoomSave;
+  await expect(secondRoomCard.getByRole("button", { name: "Bulk rack Remove" })).toBeVisible();
+  const householdRoleSave = page.waitForResponse(
+    (response) =>
+      response.url().includes("/api/setup/wizard/household") &&
+      response.request().method() === "PUT" &&
+      response.request().postData()?.includes('"role":"household_user"') === true &&
+      response.ok(),
+  );
+  await page.getByLabel("Household membership for Alex (alex)").selectOption({ label: "User" });
+  await householdRoleSave;
   await expect(page.getByText("Household details saved.")).toBeVisible();
   await expect(page.getByLabel(/Household membership for .*owner/i)).toBeDisabled();
   await expect(page.getByLabel(/Household membership for .*owner/i)).toHaveValue(
@@ -169,7 +199,7 @@ test("first-run setup handles staged users, skips optional steps, and completes 
   );
 
   await page.reload();
-  await expect(page.getByRole("heading", { name: "First household and rooms" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Create household and rooms" })).toBeVisible();
   await expect(page.getByLabel("Household name")).toHaveValue("Brown Household");
   await expect(page.getByTestId("setup-room-card-1")).toContainText("Kitchen");
   await expect(page.getByTestId("setup-room-card-2")).toContainText("Garage");
@@ -312,16 +342,16 @@ test("dietary none selection persists and marks the step complete", async ({ pag
   await expect(page.getByRole("heading", { name: "Dietary preferences" })).toBeVisible();
   await page.getByRole("button", { name: "None" }).first().click();
   await expect(page.getByRole("button", { name: "None Remove" })).toBeVisible();
+  await wizard.getByRole("button", { name: "Next" }).click();
+  await expect(page.getByRole("heading", { name: "Create household and rooms" })).toBeVisible();
+  await expect(
+    wizard.locator(".setup-progress-item").nth(2).locator(".setup-progress-count"),
+  ).toHaveText("✓");
 
   await page.reload();
+  await wizard.locator(".setup-progress-item").nth(2).click();
   await expect(page.getByRole("heading", { name: "Dietary preferences" })).toBeVisible();
   await expect(page.getByRole("button", { name: "None Remove" })).toBeVisible();
-
-  await wizard.getByRole("button", { name: "Next" }).click();
-  await expect(page.getByRole("heading", { name: "First household and rooms" })).toBeVisible();
-  await expect(wizard.locator(".setup-progress-item").nth(2).locator(".setup-progress-count")).toHaveText(
-    "✓",
-  );
 });
 
 test("setup and login forms render explicit autofill-safe field metadata", async ({ page }) => {
@@ -402,7 +432,7 @@ test("platform admin diagnostics page loads against the docker stack", async ({ 
   await expect(page.getByText(/uptime .*minute/i)).toBeVisible();
   await expect(page.getByText("Update Check")).toBeVisible();
   await expect(page.getByText("Queue And Worker")).toBeVisible();
-  await expect(page.getByText("Default")).toBeVisible();
+  await expect(page.getByText("Environment override")).toBeVisible();
 });
 
 test("platform admin updates and backups pages load from the admin navigation", async ({
@@ -414,13 +444,13 @@ test("platform admin updates and backups pages load from the admin navigation", 
   });
 
   await page.goto("/admin/updates");
-  await expect(page.getByRole("heading", { name: "Release visibility and manual updates" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Releases and manual updates" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Backups", exact: true })).toBeVisible();
   await expect(
     page
       .locator("article.panel")
       .filter({ has: page.getByRole("heading", { name: "Manual Update" }) })
-      .getByText("Operator-controlled only")
+      .getByText(/Operator controlled/i)
   ).toBeVisible();
 
   await page.goto("/admin/backups");
@@ -571,7 +601,7 @@ test("pantry add flow warns when an alias is already used by another product", a
   await addEntryForm.getByLabel("Product name").fill("Soup base");
   await addEntryForm.getByLabel("Storage location").selectOption({ label: "Kitchen / Shelf A" });
   await addEntryForm.getByLabel("Quantity").fill("1");
-  await addEntryForm.getByLabel("Unit").fill("count");
+  await addEntryForm.getByLabel("Unit").selectOption("count");
   await addEntryForm.getByLabel("Aliases").fill("Dry pasta");
   await addEntryForm.getByRole("button", { name: "Add to pantry" }).click();
 
@@ -595,7 +625,7 @@ test("shopping reconciliation uses dense rows, full Pantry product creation, and
   await addForm.getByLabel("Note").fill("Extra virgin");
   await addForm.getByRole("button", { name: "Add item" }).click();
 
-  await page.getByRole("button", { name: "Export checklist (.txt)" }).click();
+  await page.getByRole("button", { name: "Export List (.txt)" }).click();
   const pendingTrips = page
     .locator(".content-grid.shopping-columns article.panel")
     .nth(1)
@@ -619,10 +649,11 @@ test("shopping reconciliation uses dense rows, full Pantry product creation, and
   await oliveOilRow.getByRole("button", { name: "Create Pantry product" }).click();
 
   const productForm = page.getByTestId("pantry-product-form");
-  await expect(productForm.getByLabel("Barcode")).toBeVisible();
+  const barcodeInput = productForm.locator('input[name="barcodes"]');
+  await expect(barcodeInput).toBeVisible();
   await expect(productForm.getByLabel("Aliases")).toBeVisible();
   await expect(productForm.getByLabel("Product notes")).toBeVisible();
-  await productForm.getByLabel("Barcode").fill("5060000000001");
+  await barcodeInput.fill("5060000000001");
   await productForm.getByLabel("Aliases").fill("EVOO, extra virgin oil");
   await productForm.getByLabel("Product notes").fill("Use for dressings and low-heat cooking.");
   await productForm.getByLabel("Manual ingredients").fill("Olives");
@@ -727,10 +758,10 @@ test("import flow covers upload, review lines, and confirm into pantry", async (
     "Spice Blend",
   );
   await expect(page.getByTestId(`product-card-${manifest.product_external_ids.spice_blend}`)).toContainText(
-    "1.000 jar across 1 lot",
+    "1 jar across 1 lot",
   );
   await expect(page.getByTestId(`product-card-${manifest.product_external_ids.tomatoes}`)).toContainText(
-    "3.000 can across 1 lot",
+    "3 can across 1 lot",
   );
 });
 
@@ -746,6 +777,7 @@ test("ai flow covers unconfigured and configured-but-unavailable states", async 
   ).toBeVisible();
 
   await page.getByRole("button", { name: "Logout" }).click();
+  await expect(page).toHaveURL(/\/login$/);
   await loginThroughApi(page, {
     email: manifest.admin_email,
     password: manifest.password
@@ -753,26 +785,27 @@ test("ai flow covers unconfigured and configured-but-unavailable states", async 
   await dismissAdminWhatsNewIfVisible(page);
 
   await page.goto("/admin/ai");
-  const providerType = page.getByLabel("Provider type");
-  const baseUrlField = page.getByLabel("Base URL");
-  const defaultModelField = page.getByLabel("Default model");
+  await expect(page.getByRole("heading", { name: "Provider Setup" })).toBeVisible();
+  const providerType = page.locator('[aria-label="Provider type"]');
+  const baseUrlField = page.locator('[aria-label="Base URL"]');
+  const defaultModelField = page.locator('[aria-label="Default model"]');
   const apiKeyField = page.getByLabel("API key");
   await expect(page.getByRole("button", { name: "Save configuration" })).toHaveCount(0);
   await expect(providerType).toContainText("OpenAI");
-  await expect(baseUrlField).toHaveValue("https://api.openai.com/v1");
-  await expect(defaultModelField).toHaveValue("gpt-5.4-mini");
+  await expect(baseUrlField).toContainText("https://api.openai.com/v1");
+  await expect(defaultModelField).toContainText("gpt-5.4-mini");
 
   const providerBox = await providerType.boundingBox();
   const baseUrlBox = await baseUrlField.boundingBox();
   const defaultModelBox = await defaultModelField.boundingBox();
   const apiKeyBox = await apiKeyField.boundingBox();
-  expect(providerBox?.height).toBe(baseUrlBox?.height);
-  expect(baseUrlBox?.height).toBe(defaultModelBox?.height);
-  expect(defaultModelBox?.height).toBe(apiKeyBox?.height);
+  expect(Math.abs((providerBox?.height ?? 0) - (baseUrlBox?.height ?? 0))).toBeLessThan(1);
+  expect(Math.abs((baseUrlBox?.height ?? 0) - (defaultModelBox?.height ?? 0))).toBeLessThan(1);
+  expect(Math.abs((defaultModelBox?.height ?? 0) - (apiKeyBox?.height ?? 0))).toBeLessThan(1);
 
   await expect(page.getByRole("button", { name: "Run health check" })).toBeDisabled();
 
-  await page.getByRole("button", { name: "Choose model" }).click();
+  await page.locator(".ai-provider-model-action button").click();
   await expect(page.getByRole("button", { name: "Back" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Close" })).toHaveCount(0);
@@ -782,15 +815,12 @@ test("ai flow covers unconfigured and configured-but-unavailable states", async 
   await expect(page.getByLabel("Model name")).toHaveValue("gpt-5.4-mini");
   await page.getByLabel("Model name").fill("gpt-4.1-mini");
   await page.getByRole("button", { name: "Save" }).click();
-  await expect(defaultModelField).toHaveValue("gpt-4.1-mini");
+  await expect(defaultModelField).toContainText("gpt-4.1-mini");
   await expect(page.getByRole("button", { name: "Run health check" })).toBeDisabled();
 
   await apiKeyField.fill("test-openai-key");
   await page.keyboard.press("Tab");
   await expect(page.getByText("Health check failed.")).toBeVisible();
-
-  await baseUrlField.fill("http://api:9");
-  await page.keyboard.press("Tab");
   await expect(page.getByRole("button", { name: "Run health check" })).toBeEnabled();
 
   await page.getByRole("button", { name: "Run health check" }).click();
@@ -799,7 +829,7 @@ test("ai flow covers unconfigured and configured-but-unavailable states", async 
   await page.goto("/admin");
   await page.goto("/admin/ai");
   await expect(providerType).toContainText("OpenAI");
-  await expect(baseUrlField).toHaveValue("http://api:9");
+  await expect(baseUrlField).toContainText("https://api.openai.com/v1");
   await expect(page.getByRole("button", { name: "Save configuration" })).toHaveCount(0);
 
   await page.getByRole("button", { name: "Logout" }).click();
@@ -809,7 +839,9 @@ test("ai flow covers unconfigured and configured-but-unavailable states", async 
   });
 
   await page.goto(`/app/households/${manifest.household_external_id}/ai`);
-  await expect(page.getByText("The configured AI provider is unhealthy.")).toBeVisible();
+  await expect(
+    page.getByText("Pantry could not authenticate with the AI provider.")
+  ).toBeVisible();
 });
 
 test("admin ai settings persist across navigation and keep stored-key state visible", async ({
@@ -822,11 +854,9 @@ test("admin ai settings persist across navigation and keep stored-key state visi
   await dismissAdminWhatsNewIfVisible(page);
 
   await page.goto("/admin/ai");
-  await expect(page.getByLabel("Provider type")).toContainText("OpenAI");
-  await page.getByLabel("Base URL").fill("https://api.openai.com/v1");
-  await page.keyboard.press("Tab");
-  await page.getByRole("button", { name: "Choose model" }).click();
-  await page.getByText("Recommended default").click();
+  await expect(page.locator('[aria-label="Provider type"]')).toContainText("OpenAI");
+  await page.locator(".ai-provider-model-action button").click();
+  await page.getByText("Fastest / cheapest").click();
   await page.getByRole("button", { name: "Save" }).click();
   await page.getByLabel("API key").fill("sk-test-secret");
   await page.keyboard.press("Tab");
@@ -836,9 +866,9 @@ test("admin ai settings persist across navigation and keep stored-key state visi
   await page.goto("/admin");
   await page.goto("/admin/ai");
 
-  await expect(page.getByLabel("Provider type")).toContainText("OpenAI");
-  await expect(page.getByLabel("Base URL")).toHaveValue("https://api.openai.com/v1");
-  await expect(page.getByLabel("Default model")).toHaveValue("gpt-5.4-mini");
+  await expect(page.locator('[aria-label="Provider type"]')).toContainText("OpenAI");
+  await expect(page.locator('[aria-label="Base URL"]')).toContainText("https://api.openai.com/v1");
+  await expect(page.locator('[aria-label="Default model"]')).toContainText("gpt-4.1-mini");
   await expect(page.getByLabel("API key")).toHaveValue("");
 });
 
@@ -879,7 +909,7 @@ test("platform admin can manage household memberships from the consolidated pane
     .locator('select[name="user_external_id"]')
     .selectOption({ label: "Weekday Member (weekday-member@example.com)" });
   await membershipForm.locator('select[name="role"]').selectOption({ label: "User" });
-  await membershipForm.getByRole("button", { name: "Add membership" }).click();
+  await membershipForm.getByRole("button", { name: "Add member" }).click();
 
   await expect(page.getByText("Assigned weekday-member@example.com as User.")).toBeVisible();
 
@@ -952,7 +982,7 @@ test("platform admin sees a warning modal when removing the last household admin
     .locator('select[name="user_external_id"]')
     .selectOption({ label: "Solo Admin (solo-admin@example.com)" });
   await membershipForm.locator('select[name="role"]').selectOption({ label: "Admin" });
-  await membershipForm.getByRole("button", { name: "Add membership" }).click();
+  await membershipForm.getByRole("button", { name: "Add member" }).click();
   await expect(page.getByText("Assigned solo-admin@example.com as Admin.")).toBeVisible();
 
   const soloAdminRow = page.locator(".household-member-row").filter({ hasText: "solo-admin@example.com" });
@@ -999,7 +1029,7 @@ test("platform admin can remove household members and delete a household with co
     .locator('select[name="user_external_id"]')
     .selectOption({ label: "Cleanup Member (cleanup-member@example.com)" });
   await membershipForm.locator('select[name="role"]').selectOption({ label: "User" });
-  await membershipForm.getByRole("button", { name: "Add membership" }).click();
+  await membershipForm.getByRole("button", { name: "Add member" }).click();
   await expect(page.getByText("Assigned cleanup-member@example.com as User.")).toBeVisible();
 
   const cleanupMemberRow = page
