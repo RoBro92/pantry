@@ -1,6 +1,6 @@
 # Deployment
 
-Pantry’s supported public deployment path is a self hosted Docker installation using released images and repository hosted deployment assets.
+Pantry’s supported public deployment path is a self hosted Docker installation using released images and repository hosted deployment assets. The public repository is self-hosted and operator-managed only: there is no hosted control plane and no auto-update service.
 
 ## Public Deployment Files
 
@@ -96,6 +96,8 @@ Keep your existing `pantry.yml` and `pantry.env.example` if you manage them manu
 ```
 
 The update script refreshes release assets by default, updates `PANTRY_VERSION`, pulls images, runs migrations, restarts services, and runs the bundled health check.
+
+For a concise maintainer and operator checklist, see [docs/RELEASE_RUNBOOK.md](RELEASE_RUNBOOK.md).
 
 ## Operator Fallback Commands
 

@@ -17,6 +17,7 @@ Pantry is a small repo for a self hosted product with three runtime services and
 ## Product Boundaries
 
 - Pantry is self hosted and operator managed
+- Pantry does not ship hosted control-plane, billing, or other SaaS-only logic in this repository
 - Household access is enforced server side
 - Product identity stays Pantry owned even when external enrichment from Open Food Facts is linked
 - AI product intelligence is stored separately from the core product record so classification can be rerun and versioned safely

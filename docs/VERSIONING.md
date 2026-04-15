@@ -19,6 +19,8 @@ Pantry keeps release visibility explicit and operator-controlled.
 - Operators pull new images, run migrations, restart services, and verify health deliberately
 - The bundled update script automates that operator workflow without turning it into background self update behavior
 
+For the public release and upgrade checklist, see [docs/RELEASE_RUNBOOK.md](RELEASE_RUNBOOK.md).
+
 ## Compatibility
 
 - Release assets, container tags, and the `VERSION` file should stay aligned
