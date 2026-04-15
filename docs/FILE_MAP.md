@@ -31,10 +31,13 @@ Quick reference for the public repository layout.
 ## Public Documentation
 
 - `README.md`: product overview, install entry point, and docs index
+- `LICENSE`: public repository license
+- `SUPPORT.md`: support, bug-reporting, and security-reporting expectations
 - `AGENTS.md`: public repository working rules
 - `docs/ARCHITECTURE.md`: high level service and deployment layout
 - `docs/CONTRIBUTING.md`: contributor workflow and local development commands
 - `docs/DEPLOYMENT.md`: self hosted install and update guidance
+- `docs/RELEASE_RUNBOOK.md`: concise maintainer release and operator upgrade checklist
 - `docs/SECURITY.md`: safe operation and data handling notes
 - `docs/TEST_STRATEGY.md`: proportionate validation guidance
 - `docs/VERSIONING.md`: release and update model

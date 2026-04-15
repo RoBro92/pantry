@@ -2,7 +2,7 @@
 
 Pantry is a self-hosted household inventory application for tracking food, planning around what is already at home, and reducing avoidable waste.
 
-It is built for local operation rather than hosted sync. The repository ships the web app, API, worker, Docker deployment assets, and the core contributor documentation needed to run and maintain the project safely.
+It is built for local operation rather than hosted sync. This public repository ships the self-hosted, operator-managed Pantry product only: the web app, API, worker, Docker deployment assets, and the core contributor documentation needed to run and maintain it safely. It does not include hosted control-plane, billing, or other SaaS-only logic.
 
 ## What Pantry Includes
 
@@ -14,6 +14,13 @@ It is built for local operation rather than hosted sync. The repository ships th
 - Guided first-run setup, including restore from a Pantry backup bundle
 - Admin tools for users, backups, diagnostics, updates, SMTP, and optional AI provider configuration
 - Optional guided household AI meal suggestions backed by an instance-level OpenAI, Claude, Ollama, or custom OpenAI-compatible provider, including pantry-aware recipe completion writeback
+
+## Project Scope
+
+- Self-hosted and operator-managed
+- Optional AI features; the core product remains usable without AI
+- No SaaS billing, hosted sync, or hosted control-plane logic in this repository
+- No automatic updates; operators choose when to upgrade
 
 ## Quick Start
 
@@ -80,9 +87,12 @@ Contributor workflow details live in [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md
 
 ## Public Docs
 
+- [LICENSE](LICENSE)
+- [SUPPORT.md](SUPPORT.md)
 - [docs/FILE_MAP.md](docs/FILE_MAP.md)
 - [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- [docs/RELEASE_RUNBOOK.md](docs/RELEASE_RUNBOOK.md)
 - [docs/SECURITY.md](docs/SECURITY.md)
 - [docs/VERSIONING.md](docs/VERSIONING.md)
 - [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md)

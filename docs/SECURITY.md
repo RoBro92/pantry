@@ -2,6 +2,13 @@
 
 Pantry treats uploads, restore bundles, and external data as hostile input until they have been validated.
 
+## Reporting A Vulnerability
+
+- Do not post exploit details, credentials, or sensitive deployment data in a public issue
+- If GitHub private vulnerability reporting is enabled for this repository, use that channel
+- If no private reporting channel is available, open a minimal public issue requesting a private contact path without including sensitive details
+- Reproduce against the latest release when it is safe to do so, but do not delay reporting a credible security issue
+
 ## Data And Access Boundaries
 
 - Household scoped access is enforced server side
@@ -33,4 +40,4 @@ Pantry treats uploads, restore bundles, and external data as hostile input until
 
 ## Scope
 
-This repository documents Pantry’s application level safety model. Host hardening, TLS, backup retention, secret management, and patching remain operator responsibilities.
+This repository documents Pantry’s application level safety model for the self-hosted, operator-managed product. Host hardening, TLS, backup retention, secret management, and patching remain operator responsibilities.
