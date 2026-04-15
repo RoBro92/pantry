@@ -22,7 +22,8 @@ from app.schemas.pantry import (
     ProductIntelligenceStructuredMetadata,
     ProductIntelligenceSummary,
 )
-from app.services.ai_config import get_ai_feature_enabled, resolve_provider_config
+from app.services.ai_config import get_ai_feature_enabled, normalize_provider_model, resolve_provider_config
+from app.services.ai_providers.openai_compat import is_supported_openai_model
 from app.services.ai_providers import StructuredCompletionRequest
 from app.services.ai_runtime import normalize_ai_error
 from app.services.audit import record_audit_event
@@ -120,12 +121,13 @@ def build_product_intelligence_status(
         )
 
     record = resolved.record
+    default_model = normalize_provider_model(record.provider_type, record.default_model)
     if not record.is_enabled:
         return ProductIntelligenceStatusResponse(
             available=False,
             reason="The configured AI provider is disabled.",
             provider_type=record.provider_type,
-            default_model=record.default_model,
+            default_model=default_model,
             health_status=record.health_status,
             counts=counts,
             classification_scope=PRODUCT_INTELLIGENCE_SCOPE,
@@ -135,17 +137,29 @@ def build_product_intelligence_status(
         )
 
     if record.health_status == AI_HEALTH_UNHEALTHY:
+        if record.provider_type == "openai" and is_supported_openai_model(default_model):
+            return ProductIntelligenceStatusResponse(
+                available=True,
+                provider_type=record.provider_type,
+                default_model=default_model,
+                health_status=record.health_status,
+                counts=counts,
+                classification_scope=PRODUCT_INTELLIGENCE_SCOPE,
+                classification_version=PRODUCT_INTELLIGENCE_CLASSIFICATION_VERSION,
+                schema_version=PRODUCT_INTELLIGENCE_SCHEMA_VERSION,
+                latest_run=latest_run,
+            )
         return ProductIntelligenceStatusResponse(
             available=False,
             reason=str(
                 normalize_ai_error(
                     record.health_error or "The configured AI provider is unhealthy.",
                     provider_type=record.provider_type,
-                    model=record.default_model,
+                    model=default_model,
                 )
             ),
             provider_type=record.provider_type,
-            default_model=record.default_model,
+            default_model=default_model,
             health_status=record.health_status,
             counts=counts,
             classification_scope=PRODUCT_INTELLIGENCE_SCOPE,
@@ -157,7 +171,7 @@ def build_product_intelligence_status(
     return ProductIntelligenceStatusResponse(
         available=True,
         provider_type=record.provider_type,
-        default_model=record.default_model,
+        default_model=default_model,
         health_status=record.health_status,
         counts=counts,
         classification_scope=PRODUCT_INTELLIGENCE_SCOPE,

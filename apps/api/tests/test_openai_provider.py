@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 import httpx
+import pytest
 
 from app.services.ai_providers import AIProviderRuntimeConfig, StructuredCompletionRequest
 from app.services.ai_providers.openai import OpenAIProviderAdapter
-from app.services.ai_providers.openai_compat import normalize_openai_json_schema
+from app.services.ai_providers.openai_compat import (
+    canonicalize_openai_model_id,
+    normalize_openai_json_schema,
+    resolve_supported_openai_model,
+)
 from app.services.product_intelligence import ProductClassificationOutput
 from app.schemas.ai import AIProviderMealSuggestionOutput
 
@@ -186,7 +191,8 @@ def test_openai_health_check_marks_provider_unhealthy_when_models_list_but_struc
     assert health.is_healthy is False
     assert health.models == ["gpt-4.1-mini", "gpt-5.4", "gpt-5.4-mini"]
     assert health.capabilities["recommended_models"] == ["gpt-4.1-mini", "gpt-5.4-mini", "gpt-5.4"]
-    assert "not compatible with Pantry's structured AI requests" in (health.message or "")
+    assert "could not complete a structured AI request" in (health.message or "")
+    assert "gpt-5.4-mini" in (health.message or "")
     assert "400 Bad Request" not in (health.message or "")
 
 
@@ -220,6 +226,21 @@ def test_openai_health_check_allows_unprofiled_models_that_pass_the_compatibilit
     assert health.is_healthy is True
     assert health.capabilities["default_model_profile"] == "unprofiled"
     assert health.models == ["custom-openai-model"]
+
+
+@pytest.mark.parametrize(
+    ("raw_model", "expected_supported"),
+    [
+        (" gpt-4.1-mini ", "gpt-4.1-mini"),
+        ("GPT-5.4-MINI", "gpt-5.4-mini"),
+        ("gpt-5.4-preview", "gpt-5.4"),
+        ("models/gpt-5.4-mini", "gpt-5.4-mini"),
+        ("openai/gpt-5.4", "gpt-5.4"),
+    ],
+)
+def test_openai_supported_model_resolution_normalizes_aliases(raw_model, expected_supported):
+    assert resolve_supported_openai_model(raw_model) == expected_supported
+    assert canonicalize_openai_model_id(raw_model) == expected_supported
 
 
 def test_openai_adapter_parses_text_content_arrays(monkeypatch):

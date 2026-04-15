@@ -49,7 +49,7 @@ from app.schemas.setup import (
     StagedSetupUserSummary,
 )
 from app.services.backups import clear_staged_backup, load_staged_backup, restore_instance_backup_bundle, stage_backup_upload
-from app.services.ai_config import _normalize_base_url, get_instance_provider_config
+from app.services.ai_config import _normalize_base_url, get_instance_provider_config, normalize_provider_model
 from app.services.audit import record_audit_event
 from app.services.auth import count_platform_admins, get_user_by_email, get_user_by_external_id
 from app.services.instance_settings import (
@@ -785,7 +785,7 @@ def update_setup_ai(db: Session, payload: SetupAIConfigUpdateRequest) -> SetupWi
         merged["ai"] = {
             "provider_type": provider_type,
             "base_url": _normalize_base_url(payload.base_url),
-            "default_model": payload.default_model.strip(),
+            "default_model": normalize_provider_model(provider_type, payload.default_model),
             "is_enabled": payload.is_enabled,
         }
         if api_key:
@@ -1057,13 +1057,13 @@ def finalize_setup(db: Session) -> User:
                     scope_key=AI_SCOPE_KEY_INSTANCE,
                     provider_type=provider_type,
                     base_url=str(ai_payload["base_url"]),
-                    default_model=str(ai_payload["default_model"]),
+                    default_model=normalize_provider_model(provider_type, str(ai_payload["default_model"])),
                     is_enabled=True,
                 )
                 db.add(config)
             config.provider_type = provider_type
             config.base_url = str(ai_payload["base_url"])
-            config.default_model = str(ai_payload["default_model"])
+            config.default_model = normalize_provider_model(provider_type, str(ai_payload["default_model"]))
             config.encrypted_api_key = state.encrypted_ai_api_key
             config.is_enabled = True
             config.health_status = AI_HEALTH_UNKNOWN

@@ -36,6 +36,7 @@ from app.services.ai_config import (
 from app.services.ai_meal_context import build_ai_meal_context, build_meal_planner_response
 from app.services.ai_meal_prompts import build_ai_meal_prompt_plan
 from app.services.ai_providers import StructuredCompletionRequest, build_ai_provider_adapter
+from app.services.ai_providers.errors import AIProviderError
 from app.services.ai_runtime import normalize_ai_error
 from app.services.ai_suggestions import build_household_ai_feature_status
 from app.services.audit import record_audit_event
@@ -362,6 +363,12 @@ def generate_ai_meal_suggestions(
             )
         )
         parsed = AIProviderMealSuggestionOutput.model_validate(completion.parsed_output)
+        if not parsed.suggestions:
+            raise AIProviderError(
+                "Pantry could not build a usable meal shortlist from the AI response. Try again or adjust the meal request.",
+                diagnostic_message="Structured meal suggestion response contained zero suggestions.",
+                category="invalid_response",
+            )
     except Exception as exc:
         ai_error = normalize_ai_error(
             exc,
