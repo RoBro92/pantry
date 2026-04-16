@@ -28,7 +28,9 @@ compose() {
 }
 
 bootstrap_dev_env() {
-  if [[ -n "${PANTRY_DEV_ENV_FILE:-}" ]]; then
+  if [[ -n "${PANTRO_DEV_ENV_FILE:-}" ]]; then
+    DEV_ENV_FILE="${PANTRO_DEV_ENV_FILE}"
+  elif [[ -n "${PANTRY_DEV_ENV_FILE:-}" ]]; then
     DEV_ENV_FILE="${PANTRY_DEV_ENV_FILE}"
   elif [[ -f "${DEFAULT_DEV_ENV_FILE}" ]]; then
     DEV_ENV_FILE="${DEFAULT_DEV_ENV_FILE}"
@@ -47,11 +49,31 @@ bootstrap_dev_env() {
     echo "Created ${DEV_ENV_FILE} from $(basename "${template_source}") for local development."
   fi
 
-  export PANTRY_WEB_WATCHPACK_POLLING="${PANTRY_WEB_WATCHPACK_POLLING:-$(detect_polling_default)}"
-  export PANTRY_WEB_CHOKIDAR_USEPOLLING="${PANTRY_WEB_CHOKIDAR_USEPOLLING:-${PANTRY_WEB_WATCHPACK_POLLING}}"
-  export PANTRY_WEB_CHOKIDAR_INTERVAL="${PANTRY_WEB_CHOKIDAR_INTERVAL:-500}"
-  export PANTRY_API_WATCHFILES_FORCE_POLLING="${PANTRY_API_WATCHFILES_FORCE_POLLING:-${PANTRY_WEB_WATCHPACK_POLLING}}"
-  export PANTRY_WORKER_WATCHFILES_FORCE_POLLING="${PANTRY_WORKER_WATCHFILES_FORCE_POLLING:-${PANTRY_WEB_WATCHPACK_POLLING}}"
+  export PANTRO_WEB_WATCHPACK_POLLING="${PANTRO_WEB_WATCHPACK_POLLING:-${PANTRY_WEB_WATCHPACK_POLLING:-$(detect_polling_default)}}"
+  export PANTRO_WEB_CHOKIDAR_USEPOLLING="${PANTRO_WEB_CHOKIDAR_USEPOLLING:-${PANTRY_WEB_CHOKIDAR_USEPOLLING:-${PANTRO_WEB_WATCHPACK_POLLING}}}"
+  export PANTRO_WEB_CHOKIDAR_INTERVAL="${PANTRO_WEB_CHOKIDAR_INTERVAL:-${PANTRY_WEB_CHOKIDAR_INTERVAL:-500}}"
+  export PANTRO_API_WATCHFILES_FORCE_POLLING="${PANTRO_API_WATCHFILES_FORCE_POLLING:-${PANTRY_API_WATCHFILES_FORCE_POLLING:-${PANTRO_WEB_WATCHPACK_POLLING}}}"
+  export PANTRO_WORKER_WATCHFILES_FORCE_POLLING="${PANTRO_WORKER_WATCHFILES_FORCE_POLLING:-${PANTRY_WORKER_WATCHFILES_FORCE_POLLING:-${PANTRO_WEB_WATCHPACK_POLLING}}}"
+
+  export PANTRO_LOCAL_AI_PROVIDER_TYPE="${PANTRO_LOCAL_AI_PROVIDER_TYPE:-${PANTRY_LOCAL_AI_PROVIDER_TYPE:-}}"
+  export PANTRO_LOCAL_AI_BASE_URL="${PANTRO_LOCAL_AI_BASE_URL:-${PANTRY_LOCAL_AI_BASE_URL:-}}"
+  export PANTRO_LOCAL_AI_DEFAULT_MODEL="${PANTRO_LOCAL_AI_DEFAULT_MODEL:-${PANTRY_LOCAL_AI_DEFAULT_MODEL:-}}"
+  export PANTRO_LOCAL_AI_API_KEY="${PANTRO_LOCAL_AI_API_KEY:-${PANTRY_LOCAL_AI_API_KEY:-}}"
+  export PANTRO_LOCAL_AI_ENABLED="${PANTRO_LOCAL_AI_ENABLED:-${PANTRY_LOCAL_AI_ENABLED:-}}"
+  export PANTRO_LOCAL_SMTP_HOST="${PANTRO_LOCAL_SMTP_HOST:-${PANTRY_LOCAL_SMTP_HOST:-}}"
+  export PANTRO_LOCAL_SMTP_PORT="${PANTRO_LOCAL_SMTP_PORT:-${PANTRY_LOCAL_SMTP_PORT:-}}"
+  export PANTRO_LOCAL_SMTP_USERNAME="${PANTRO_LOCAL_SMTP_USERNAME:-${PANTRY_LOCAL_SMTP_USERNAME:-}}"
+  export PANTRO_LOCAL_SMTP_PASSWORD="${PANTRO_LOCAL_SMTP_PASSWORD:-${PANTRY_LOCAL_SMTP_PASSWORD:-}}"
+  export PANTRO_LOCAL_SMTP_FROM_EMAIL="${PANTRO_LOCAL_SMTP_FROM_EMAIL:-${PANTRY_LOCAL_SMTP_FROM_EMAIL:-}}"
+  export PANTRO_LOCAL_SMTP_FROM_NAME="${PANTRO_LOCAL_SMTP_FROM_NAME:-${PANTRY_LOCAL_SMTP_FROM_NAME:-}}"
+  export PANTRO_LOCAL_SMTP_SECURITY="${PANTRO_LOCAL_SMTP_SECURITY:-${PANTRY_LOCAL_SMTP_SECURITY:-}}"
+  export PANTRO_LOCAL_SMTP_ENABLED="${PANTRO_LOCAL_SMTP_ENABLED:-${PANTRY_LOCAL_SMTP_ENABLED:-}}"
+  export PANTRO_LOCAL_SMTP_TEST_RECIPIENT_EMAIL="${PANTRO_LOCAL_SMTP_TEST_RECIPIENT_EMAIL:-${PANTRY_LOCAL_SMTP_TEST_RECIPIENT_EMAIL:-}}"
+  export PANTRO_LOCAL_SMTP_PASSWORD_RESET_ENABLED="${PANTRO_LOCAL_SMTP_PASSWORD_RESET_ENABLED:-${PANTRY_LOCAL_SMTP_PASSWORD_RESET_ENABLED:-}}"
+}
+
+legacy_compose_down() {
+  "${COMPOSE_CMD[@]}" -p pantry-dev --env-file "${DEV_ENV_FILE}" -f "${ROOT_DIR}/compose.yml" -f "${ROOT_DIR}/compose.dev.yml" down --remove-orphans --volumes >/dev/null 2>&1 || true
 }
 
 usage() {
@@ -77,7 +99,7 @@ Notes:
   - Use rebuild after Dockerfile or dependency changes.
   - Docker Desktop file polling is enabled automatically on macOS and Windows-like shells.
 
-This helper does not change the production or self-hosted install flow in infra/compose/pantry.yml.
+This helper does not change the production or self-hosted install flow in infra/compose/pantro.yml.
 EOF
 }
 
@@ -102,6 +124,7 @@ bootstrap_mode() {
 }
 
 start_stack() {
+  legacy_compose_down
   compose down --remove-orphans --volumes
   compose up -d --remove-orphans --force-recreate
   wait_for_api
@@ -141,7 +164,7 @@ run_mode() {
   manifest="$(bootstrap_mode "${mode}")"
   printf '%s\n' "${manifest}"
   echo
-  echo "Pantry local development mode: ${mode}"
+  echo "Pantro local development mode: ${mode}"
   echo "Open: http://localhost:${WEB_PORT}/"
 }
 
@@ -157,6 +180,7 @@ main() {
       run_mode "reset" "${2:-}"
       ;;
     down)
+      legacy_compose_down
       compose down --remove-orphans
       ;;
     logs)
@@ -166,6 +190,7 @@ main() {
       compose ps
       ;;
     rebuild)
+      legacy_compose_down
       compose down --remove-orphans
       compose up -d --build --remove-orphans --force-recreate
       wait_for_api

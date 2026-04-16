@@ -17,7 +17,7 @@ export default async function AdminLayout({
         <p className="eyebrow">Admin Dashboard</p>
         <h1>Installation console</h1>
         <p>
-          This dashboard provides administrative tools for managing your Pantry install.
+          This dashboard provides administrative tools for managing your Pantro install.
         </p>
         <AdminSectionNav />
       </section>

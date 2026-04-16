@@ -51,21 +51,23 @@ def _parse_optional_port(value: str | None) -> int | None:
 
 
 def resolve_local_smtp_bootstrap_config() -> LocalSMTPBootstrapConfig | None:
-    raw_host = _first_env_value("PANTRY_LOCAL_SMTP_HOST", "SMTP_HOST")
+    raw_host = _first_env_value("PANTRO_LOCAL_SMTP_HOST", "PANTRY_LOCAL_SMTP_HOST", "SMTP_HOST")
     if raw_host is None:
         return None
 
     try:
-        security = normalize_smtp_security(_first_env_value("PANTRY_LOCAL_SMTP_SECURITY", "SMTP_SECURITY"))
+        security = normalize_smtp_security(
+            _first_env_value("PANTRO_LOCAL_SMTP_SECURITY", "PANTRY_LOCAL_SMTP_SECURITY", "SMTP_SECURITY")
+        )
         host = normalize_smtp_host(raw_host)
         if host is None:
             return None
 
         username = _normalize_optional_text(
-            _first_env_value("PANTRY_LOCAL_SMTP_USERNAME", "SMTP_USERNAME")
+            _first_env_value("PANTRO_LOCAL_SMTP_USERNAME", "PANTRY_LOCAL_SMTP_USERNAME", "SMTP_USERNAME")
         )
         password = _normalize_optional_text(
-            _first_env_value("PANTRY_LOCAL_SMTP_PASSWORD", "SMTP_PASSWORD")
+            _first_env_value("PANTRO_LOCAL_SMTP_PASSWORD", "PANTRY_LOCAL_SMTP_PASSWORD", "SMTP_PASSWORD")
         )
         if username and not password:
             raise ValueError("An SMTP password is required when an SMTP username is configured.")
@@ -73,15 +75,17 @@ def resolve_local_smtp_bootstrap_config() -> LocalSMTPBootstrapConfig | None:
             raise ValueError("An SMTP username is required when an SMTP password is configured.")
 
         from_email = _normalize_optional_text(
-            _first_env_value("PANTRY_LOCAL_SMTP_FROM_EMAIL", "SMTP_FROM_EMAIL")
+            _first_env_value("PANTRO_LOCAL_SMTP_FROM_EMAIL", "PANTRY_LOCAL_SMTP_FROM_EMAIL", "SMTP_FROM_EMAIL")
         )
         test_recipient_email = _normalize_optional_text(
-            _first_env_value("PANTRY_LOCAL_SMTP_TEST_RECIPIENT_EMAIL")
+            _first_env_value("PANTRO_LOCAL_SMTP_TEST_RECIPIENT_EMAIL", "PANTRY_LOCAL_SMTP_TEST_RECIPIENT_EMAIL")
         )
         return LocalSMTPBootstrapConfig(
             host=host,
             port=_normalize_smtp_port(
-                _parse_optional_port(_first_env_value("PANTRY_LOCAL_SMTP_PORT", "SMTP_PORT")),
+                _parse_optional_port(
+                    _first_env_value("PANTRO_LOCAL_SMTP_PORT", "PANTRY_LOCAL_SMTP_PORT", "SMTP_PORT")
+                ),
                 security=security,
             ),
             username=username,
@@ -92,11 +96,11 @@ def resolve_local_smtp_bootstrap_config() -> LocalSMTPBootstrapConfig | None:
                 else None
             ),
             from_name=_normalize_optional_text(
-                _first_env_value("PANTRY_LOCAL_SMTP_FROM_NAME", "SMTP_FROM_NAME")
+                _first_env_value("PANTRO_LOCAL_SMTP_FROM_NAME", "PANTRY_LOCAL_SMTP_FROM_NAME", "SMTP_FROM_NAME")
             ),
             security=security,
             is_enabled=_parse_bool(
-                _first_env_value("PANTRY_LOCAL_SMTP_ENABLED", "SMTP_ENABLED"),
+                _first_env_value("PANTRO_LOCAL_SMTP_ENABLED", "PANTRY_LOCAL_SMTP_ENABLED", "SMTP_ENABLED"),
                 True,
             ),
             test_recipient_email=(
@@ -105,7 +109,10 @@ def resolve_local_smtp_bootstrap_config() -> LocalSMTPBootstrapConfig | None:
                 else None
             ),
             password_reset_enabled=_parse_bool(
-                _first_env_value("PANTRY_LOCAL_SMTP_PASSWORD_RESET_ENABLED"),
+                _first_env_value(
+                    "PANTRO_LOCAL_SMTP_PASSWORD_RESET_ENABLED",
+                    "PANTRY_LOCAL_SMTP_PASSWORD_RESET_ENABLED",
+                ),
                 False,
             ),
         )

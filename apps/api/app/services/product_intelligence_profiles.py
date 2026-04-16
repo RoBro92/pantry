@@ -148,7 +148,7 @@ SUPPORTED_MODEL_PROFILES: dict[str, tuple[SupportedModelProfile, ...]] = {
             model="gpt-4.1-mini",
             tier="lower",
             title="Fast / cheapest",
-            description="The lowest-cost supported OpenAI option for compact Pantry AI runs.",
+            description="The lowest-cost supported OpenAI option for compact Pantro AI runs.",
             execution_profile=ProductIntelligenceExecutionProfile(
                 **{
                     **PROVIDER_FALLBACK_PROFILES[AI_PROVIDER_OPENAI].__dict__,
@@ -163,7 +163,7 @@ SUPPORTED_MODEL_PROFILES: dict[str, tuple[SupportedModelProfile, ...]] = {
             model="gpt-5.4-mini",
             tier="balanced",
             title="Balanced default",
-            description="Pantry's recommended OpenAI default for product intelligence and meal suggestions.",
+            description="Pantro's recommended OpenAI default for product intelligence and meal suggestions.",
             execution_profile=ProductIntelligenceExecutionProfile(
                 **{
                     **PROVIDER_FALLBACK_PROFILES[AI_PROVIDER_OPENAI].__dict__,
@@ -178,7 +178,7 @@ SUPPORTED_MODEL_PROFILES: dict[str, tuple[SupportedModelProfile, ...]] = {
             model="gpt-5.4",
             tier="higher",
             title="Higher quality",
-            description="Use when Pantry should prioritize stronger OpenAI quality over latency and cost.",
+            description="Use when Pantro should prioritize stronger OpenAI quality over latency and cost.",
             execution_profile=ProductIntelligenceExecutionProfile(
                 **{
                     **PROVIDER_FALLBACK_PROFILES[AI_PROVIDER_OPENAI].__dict__,
@@ -197,7 +197,7 @@ SUPPORTED_MODEL_PROFILES: dict[str, tuple[SupportedModelProfile, ...]] = {
             model="claude-haiku-4-5",
             tier="lower",
             title="Fast / lower cost",
-            description="Anthropic’s fastest recommended Pantry option for compact structured work.",
+            description="Anthropic’s fastest recommended Pantro option for compact structured work.",
             execution_profile=ProductIntelligenceExecutionProfile(
                 **{
                     **PROVIDER_FALLBACK_PROFILES[AI_PROVIDER_CLAUDE].__dict__,
@@ -212,7 +212,7 @@ SUPPORTED_MODEL_PROFILES: dict[str, tuple[SupportedModelProfile, ...]] = {
             model="claude-sonnet-4-6",
             tier="balanced",
             title="Balanced default",
-            description="The default Anthropic pick for Pantry’s mixed quality and responsiveness needs.",
+            description="The default Anthropic pick for Pantro’s mixed quality and responsiveness needs.",
             execution_profile=ProductIntelligenceExecutionProfile(
                 **{
                     **PROVIDER_FALLBACK_PROFILES[AI_PROVIDER_CLAUDE].__dict__,
@@ -229,7 +229,7 @@ SUPPORTED_MODEL_PROFILES: dict[str, tuple[SupportedModelProfile, ...]] = {
             model="claude-opus-4-6",
             tier="higher",
             title="Higher quality",
-            description="Use when Pantry should favour quality over latency and cost.",
+            description="Use when Pantro should favour quality over latency and cost.",
             execution_profile=ProductIntelligenceExecutionProfile(
                 **{
                     **PROVIDER_FALLBACK_PROFILES[AI_PROVIDER_CLAUDE].__dict__,
@@ -248,7 +248,7 @@ SUPPORTED_MODEL_PROFILES: dict[str, tuple[SupportedModelProfile, ...]] = {
             model="gemini-2.5-flash-lite",
             tier="lower",
             title="Fast / lower cost",
-            description="The lightest Pantry-supported Gemini option.",
+            description="The lightest Pantro-supported Gemini option.",
             execution_profile=ProductIntelligenceExecutionProfile(
                 **{
                     **PROVIDER_FALLBACK_PROFILES[AI_PROVIDER_GEMINI].__dict__,
@@ -264,7 +264,7 @@ SUPPORTED_MODEL_PROFILES: dict[str, tuple[SupportedModelProfile, ...]] = {
             model="gemini-2.5-flash",
             tier="balanced",
             title="Balanced default",
-            description="The Pantry default Gemini model for classification and suggestion work.",
+            description="The Pantro default Gemini model for classification and suggestion work.",
             execution_profile=ProductIntelligenceExecutionProfile(
                 **{
                     **PROVIDER_FALLBACK_PROFILES[AI_PROVIDER_GEMINI].__dict__,
@@ -280,7 +280,7 @@ SUPPORTED_MODEL_PROFILES: dict[str, tuple[SupportedModelProfile, ...]] = {
             model="gemini-2.5-pro",
             tier="higher",
             title="Higher quality",
-            description="Use when Pantry should favour stronger reasoning quality from Gemini.",
+            description="Use when Pantro should favour stronger reasoning quality from Gemini.",
             execution_profile=ProductIntelligenceExecutionProfile(
                 **{
                     **PROVIDER_FALLBACK_PROFILES[AI_PROVIDER_GEMINI].__dict__,

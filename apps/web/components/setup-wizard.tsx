@@ -224,7 +224,7 @@ function getRestoreValidationIssues(wizard: SetupWizardStateResponse) {
     return [];
   }
   if (!wizard.staged_restore) {
-    return ["Upload and validate a full instance Pantry backup before continuing."];
+    return ["Upload and validate a full instance Pantro backup before continuing."];
   }
   if (wizard.staged_restore.supported_for_restore) {
     return [];
@@ -1021,7 +1021,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
         nextState,
         nextState.staged_restore?.supported_for_restore
           ? "Restore backup staged safely."
-          : "Backup uploaded, but Pantry cannot restore it on this installation."
+          : "Backup uploaded, but Pantro cannot restore it on this installation."
       );
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Restore upload failed.");
@@ -1221,7 +1221,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
           <p className="eyebrow">Step {stepOrder.indexOf("welcome") + 1}</p>
           <h1>Install selection</h1>
           <p className="step-copy">
-            Choose how this Pantry instance should start. Pantry keeps everything staged until the
+            Choose how this Pantro instance should start. Pantro keeps everything staged until the
             final confirmation step so operators stay in control.
           </p>
 
@@ -1249,7 +1249,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
             <article className="setup-highlight install-selection-card">
               <strong>Restore from backup</strong>
               <p>
-                Upload a full instance backup bundle. Pantry validates it safely and restores it
+                Upload a full instance backup bundle. Pantro validates it safely and restores it
                 only when setup is finalized.
               </p>
               <div className="install-selection-actions">
@@ -1279,7 +1279,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
             <div className="stack">
               <form className="stack" onSubmit={handleRestoreUpload}>
                 <label className="field">
-                  <span>Pantry backup bundle</span>
+                  <span>Pantro backup bundle</span>
                   <input type="file" name="file" accept=".json,application/json" required />
                 </label>
                 <div className="page-actions">
@@ -1302,12 +1302,12 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                         : "Restore blocked for this backup"}
                     </strong>
                     <p>
-                      {wizard.staged_restore.original_filename} · {wizard.staged_restore.bundle.scope} · exported from Pantry {wizard.staged_restore.bundle.app_version}
+                      {wizard.staged_restore.original_filename} · {wizard.staged_restore.bundle.scope} · exported from Pantro {wizard.staged_restore.bundle.app_version}
                     </p>
                     <p>
                       {wizard.staged_restore.supported_for_restore
                         ? "Validated and ready to continue to review."
-                        : "Pantry staged the file safely, but this backup does not meet the current restore requirements."}
+                        : "Pantro staged the file safely, but this backup does not meet the current restore requirements."}
                     </p>
                   </div>
                   <ul className="callout-list">
@@ -1319,7 +1319,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
               ) : (
                 <div className="warning-callout">
                   <strong>Restore upload required</strong>
-                  <p>Upload and validate a full instance Pantry backup before continuing.</p>
+                  <p>Upload and validate a full instance Pantro backup before continuing.</p>
                 </div>
               )}
             </div>
@@ -1334,7 +1334,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
           <p className="eyebrow">Step {stepOrder.indexOf("users") + 1}</p>
           <h1>Admin account and initial users</h1>
           <p className="step-copy">
-            Create the main Pantry admin first, then stage any additional users you want available
+            Create the main Pantro admin first, then stage any additional users you want available
             as soon as setup finishes.
           </p>
 
@@ -1371,7 +1371,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                   spellCheck={false}
                   onChange={(event) => updateAdmin({ display_name: event.target.value })}
                   onBlur={() => void persistStep("users", { suppressErrors: true })}
-                  placeholder="Pantry owner"
+                  placeholder="Pantro owner"
                 />
               </label>
             </div>
@@ -1533,7 +1533,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
               <div className="stack compact-stack">
                 <h2>Rooms and Storage</h2>
                 <p className="helper-text">
-                  Pantry uses Rooms for high level spaces such as Kitchen, Garage, or Utility room,
+                  Pantro uses Rooms for high level spaces such as Kitchen, Garage, or Utility room,
                   with storage locations inside each one.
                 </p>
               </div>
@@ -1680,11 +1680,11 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
           <p className="eyebrow">Step {stepOrder.indexOf("public_url") + 1}</p>
           <h1>Public browser URL</h1>
           <p className="step-copy">
-            Pantry uses this for QR codes and browser links, so it should match the address people
+            Pantro uses this for QR codes and browser links, so it should match the address people
             will actually open personal devices.
           </p>
           <label className="field">
-            <span>Public Pantry URL</span>
+            <span>Public Pantro URL</span>
             <input
               type="url"
               name="setup_public_base_url"
@@ -1713,7 +1713,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
             <code>https://pantry.example.com</code>
           </div>
           <p className="helper-text">
-            Optional. Skip this for now if you want Pantry to use the deployment default until you
+            Optional. Skip this for now if you want Pantro to use the deployment default until you
             decide on a permanent address.
           </p>
         </section>
@@ -1726,7 +1726,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
           <p className="eyebrow">Step {stepOrder.indexOf("dietary") + 1}</p>
           <h1>Dietary preferences</h1>
           <p className="step-copy">
-            Select household dietary preferences and assign individual preferences to users. This will help Pantry make better meal suggestions and warnings about expiring goods.
+            Select household dietary preferences and assign individual preferences to users. This will help Pantro make better meal suggestions and warnings about expiring goods.
           </p>
 
           <TokenEditor
@@ -1783,7 +1783,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
           <p className="eyebrow">Step {stepOrder.indexOf("ai") + 1}</p>
           <h1>AI configuration</h1>
           <p className="step-copy">
-            Optional. Configure Pantry’s instance level AI provider now if you want meal and pantry
+            Optional. Configure Pantro’s instance level AI provider now if you want meal and pantry
             suggestions ready after setup.
           </p>
           <p className={`helper-text${providerSupport.isCurrentlySupported ? "" : " is-error"}`}>
@@ -1806,7 +1806,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                 }))
               }
             />
-            <span>Enable AI suggestions for this Pantry instance.</span>
+            <span>Enable AI suggestions for this Pantro instance.</span>
           </label>
           <div className="content-grid">
             <label className="field">
@@ -1867,7 +1867,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
               />
               <p className="helper-text">
                 Recommended: <code>gpt-4.1-mini</code> for fastest low-cost runs,{" "}
-                <code>gpt-5.4-mini</code> as Pantry&apos;s default balance, or <code>gpt-5.4</code>{" "}
+                <code>gpt-5.4-mini</code> as Pantro&apos;s default balance, or <code>gpt-5.4</code>{" "}
                 for the strongest quality.
               </p>
             </label>
@@ -1894,7 +1894,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
           </div>
           {!providerSupport.isCurrentlySupported ? (
             <p className="helper-text">
-              Finish setup with OpenAI if you want Pantry’s AI classification and guided meal
+              Finish setup with OpenAI if you want Pantro’s AI classification and guided meal
               suggestions ready immediately. The other providers remain visible for future
               validation work.
             </p>
@@ -1909,7 +1909,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
           <p className="eyebrow">Step {stepOrder.indexOf("smtp") + 1}</p>
           <h1>SMTP configuration</h1>
           <p className="step-copy">
-            Optional. Save email delivery settings now. Pantry can later use this for password
+            Optional. Save email delivery settings now. Pantro can later use this for password
             reset links and other product-facing outbound mail.
           </p>
           <label className="checkbox-row">
@@ -1957,7 +1957,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
             <span>Allow password reset emails after setup completes.</span>
           </label>
           <p className="helper-text">
-            This uses Pantry’s default reset email template. Full template editing stays in the
+            This uses Pantro’s default reset email template. Full template editing stays in the
             admin SMTP settings page.
           </p>
           <div className="content-grid">
@@ -2090,7 +2090,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                     smtp_config: { ...current.smtp_config, from_name: event.target.value }
                   }))
                 }
-                placeholder="Pantry"
+                placeholder="Pantro"
               />
             </label>
             <label className="field">
@@ -2123,7 +2123,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
         <p className="eyebrow">Step {stepOrder.indexOf("review") + 1}</p>
         <h1>Review and complete</h1>
         <p className="step-copy">
-          Check everything looks right, then complete the setup. Pantry will only write staged
+          Check everything looks right, then complete the setup. Pantro will only write staged
           fresh-install data or apply the staged restore bundle once you confirm.
         </p>
 
@@ -2144,7 +2144,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                   label="Bundle"
                   value={
                     wizard.staged_restore
-                      ? `${wizard.staged_restore.bundle.scope} · Pantry ${wizard.staged_restore.bundle.app_version}`
+                      ? `${wizard.staged_restore.bundle.scope} · Pantro ${wizard.staged_restore.bundle.app_version}`
                       : "Upload a full instance backup bundle."
                   }
                 />
@@ -2363,8 +2363,8 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
             <strong>Ready to finalize.</strong>
             <p>
               {wizard.installation_mode === "restore_backup"
-                ? "Pantry will restore the staged full instance backup in one final step."
-                : "Pantry will create users, the first household, memberships, locations, settings, and any optional integrations in one final step."}
+                ? "Pantro will restore the staged full instance backup in one final step."
+                : "Pantro will create users, the first household, memberships, locations, settings, and any optional integrations in one final step."}
             </p>
           </div>
         )}
@@ -2375,7 +2375,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
   return (
     <div className="setup-wizard-shell" data-testid="setup-wizard">
       <aside className="setup-sidebar panel">
-        <p className="eyebrow">Pantry Setup</p>
+        <p className="eyebrow">Pantro Setup</p>
         <h2>First-run wizard</h2>
         <p className="sidebar-copy">
           Build the install now, then finalize once everything looks right.

@@ -187,7 +187,7 @@ def test_password_reset_status_only_becomes_available_after_smtp_is_tested(clien
         username="mailer",
         password="top-secret",
         from_email="pantry@example.com",
-        from_name="Pantry",
+        from_name="Pantro",
         security="starttls",
         is_enabled=True,
     )
@@ -236,7 +236,7 @@ def test_password_reset_request_and_confirm_flow(client, db_session, monkeypatch
         username="mailer",
         password="top-secret",
         from_email="pantry@example.com",
-        from_name="Pantry",
+        from_name="Pantro",
         security="starttls",
         is_enabled=True,
     )
@@ -263,9 +263,9 @@ def test_password_reset_request_and_confirm_flow(client, db_session, monkeypatch
         json={"email": "member@example.com"},
     )
     assert request_response.status_code == 200
-    assert request_response.json()["message"].startswith("If we found an active Pantry account")
+    assert request_response.json()["message"].startswith("If we found an active Pantro account")
     assert captured_email["to_email"] == "member@example.com"
-    assert "Reset your Pantry password" in captured_email["subject"]
+    assert "Reset your Pantro password" in captured_email["subject"]
 
     match = re.search(r"/reset-password\?token=([^\s]+)", captured_email["body"])
     assert match is not None
@@ -325,7 +325,7 @@ def test_password_reset_request_stays_generic_for_username_only_accounts(
         username="mailer",
         password="top-secret",
         from_email="pantry@example.com",
-        from_name="Pantry",
+        from_name="Pantro",
         security="starttls",
         is_enabled=True,
     )

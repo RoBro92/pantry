@@ -85,9 +85,13 @@ jobs:
             infra/scripts/read-version.sh \
             infra/scripts/release-manifest.sh \
             infra/scripts/check-release-metadata.sh \
+            infra/scripts/install-pantro.sh \
             infra/scripts/install-pantry.sh \
+            infra/scripts/update-pantro.sh \
             infra/scripts/update-pantry.sh \
+            infra/scripts/healthcheck-pantro.sh \
             infra/scripts/healthcheck-pantry.sh \
+            infra/scripts/lib/pantro-selfhost.sh \
             infra/scripts/lib/pantry-selfhost.sh \
             infra/scripts/validate-release.sh \
             infra/scripts/bump-version.sh \
@@ -98,4 +102,6 @@ jobs:
             infra/scripts/worker-once.sh
 
       - name: Render release compose file
-        run: docker compose --env-file infra/env/pantry.env.example -f infra/compose/pantry.yml config >/dev/null
+        run: |
+          docker compose --env-file infra/env/pantro.env.example -f infra/compose/pantro.yml config >/dev/null
+          docker compose --env-file infra/env/pantry.env.example -f infra/compose/pantry.yml config >/dev/null

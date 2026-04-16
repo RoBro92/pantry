@@ -1,6 +1,6 @@
 # Versioning
 
-Pantry keeps release visibility explicit and operator-controlled.
+Pantro keeps release visibility explicit and operator-controlled.
 
 ## Running Version
 
@@ -15,7 +15,7 @@ Pantry keeps release visibility explicit and operator-controlled.
 
 ## Update Model
 
-- Pantry does not auto update
+- Pantro does not auto update
 - Operators pull new images, run migrations, restart services, and verify health deliberately
 - The bundled update script automates that operator workflow without turning it into background self update behavior
 

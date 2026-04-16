@@ -199,7 +199,7 @@ export function AdminUpdatesPanel({ initialReleaseStatus }: AdminUpdatesPanelPro
         <ReleaseNotesCard
           heading="Latest Available Release"
           release={releaseStatus.latest_release}
-          emptyState="Pantry could not load latest release metadata right now."
+          emptyState="Pantro could not load latest release metadata right now."
         />
       </section>
 
@@ -207,7 +207,7 @@ export function AdminUpdatesPanel({ initialReleaseStatus }: AdminUpdatesPanelPro
         <p className="eyebrow">Manual Update Commands</p>
         <h2>Copy and run as the operator</h2>
         <p className="section-copy">
-          Pantry does not self-update. Pull the release, restart the stack, and run migrations
+          Pantro does not self-update. Pull the release, restart the stack, and run migrations
           deliberately.
         </p>
         <div className="stack">

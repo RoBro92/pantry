@@ -53,7 +53,7 @@ export function PantryProductCard({
           <ProductEnrichmentDetails
             enrichment={product.enrichment}
             title="Linked product details"
-            subtitle="Open Food Facts metadata is optional advisory context and does not replace Pantry's product identity."
+            subtitle="Open Food Facts metadata is optional advisory context and does not replace the saved product record identity."
           />
         ) : null}
 

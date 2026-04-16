@@ -15,7 +15,7 @@ ENV NEXT_PUBLIC_APP_VERSION=${NEXT_PUBLIC_APP_VERSION}
 
 COPY . /app
 
-RUN npm run build --workspace @pantry/web
+RUN npm run build --workspace @pantro/web
 
 FROM node:20-alpine AS runner
 

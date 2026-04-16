@@ -1,5 +1,5 @@
 {
-  "name": "pantry",
+  "name": "pantro",
   "private": true,
   "packageManager": "npm@10",
   "engines": {
@@ -26,9 +26,9 @@
     "dev:stack:rebuild": "./infra/scripts/dev-stack.sh rebuild",
     "dev:stack:down": "./infra/scripts/dev-stack.sh down",
     "dev:stack:logs": "./infra/scripts/dev-stack.sh logs",
-    "dev:web": "sh -lc 'export NEXT_PUBLIC_APP_VERSION=$(./infra/scripts/read-version.sh); npm run dev --workspace @pantry/web'",
-    "build:web": "sh -lc 'export NEXT_PUBLIC_APP_VERSION=$(./infra/scripts/read-version.sh); npm run build --workspace @pantry/web'",
-    "typecheck:web": "sh -lc 'export NEXT_PUBLIC_APP_VERSION=$(./infra/scripts/read-version.sh); npm run typecheck --workspace @pantry/web'",
+    "dev:web": "sh -lc 'export NEXT_PUBLIC_APP_VERSION=$(./infra/scripts/read-version.sh); npm run dev --workspace @pantro/web'",
+    "build:web": "sh -lc 'export NEXT_PUBLIC_APP_VERSION=$(./infra/scripts/read-version.sh); npm run build --workspace @pantro/web'",
+    "typecheck:web": "sh -lc 'export NEXT_PUBLIC_APP_VERSION=$(./infra/scripts/read-version.sh); npm run typecheck --workspace @pantro/web'",
     "test:e2e": "playwright test",
     "version:show": "./infra/scripts/read-version.sh"
   },

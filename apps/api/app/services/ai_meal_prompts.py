@@ -15,12 +15,12 @@ class AIMealSuggestionPromptPlan:
 def _mode_copy(request: AIMealSuggestionRequest) -> str:
     if request.pantry_only:
         return (
-            "Pantry-only mode is active. Suggest meals that can be made from the pantry context only. "
+            "Inventory-only mode is active. Suggest meals that can be made from the available stock only. "
             "If there is no perfect recipe, still provide a sensible pantry-based meal using what is available."
         )
     if request.allow_extra_ingredients:
         return (
-            "Pantry-plus-extras mode is active. Prefer pantry stock first and keep extra ingredients to a small, practical number."
+            "Inventory-plus-extras mode is active. Prefer available stock first and keep extra ingredients to a small, practical number."
         )
     return "Prefer pantry stock first and avoid introducing extra ingredients unless there is no sensible alternative."
 

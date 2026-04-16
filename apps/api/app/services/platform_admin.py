@@ -245,7 +245,7 @@ def update_managed_user(
         and platform_role is None
         and _count_platform_admins(db) <= 1
     ):
-        raise ValueError("Pantry must keep at least one platform admin.")
+        raise ValueError("Pantro must keep at least one platform admin.")
 
     desired_memberships: dict[str, str] = {}
     for membership in memberships:
@@ -383,7 +383,7 @@ def delete_managed_user(
         and user.platform_role.code == PLATFORM_ADMIN_ROLE
         and _count_platform_admins(db) <= 1
     ):
-        raise ValueError("Pantry must keep at least one platform admin.")
+        raise ValueError("Pantro must keep at least one platform admin.")
 
     for membership in list(user.memberships):
         if (

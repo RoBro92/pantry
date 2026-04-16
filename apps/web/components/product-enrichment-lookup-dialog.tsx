@@ -97,7 +97,7 @@ export function ProductEnrichmentLookupDialog({
   return (
     <ModalShell
       title={`Lookup product data for ${product.product_name}`}
-      description="Pantry keeps the product name, aliases, and stock identity. This only links optional Open Food Facts enrichment."
+      description="Pantro keeps the product name, aliases, and stock identity. This only links optional Open Food Facts enrichment."
       onClose={onClose}
       panelClassName="modal-panel modal-panel-wide"
     >
@@ -135,7 +135,7 @@ export function ProductEnrichmentLookupDialog({
           <div className="inline-status-card">
             <strong>Checking Open Food Facts</strong>
             <p className="helper-text">
-              Pantry will try the barcode first, then fall back to a product-name search if needed.
+              Pantro will try the barcode first, then fall back to a product-name search if needed.
             </p>
           </div>
         )}

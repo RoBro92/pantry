@@ -30,9 +30,9 @@ jobs:
           file_version="$(tr -d '[:space:]' < VERSION)"
           owner_lc="$(printf '%s' "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')"
           image_namespace="ghcr.io/${owner_lc}"
-          api_tags="${image_namespace}/pantry-api:${version}"
-          worker_tags="${image_namespace}/pantry-worker:${version}"
-          web_tags="${image_namespace}/pantry-web:${version}"
+          api_tags="${image_namespace}/pantro-api:${version}"$'\n'"${image_namespace}/pantry-api:${version}"
+          worker_tags="${image_namespace}/pantro-worker:${version}"$'\n'"${image_namespace}/pantry-worker:${version}"
+          web_tags="${image_namespace}/pantro-web:${version}"$'\n'"${image_namespace}/pantry-web:${version}"
 
           if [[ "${version}" != "${file_version}" ]]; then
             printf 'Tag %s does not match VERSION %s\n' "${tag}" "${file_version}" >&2
@@ -40,9 +40,9 @@ jobs:
           fi
 
           if [[ "${version}" != *-* ]]; then
-            api_tags="${api_tags}"$'\n'"${image_namespace}/pantry-api:latest"
-            worker_tags="${worker_tags}"$'\n'"${image_namespace}/pantry-worker:latest"
-            web_tags="${web_tags}"$'\n'"${image_namespace}/pantry-web:latest"
+            api_tags="${api_tags}"$'\n'"${image_namespace}/pantro-api:latest"$'\n'"${image_namespace}/pantry-api:latest"
+            worker_tags="${worker_tags}"$'\n'"${image_namespace}/pantro-worker:latest"$'\n'"${image_namespace}/pantry-worker:latest"
+            web_tags="${web_tags}"$'\n'"${image_namespace}/pantro-web:latest"$'\n'"${image_namespace}/pantry-web:latest"
           fi
 
           {
@@ -150,7 +150,7 @@ jobs:
         run: |
           set -euo pipefail
           tag="${{ steps.release.outputs.tag }}"
-          title="Pantry ${tag}"
+          title="Pantro ${tag}"
           if gh release view "${tag}" >/dev/null 2>&1; then
             gh release edit "${tag}" --title "${title}"
           else

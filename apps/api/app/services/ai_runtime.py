@@ -55,8 +55,8 @@ class PantryAIError(ValueError):
 def get_provider_support_copy(provider_type: str | None) -> str:
     provider = canonical_provider_type(provider_type)
     if provider == AI_PROVIDER_OPENAI:
-        return f"Use one of Pantry's supported OpenAI models: {recommended_openai_models_text()}."
-    return "Pantry currently supports OpenAI for product classification and guided meal suggestions."
+        return f"Use one of Pantro's supported OpenAI models: {recommended_openai_models_text()}."
+    return "Pantro currently supports OpenAI for product classification and guided meal suggestions."
 
 
 def normalize_ai_error(
@@ -115,7 +115,7 @@ def normalize_ai_error(
         token in lower_message for token in ("not currently supported", "foundation only")
     ):
         return PantryAIError(
-            "Pantry currently supports OpenAI for product classification and guided meal suggestions.",
+            "Pantro currently supports OpenAI for product classification and guided meal suggestions.",
             category=AI_ERROR_UNSUPPORTED_PROVIDER,
             technical_message=technical_message,
         )
@@ -130,14 +130,14 @@ def normalize_ai_error(
 
         if status_code == 429:
             return PantryAIError(
-                "The AI provider is rate limiting Pantry right now. Wait a moment and retry.",
+                "The AI provider is rate limiting Pantro right now. Wait a moment and retry.",
                 category=AI_ERROR_RATE_LIMIT,
                 technical_message=technical_message,
                 retryable=True,
             )
         if status_code in {401, 403}:
             return PantryAIError(
-                "Pantry could not authenticate with the AI provider. Check the API key and base URL in AI settings.",
+                "Pantro could not authenticate with the AI provider. Check the API key and base URL in AI settings.",
                 category=AI_ERROR_CONFIGURATION,
                 technical_message=technical_message,
             )
@@ -147,7 +147,7 @@ def normalize_ai_error(
                     (
                         f"The configured OpenAI account could not access the model "
                         f"'{describe_openai_model(model)}'. Confirm model access, or use another "
-                        f"Pantry-supported OpenAI model: {recommended_openai_models_text()}."
+                        f"Pantro-supported OpenAI model: {recommended_openai_models_text()}."
                     ),
                     category=AI_ERROR_CONFIGURATION,
                     technical_message=technical_message,
@@ -159,7 +159,7 @@ def normalize_ai_error(
             )
         if status_code == 400 and _looks_like_output_token_parameter_error(combined):
             return PantryAIError(
-                "The AI provider rejected Pantry's structured request parameters. Retry, or re-run the health check after changing models.",
+                "The AI provider rejected Pantro's structured request parameters. Retry, or re-run the health check after changing models.",
                 category=AI_ERROR_REQUEST_FAILED,
                 technical_message=technical_message,
             )
@@ -193,7 +193,7 @@ def normalize_ai_error(
                 retryable=True,
             )
         return PantryAIError(
-            "Pantry could not complete the AI request. Review the AI provider settings and try again.",
+            "Pantro could not complete the AI request. Review the AI provider settings and try again.",
             category=AI_ERROR_REQUEST_FAILED,
             technical_message=technical_message,
         )
@@ -208,7 +208,7 @@ def normalize_ai_error(
 
     if isinstance(error, (json.JSONDecodeError, ValidationError)):
         return PantryAIError(
-            "The AI provider returned a response Pantry could not use. Retry, or switch to a supported OpenAI model.",
+            "The AI provider returned a response Pantro could not use. Retry, or switch to a supported OpenAI model.",
             category=AI_ERROR_INVALID_RESPONSE,
             technical_message=technical_message,
         )
@@ -223,21 +223,21 @@ def normalize_ai_error(
 
     if any(token in lower_message for token in ("empty response", "provider returned an empty response", "did not return")):
         return PantryAIError(
-            "The AI provider returned a response Pantry could not use. Retry, or switch to a supported OpenAI model.",
+            "The AI provider returned a response Pantro could not use. Retry, or switch to a supported OpenAI model.",
             category=AI_ERROR_INVALID_RESPONSE,
             technical_message=technical_message,
         )
 
     if any(token in lower_message for token in ("api key", "authentication", "unauthorized", "forbidden")):
         return PantryAIError(
-            "Pantry could not authenticate with the AI provider. Check the API key and base URL in AI settings.",
+            "Pantro could not authenticate with the AI provider. Check the API key and base URL in AI settings.",
             category=AI_ERROR_CONFIGURATION,
             technical_message=technical_message,
         )
 
     if _looks_like_output_token_parameter_error(lower_message):
         return PantryAIError(
-            "The AI provider rejected Pantry's structured request parameters. Retry, or re-run the health check after changing models.",
+            "The AI provider rejected Pantro's structured request parameters. Retry, or re-run the health check after changing models.",
             category=AI_ERROR_REQUEST_FAILED,
             technical_message=technical_message,
         )
@@ -268,7 +268,7 @@ def normalize_ai_error(
         )
 
     return PantryAIError(
-        "Pantry could not complete the AI request. Review the AI provider settings and try again.",
+        "Pantro could not complete the AI request. Review the AI provider settings and try again.",
         category=AI_ERROR_REQUEST_FAILED,
         technical_message=technical_message,
     )
@@ -342,4 +342,4 @@ def _unsupported_model_message(provider_type: str | None, model: str | None) -> 
     provider_hint = get_provider_support_copy(provider_type)
     if provider_type == AI_PROVIDER_OPENAI and model:
         return build_openai_unsupported_model_message(model)
-    return f"This AI model/provider combination is not currently supported for Pantry's structured AI workflow. {provider_hint}"
+    return f"This AI model/provider combination is not currently supported for Pantro's structured AI workflow. {provider_hint}"

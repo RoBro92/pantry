@@ -19,30 +19,30 @@ Recommended branch prefixes:
 
 ## Local Development Stack
 
-Pantry provides a repo-root wrapper for local branch work:
+Pantro provides a repo-root wrapper for local branch work:
 
 ```bash
-./pantry start --fresh
-./pantry start --demo
+./pantro start --fresh
+./pantro start --demo
 ```
 
 - `fresh` resets the local environment to the first run setup flow
 - `demo` resets the local environment and seeds stable demo data
-- each `./pantry start --fresh` or `./pantry start --demo` run replaces the full local web, api, and worker stack before seeding the selected mode
-- switch modes without a rebuild with `./pantry reset --fresh` or `./pantry reset --demo`
-- stop and remove the full local stack with `./pantry stop`
-- follow logs with `./pantry logs`
-- check the current stack with `./pantry status`
-- rebuild images only when Dockerfiles or dependencies changed with `./pantry rebuild`
+- each `./pantro start --fresh` or `./pantro start --demo` run replaces the full local web, api, and worker stack before seeding the selected mode
+- switch modes without a rebuild with `./pantro reset --fresh` or `./pantro reset --demo`
+- stop and remove the full local stack with `./pantro stop`
+- follow logs with `./pantro logs`
+- check the current stack with `./pantro status`
+- rebuild images only when Dockerfiles or dependencies changed with `./pantro rebuild`
 - the helper prefers `.env.local`, falls back to `.env`, and bootstraps `.env.local` from `.env.local.example` if needed
-- optional `PANTRY_LOCAL_AI_*` and `PANTRY_LOCAL_SMTP_*` values in `.env.local` pre-populate fresh setup and local demo-mode AI/SMTP settings without committing secrets to the repo
-- bootstrap validation runs once after demo seed or setup finalize; Pantry does not background-poll AI or SMTP health in local development
+- optional `PANTRO_LOCAL_AI_*` and `PANTRO_LOCAL_SMTP_*` values in `.env.local` pre-populate fresh setup and local demo-mode AI/SMTP settings without committing secrets to the repo
+- bootstrap validation runs once after demo seed or setup finalize; Pantro does not background-poll AI or SMTP health in local development
 - web edits in `apps/web` and `packages/shared-types` hot reload in browser
 - API edits in `apps/api/app` and Alembic files auto-reload the FastAPI process
 - worker edits in `apps/worker/worker` and shared API-side worker dependencies restart the worker process automatically
 
 Cross-platform note:
-Docker Desktop file polling is enabled automatically by the helper on macOS and Windows-like shells. Linux keeps native file watching by default. If your host still misses changes, set `PANTRY_WEB_WATCHPACK_POLLING=true`, `PANTRY_API_WATCHFILES_FORCE_POLLING=true`, and `PANTRY_WORKER_WATCHFILES_FORCE_POLLING=true` before starting the stack. On Windows, run `./pantry` from Git Bash or WSL.
+Docker Desktop file polling is enabled automatically by the helper on macOS and Windows-like shells. Linux keeps native file watching by default. If your host still misses changes, set `PANTRO_WEB_WATCHPACK_POLLING=true`, `PANTRO_API_WATCHFILES_FORCE_POLLING=true`, and `PANTRO_WORKER_WATCHFILES_FORCE_POLLING=true` before starting the stack. On Windows, run `./pantro` from Git Bash or WSL.
 
 Demo credentials:
 
@@ -63,9 +63,9 @@ Start with [docs/TEST_STRATEGY.md](TEST_STRATEGY.md).
 Common commands:
 
 ```bash
-./pantry start --fresh
-./pantry start --demo
-./pantry stop
+./pantro start --fresh
+./pantro start --demo
+./pantro stop
 npm run typecheck:web
 npm run build:web
 cd apps/api && pytest -q

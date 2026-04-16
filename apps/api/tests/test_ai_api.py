@@ -421,7 +421,7 @@ def test_ai_context_prefers_classified_product_intelligence_with_fallback_for_un
             allergen_tags=["Gluten"],
             recipe_role_tags=["Sauce", "Seasoning"],
             substitution_groups=["Brown sauce"],
-            pantry_use_tags=["Pantry staple", "Shelf stable"],
+            pantry_use_tags=["Staple", "Shelf stable"],
             structured_metadata={
                 "product_format": "Bottled sauce",
                 "storage_profile": "Shelf stable",
@@ -854,8 +854,8 @@ def test_ai_meal_planner_keeps_supported_openai_models_available_when_cached_hea
     )
     config.health_status = "unhealthy"
     config.health_error = (
-        "The OpenAI model 'gpt-5.4' is not a good fit for Pantry's structured AI workflow. "
-        "Use one of Pantry's supported OpenAI models: gpt-4.1-mini, gpt-5.4-mini, or gpt-5.4."
+        "The OpenAI model 'gpt-5.4' is not a good fit for Pantro's structured AI workflow. "
+        "Use one of Pantro's supported OpenAI models: gpt-4.1-mini, gpt-5.4-mini, or gpt-5.4."
     )
     db_session.add(config)
     db_session.commit()
@@ -1069,7 +1069,7 @@ def test_ai_meal_suggestions_support_pantry_only_and_pantry_plus_extras_modes(
         f"/api/households/{household.external_id}/recipes",
         json={
             "title": "Simple Pasta",
-            "notes": "Pantry staple.",
+            "notes": "Staple.",
             "ingredients": [
                 {"name": "Pasta", "quantity": "1.000", "unit": "count"},
                 {"name": "Tomatoes", "quantity": "1.000", "unit": "can"},
@@ -1105,7 +1105,7 @@ def test_ai_meal_suggestions_support_pantry_only_and_pantry_plus_extras_modes(
                 "suggestions": [
                     {
                         "title": "Simple Pasta Bowl" if pantry_only else "Pasta with Lemon",
-                        "short_summary": "Pantry-first dinner.",
+                        "short_summary": "Inventory-first dinner.",
                         "why_it_matches": "Uses the core pantry staples already on hand.",
                         "total_time_minutes": 25,
                         "dietary_fit_summary": "Matches the selected dietary preferences.",
@@ -1249,7 +1249,7 @@ def test_ai_meal_suggestions_hide_raw_openai_400_details(client, db_session, mon
         def generate_structured_output(self, request) -> StructuredCompletionResult:
             raise AIProviderError(
                 (
-                    "The selected OpenAI model (gpt-5.4-mini) is not compatible with Pantry's "
+                    "The selected OpenAI model (gpt-5.4-mini) is not compatible with Pantro's "
                     "structured AI requests on Chat Completions. Choose a recommended OpenAI "
                     "model such as gpt-4.1-mini, gpt-5.4-mini, gpt-5.4."
                 ),

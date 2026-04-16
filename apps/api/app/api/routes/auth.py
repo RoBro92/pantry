@@ -36,7 +36,7 @@ def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db_
     if not is_setup_complete(db):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Pantry setup is not complete yet. Finish the setup wizard first.",
+            detail="Pantro setup is not complete yet. Finish the setup wizard first.",
         )
 
     identifier = payload.identifier or payload.email or ""
@@ -66,7 +66,7 @@ def current_session(
         request.session.clear()
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Pantry setup is not complete yet. Finish the setup wizard first.",
+            detail="Pantro setup is not complete yet. Finish the setup wizard first.",
         )
     response.headers["cache-control"] = "no-store"
     request.session["user_external_id"] = current_user.external_id
@@ -115,7 +115,7 @@ def post_password_reset_request(
     return PasswordActionResponse(
         ok=True,
         message=(
-            "If we found an active Pantry account with that email, a reset link has been sent."
+            "If we found an active Pantro account with that email, a reset link has been sent."
         ),
     )
 

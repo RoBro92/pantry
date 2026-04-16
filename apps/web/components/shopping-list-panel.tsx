@@ -86,7 +86,7 @@ function getPendingItemBadge(item: ShoppingListItemSummary) {
   if (item.product_external_id === null) {
     return { label: "New product", className: "pill is-warning" };
   }
-  return { label: "Pantry product", className: "pill is-success" };
+  return { label: "Product record", className: "pill is-success" };
 }
 
 function buildLocationSummary(item: ShoppingListItemSummary, locations: PantryLocationSummary[], draft: PendingItemDraft) {
@@ -466,7 +466,7 @@ export function ShoppingListPanel({
         const newProducts = selectedItems.filter((item) => item.product_external_id === null);
         if (newProducts.length > 0) {
           if (!canAdminister) {
-            throw new Error("A household admin must create Pantry products for new purchased items before they can be reconciled.");
+            throw new Error("A household admin must create product records for new purchased items before they can be reconciled.");
           }
           setQueuedBulkAction({ action, itemIds: targetItemIds });
           setProductCreationQueue(newProducts);
@@ -551,7 +551,7 @@ export function ShoppingListPanel({
               <p className="eyebrow">Shopping List</p>
               <h1>Household shopping</h1>
               <p className="section-copy">
-                Add items manually or via Pantry to your shopping list, generate a printable list, and reconcile on purchase.
+                Add items manually or via Pantro to your shopping list, generate a printable list, and reconcile on purchase.
               </p>
             </div>
             <div className="tag-row">
@@ -796,7 +796,7 @@ export function ShoppingListPanel({
                   <span>Product</span>
                   <span>Purchased qty</span>
                   <span>Unit</span>
-                  <span>Pantry location</span>
+                  <span>Storage location</span>
                   <span>Actions</span>
                 </div>
 
@@ -850,7 +850,7 @@ export function ShoppingListPanel({
                           />
                         </label>
                         <label className="field compact shopping-reconcile-inline-field shopping-reconcile-location-field">
-                          <span className="shopping-inline-label">Pantry location</span>
+                          <span className="shopping-inline-label">Storage location</span>
                           <select
                             value={draft.pantryLocationExternalId}
                             onChange={(event) =>
@@ -926,7 +926,7 @@ export function ShoppingListPanel({
                               <span>{buildPurchasedSummary(item, draft)}</span>
                             </div>
                             <div className="stack compact-stack">
-                              <span className="shopping-detail-label">Pantry location</span>
+                              <span className="shopping-detail-label">Storage location</span>
                               <span>{locationSummary}</span>
                             </div>
                             <div className="stack compact-stack">
@@ -969,11 +969,11 @@ export function ShoppingListPanel({
                                     setProductCreationQueue([item]);
                                   }}
                                 >
-                                  Create Pantry product
+                                  Create product record
                                 </button>
                               ) : (
                                 <span className="helper-text">
-                                  A household admin must create the Pantry product before this item can be reconciled.
+                                  A household admin must create the product record before this item can be reconciled.
                                 </span>
                               )
                             ) : null}
@@ -1055,8 +1055,8 @@ export function ShoppingListPanel({
         <PantryProductDialog
           householdExternalId={householdExternalId}
           mode="create"
-          title="Create Pantry product"
-          description="Create the missing Pantry product with the full product fields, then return to reconciliation."
+          title="Create product record"
+          description="Create the missing product record with the full product fields, then return to reconciliation."
           submitLabel="Create product"
           initialValues={{
             name: productCreationItem.label,

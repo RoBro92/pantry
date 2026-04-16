@@ -187,7 +187,7 @@ def get_settings() -> AppSettings:
     )
 
     return AppSettings(
-        service_name=os.getenv("API_SERVICE_NAME", "pantry-api"),
+        service_name=os.getenv("API_SERVICE_NAME", "pantro-api"),
         environment=os.getenv("ENVIRONMENT", "development"),
         log_level=os.getenv("LOG_LEVEL", "INFO"),
         app_version=_resolve_app_version(),
@@ -198,7 +198,7 @@ def get_settings() -> AppSettings:
         api_base_url=os.getenv("API_BASE_URL", "http://localhost:8000"),
         database_url=os.getenv(
             "DATABASE_URL",
-            "postgresql+psycopg://pantry:change-me@postgres:5432/pantry",
+            "postgresql+psycopg://pantro:change-me@postgres:5432/pantro",
         ),
         redis_url=os.getenv("REDIS_URL", "redis://redis:6379/0"),
         settings_encryption_key=os.getenv("SETTINGS_ENCRYPTION_KEY") or None,
@@ -207,7 +207,7 @@ def get_settings() -> AppSettings:
         backup_storage_root=os.getenv("BACKUP_STORAGE_ROOT", "/workspace/.local/backups"),
         backup_max_upload_bytes=int(os.getenv("BACKUP_MAX_UPLOAD_BYTES", "26214400")),
         session_secret_key=os.getenv("SESSION_SECRET_KEY", "change-me-for-production"),
-        session_cookie_name=os.getenv("SESSION_COOKIE_NAME", "pantry_session"),
+        session_cookie_name=os.getenv("SESSION_COOKIE_NAME", "pantro_session"),
         session_max_age_seconds=int(os.getenv("SESSION_MAX_AGE_SECONDS", "604800")),
         session_https_only=_parse_bool(os.getenv("SESSION_HTTPS_ONLY"), False),
         session_same_site=os.getenv("SESSION_SAME_SITE", "lax"),

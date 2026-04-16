@@ -17,7 +17,7 @@ export function AppShell({ session, releaseStatus, children }: AppShellProps) {
       {releaseStatus ? <AdminReleaseNotesDialog initialReleaseStatus={releaseStatus} /> : null}
       <div className="shell-grid">
         <aside className="sidebar panel">
-          <p className="eyebrow">Pantry {appConfig.version}</p>
+          <p className="eyebrow">Pantro {appConfig.version}</p>
           <h1 className="shell-title">Navigation</h1>
           <p className="sidebar-copy">
             {session.memberships.length} household
@@ -29,7 +29,7 @@ export function AppShell({ session, releaseStatus, children }: AppShellProps) {
             {session.memberships.map((membership) => (
               <div key={membership.external_id} className="nav-group">
                 <span className="nav-group-title">{membership.household_name}</span>
-                <Link href={`/app/households/${membership.household_external_id}`}>Pantry</Link>
+                <Link href={`/app/households/${membership.household_external_id}`}>Inventory</Link>
                 <Link href={`/app/households/${membership.household_external_id}/shopping-list`}>
                   Shopping List
                 </Link>

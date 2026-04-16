@@ -129,7 +129,7 @@ def _resolve_release_metadata_url(settings: AppSettings) -> tuple[str | None, st
 def _github_headers(settings: AppSettings) -> dict[str, str]:
     return {
         "Accept": "application/vnd.github+json",
-        "User-Agent": f"Pantry/{settings.app_version}",
+        "User-Agent": f"Pantro/{settings.app_version}",
     }
 
 
@@ -260,8 +260,8 @@ def _parse_body_release_notes(body: str | None) -> tuple[str | None, tuple[str, 
 
 def _default_manual_update_commands() -> tuple[str, ...]:
     return (
-        "./infra/scripts/update-pantry.sh",
-        "docker compose -f infra/compose/pantry.yml pull && docker compose -f infra/compose/pantry.yml up -d && docker compose -f infra/compose/pantry.yml exec api alembic upgrade head",
+        "./infra/scripts/update-pantro.sh",
+        "docker compose -f infra/compose/pantro.yml pull && docker compose -f infra/compose/pantro.yml up -d && docker compose -f infra/compose/pantro.yml exec api alembic upgrade head",
     )
 
 
@@ -278,7 +278,7 @@ def _load_release_json_asset(settings: AppSettings, metadata: ReleaseMetadata) -
         return None
 
     with httpx.Client(timeout=settings.release_check_timeout_seconds, follow_redirects=True) as client:
-        response = client.get(asset_url, headers={"User-Agent": f"Pantry/{settings.app_version}"})
+        response = client.get(asset_url, headers={"User-Agent": f"Pantro/{settings.app_version}"})
         response.raise_for_status()
         payload = response.json()
 
@@ -398,7 +398,7 @@ def build_release_check_summary(db: Session | None = None) -> dict[str, object]:
         summary["metadata_status"] = "release_missing" if status_code == 404 else "request_failed"
         summary["status"] = "release_metadata_missing" if status_code == 404 else "unavailable"
         summary["message"] = (
-            "No published GitHub Release metadata is available for this repository yet. GHCR images may exist, but Pantry only uses GitHub Releases for advisory update metadata."
+            "No published GitHub Release metadata is available for this repository yet. GHCR images may exist, but Pantro only uses GitHub Releases for advisory update metadata."
             if status_code == 404
             else f"Release metadata request failed with status {status_code}."
         )

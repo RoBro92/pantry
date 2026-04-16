@@ -3,14 +3,17 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 VERSION="$(tr -d '[:space:]' < "${ROOT_DIR}/VERSION")"
-IMAGE_NAMESPACE="${PANTRY_IMAGE_NAMESPACE:-ghcr.io/robro92}"
+IMAGE_NAMESPACE="${PANTRO_IMAGE_NAMESPACE:-${PANTRY_IMAGE_NAMESPACE:-ghcr.io/robro92}}"
 RELEASE_REPOSITORY="${RELEASE_CHECK_REPOSITORY:-RoBro92/pantry}"
 
 printf 'VERSION=%s\n' "${VERSION}"
 printf 'RELEASE_TAG=v%s\n' "${VERSION}"
-printf 'WEB_IMAGE=%s/pantry-web:%s\n' "${IMAGE_NAMESPACE}" "${VERSION}"
-printf 'API_IMAGE=%s/pantry-api:%s\n' "${IMAGE_NAMESPACE}" "${VERSION}"
-printf 'WORKER_IMAGE=%s/pantry-worker:%s\n' "${IMAGE_NAMESPACE}" "${VERSION}"
+printf 'WEB_IMAGE=%s/pantro-web:%s\n' "${IMAGE_NAMESPACE}" "${VERSION}"
+printf 'API_IMAGE=%s/pantro-api:%s\n' "${IMAGE_NAMESPACE}" "${VERSION}"
+printf 'WORKER_IMAGE=%s/pantro-worker:%s\n' "${IMAGE_NAMESPACE}" "${VERSION}"
+printf 'LEGACY_WEB_IMAGE=%s/pantry-web:%s\n' "${IMAGE_NAMESPACE}" "${VERSION}"
+printf 'LEGACY_API_IMAGE=%s/pantry-api:%s\n' "${IMAGE_NAMESPACE}" "${VERSION}"
+printf 'LEGACY_WORKER_IMAGE=%s/pantry-worker:%s\n' "${IMAGE_NAMESPACE}" "${VERSION}"
 
 printf 'RELEASE_METADATA_URL=https://api.github.com/repos/%s/releases/latest\n' "${RELEASE_REPOSITORY}"
 printf 'RELEASES_PAGE_URL=https://github.com/%s/releases\n' "${RELEASE_REPOSITORY}"

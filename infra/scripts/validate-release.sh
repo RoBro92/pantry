@@ -8,7 +8,7 @@ DEV_STACK_STARTED=0
 cleanup() {
   if [[ "${DEV_STACK_STARTED}" -eq 1 ]]; then
     printf '==> Shutting down local validation stack\n'
-    "${ROOT_DIR}/pantry" stop >/dev/null
+    "${ROOT_DIR}/pantro" stop >/dev/null
   fi
 }
 
@@ -34,9 +34,13 @@ bash -n \
   "${ROOT_DIR}/infra/scripts/read-version.sh" \
   "${ROOT_DIR}/infra/scripts/release-manifest.sh" \
   "${ROOT_DIR}/infra/scripts/check-release-metadata.sh" \
+  "${ROOT_DIR}/infra/scripts/install-pantro.sh" \
   "${ROOT_DIR}/infra/scripts/install-pantry.sh" \
+  "${ROOT_DIR}/infra/scripts/update-pantro.sh" \
   "${ROOT_DIR}/infra/scripts/update-pantry.sh" \
+  "${ROOT_DIR}/infra/scripts/healthcheck-pantro.sh" \
   "${ROOT_DIR}/infra/scripts/healthcheck-pantry.sh" \
+  "${ROOT_DIR}/infra/scripts/lib/pantro-selfhost.sh" \
   "${ROOT_DIR}/infra/scripts/lib/pantry-selfhost.sh" \
   "${ROOT_DIR}/infra/scripts/validate-release.sh" \
   "${ROOT_DIR}/infra/scripts/bump-version.sh" \
@@ -56,7 +60,7 @@ printf '==> API release tests\n'
 )
 
 printf '==> Source-stack smoke and E2E gate\n'
-"${ROOT_DIR}/pantry" start --demo >/dev/null
+"${ROOT_DIR}/pantro" start --demo >/dev/null
 DEV_STACK_STARTED=1
 "${ROOT_DIR}/infra/scripts/smoke-check.sh"
 (
@@ -65,15 +69,16 @@ DEV_STACK_STARTED=1
 )
 
 printf '==> Compose render\n'
+docker compose --env-file "${ROOT_DIR}/infra/env/pantro.env.example" -f "${ROOT_DIR}/infra/compose/pantro.yml" config >/dev/null
 docker compose --env-file "${ROOT_DIR}/infra/env/pantry.env.example" -f "${ROOT_DIR}/infra/compose/pantry.yml" config >/dev/null
 
 printf '==> Production image builds\n'
-docker build -f "${ROOT_DIR}/infra/docker/api.production.Dockerfile" -t pantry-api-production:validate "${ROOT_DIR}" >/dev/null
-docker build -f "${ROOT_DIR}/infra/docker/worker.production.Dockerfile" -t pantry-worker-production:validate "${ROOT_DIR}" >/dev/null
+docker build -f "${ROOT_DIR}/infra/docker/api.production.Dockerfile" -t pantro-api-production:validate "${ROOT_DIR}" >/dev/null
+docker build -f "${ROOT_DIR}/infra/docker/worker.production.Dockerfile" -t pantro-worker-production:validate "${ROOT_DIR}" >/dev/null
 docker build \
   -f "${ROOT_DIR}/infra/docker/web.production.Dockerfile" \
   --build-arg NEXT_PUBLIC_APP_VERSION="${VERSION}" \
-  -t pantry-web-production:validate \
+  -t pantro-web-production:validate \
   "${ROOT_DIR}" >/dev/null
 
 printf '==> Release validation complete\n'

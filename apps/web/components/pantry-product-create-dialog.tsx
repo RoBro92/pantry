@@ -82,9 +82,9 @@ export function PantryProductDialog({
   initialValues,
   onCompleted,
   onClose,
-  title = mode === "create" ? "Create Pantry product" : "Edit Pantry product",
+  title = mode === "create" ? "Create product record" : "Edit product record",
   description = mode === "create"
-    ? "Create a Pantry product record with the full product fields before stock is reconciled."
+    ? "Create a full product record before stock is reconciled."
     : "Update the saved product record without mixing in stock-lot fields.",
   submitLabel = mode === "create" ? "Create product" : "Save product",
   contextSummary,
@@ -178,7 +178,7 @@ export function PantryProductDialog({
 
     try {
       if (mode === "edit" && !initialValues.externalId) {
-        throw new Error("This Pantry product is missing its identifier.");
+        throw new Error("This product record is missing its identifier.");
       }
       const payload = {
         name: form.name,
@@ -210,7 +210,7 @@ export function PantryProductDialog({
       onClose();
     } catch (requestError) {
       setError(
-        requestError instanceof Error ? requestError.message : "Could not save this Pantry product.",
+        requestError instanceof Error ? requestError.message : "Could not save this product record.",
       );
     } finally {
       setPending(false);
@@ -242,7 +242,7 @@ export function PantryProductDialog({
                   <p className="helper-text">Purchased: {contextSummary.quantitySummary}</p>
                 ) : null}
                 {contextSummary.pantryLocationSummary ? (
-                  <p className="helper-text">Pantry location: {contextSummary.pantryLocationSummary}</p>
+                  <p className="helper-text">Storage location: {contextSummary.pantryLocationSummary}</p>
                 ) : null}
                 {contextSummary.note ? <p className="helper-text">Shopping note: {contextSummary.note}</p> : null}
               </div>
@@ -310,7 +310,7 @@ export function PantryProductDialog({
                 onScan={() => setIsScannerOpen(true)}
                 lookupPending={lookupPending}
                 lookupDisabled={!form.name.trim() && !primaryBarcode(form.barcodesInput)}
-                helperText="Use the first barcode for Open Food Facts lookup. Camera scanning works in secure browser contexts over HTTPS or localhost when the device and browser allow it, and Pantry keeps manual/USB fallback available either way. Extra barcodes can be added as comma-separated values."
+                helperText="Use the first barcode for Open Food Facts lookup. Camera scanning works in secure browser contexts over HTTPS or localhost when the device and browser allow it, and Pantro keeps manual/USB fallback available either way. Extra barcodes can be added as comma-separated values."
               />
 
               <label className="field">

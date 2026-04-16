@@ -15,7 +15,7 @@ For docs only work, validation can stop at:
 Use the local stack when runtime wiring or user-visible flows changed:
 
 ```bash
-./pantry start --fresh
+./pantro start --fresh
 ```
 
 Common checks:
@@ -45,10 +45,10 @@ That gate now boots the local demo stack, runs `./infra/scripts/smoke-check.sh`,
 When iterating locally before the full gate, use:
 
 ```bash
-./pantry start --demo
+./pantro start --demo
 ./infra/scripts/smoke-check.sh
 npm run test:e2e
-./pantry stop
+./pantro stop
 ```
 
 ## Finish Cleanly
@@ -56,5 +56,5 @@ npm run test:e2e
 Shut the stack down when you are done:
 
 ```bash
-./pantry stop
+./pantro stop
 ```

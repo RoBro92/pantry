@@ -15,10 +15,10 @@ export default async function ForgotPasswordPage() {
     <main className="page-shell">
       <section className="auth-stage-shell">
         <div className="auth-stage-intro">
-          <p className="eyebrow">Pantry</p>
+          <p className="eyebrow">Pantro</p>
           <h1>Password reset</h1>
           <p className="lede">
-            Ask Pantry to send a reset link only if this install has email delivery configured and
+            Ask Pantro to send a reset link only if this install has email delivery configured and
             your account uses an email address.
           </p>
         </div>
@@ -30,7 +30,7 @@ export default async function ForgotPasswordPage() {
             <h1>Reset unavailable</h1>
             <p className="section-copy">
               {passwordResetAvailability.reason ??
-                "This Pantry install is not ready to send password reset emails."}
+                "This Pantro install is not ready to send password reset emails."}
             </p>
           </section>
         )}

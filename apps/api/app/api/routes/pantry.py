@@ -370,7 +370,7 @@ def delete_product_route(
         product=product,
     )
     return DeleteProductResponse(
-        message=f"Deleted {product.name} and its associated stock lots from Pantry.",
+        message=f"Deleted {product.name} and its associated stock lots from Pantro.",
     )
 
 

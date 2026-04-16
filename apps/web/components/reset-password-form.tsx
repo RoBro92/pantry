@@ -69,7 +69,7 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
       <p className="eyebrow">Password Reset</p>
       <h1>Choose a new password</h1>
       <p className="section-copy">
-        Set a new password for your Pantry account, then sign in again.
+        Set a new password for your Pantro account, then sign in again.
       </p>
       <label className="field">
         <span>New password</span>

@@ -144,9 +144,9 @@ def send_smtp_test_email(db_session) -> str:
     send_email(
         db_session,
         to_email=config.test_recipient_email,
-        subject="Pantry SMTP test email",
+        subject="Pantro SMTP test email",
         body=(
-            "This is a Pantry SMTP test email.\n\n"
+            "This is a Pantro SMTP test email.\n\n"
             f"Sender: {formataddr((config.from_name, config.from_email)) if config.from_name and config.from_email else config.from_email}\n"
             f"Sent at: {timestamp}\n"
         ),

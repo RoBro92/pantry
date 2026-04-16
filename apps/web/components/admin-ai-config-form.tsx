@@ -277,7 +277,7 @@ export function AdminAIConfigForm({
     config?.health_error ??
     (
       effectiveHealthStatus === "unknown"
-        ? "No health check has been recorded yet. Pantry rechecks provider health when AI requests run."
+        ? "No health check has been recorded yet. Pantro rechecks provider health when AI requests run."
         : "No issues reported."
     );
 
@@ -291,7 +291,7 @@ export function AdminAIConfigForm({
           automatically, secrets are not shown after save, and secrets are never written to logs.
         </p>
         <p className="helper-text">
-          Pantry records provider health when you save or explicitly recheck it here, and AI requests
+          Pantro records provider health when you save or explicitly recheck it here, and AI requests
           also perform a fresh health check before they run.
         </p>
         <p className={`helper-text${providerSupport.isCurrentlySupported ? "" : " is-error"}`}>
@@ -382,7 +382,7 @@ export function AdminAIConfigForm({
           </p>
         ) : !providerSupport.isCurrentlySupported ? (
           <p className="status-note">
-            Pantry keeps this provider visible for future validation, but OpenAI is the supported
+            Pantro keeps this provider visible for future validation, but OpenAI is the supported
             choice for classification and guided meal suggestions right now.
           </p>
         ) : null}
