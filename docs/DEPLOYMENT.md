@@ -1,6 +1,6 @@
 # Deployment
 
-Pantry’s supported public deployment path is a self hosted Docker installation using released images and repository hosted deployment assets. The public repository is self-hosted and operator-managed only: there is no hosted control plane and no auto-update service.
+Pantro’s supported public deployment path is a self hosted Docker installation using released images and repository hosted deployment assets. The public repository is self-hosted and operator-managed only: there is no hosted control plane and no auto-update service.
 
 ## Public Deployment Files
 
@@ -9,6 +9,8 @@ Pantry’s supported public deployment path is a self hosted Docker installation
 - `infra/scripts/install-pantry.sh`
 - `infra/scripts/update-pantry.sh`
 - `infra/scripts/healthcheck-pantry.sh`
+
+These deployment entry points intentionally keep their existing legacy-compatible names. Pantro is the product name, but released technical surfaces such as `PANTRY_*` environment variable prefixes, `pantry.yml`, the install/update script names, and GHCR image names remain unchanged in this pass to avoid breaking existing operator workflows.
 
 ## Scripted Install
 
@@ -75,7 +77,7 @@ Then complete first-run setup in the browser.
 
 ## Updating
 
-Pantry updates are explicit operator actions.
+Pantro updates are explicit operator actions.
 
 Update to the latest release:
 
@@ -106,7 +108,7 @@ Bootstrap a platform admin from the API container:
 ```bash
 docker compose --env-file .env -f pantry.yml run --rm api python -m app.cli bootstrap-platform-admin \
   --email admin@example.com \
-  --display-name "Pantry Admin"
+  --display-name "Pantro Admin"
 ```
 
 Reset a password from the API container:
@@ -118,7 +120,7 @@ docker compose --env-file .env -f pantry.yml run --rm api python -m app.cli rese
 
 ## Restore Notes
 
-- Restore currently accepts Pantry backup bundle JSON files only
+- Restore currently accepts Pantro backup bundle JSON files only
 - Restore is validated before application and remains an explicit operator action
 - Uploaded restore bundles are staged under `BACKUP_STORAGE_ROOT`
 - Admin household restore creates a new household only and does not merge into an existing household

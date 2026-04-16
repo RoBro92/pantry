@@ -141,7 +141,7 @@ run_mode() {
   manifest="$(bootstrap_mode "${mode}")"
   printf '%s\n' "${manifest}"
   echo
-  echo "Pantry local development mode: ${mode}"
+  echo "Pantro local development mode: ${mode}"
   echo "Open: http://localhost:${WEB_PORT}/"
 }
 

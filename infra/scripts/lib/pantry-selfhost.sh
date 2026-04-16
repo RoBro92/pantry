@@ -231,7 +231,7 @@ request = urllib.request.Request(
     url,
     headers={
         "Accept": "application/vnd.github+json",
-        "User-Agent": "Pantry installer",
+        "User-Agent": "Pantro installer",
     },
 )
 

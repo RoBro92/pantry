@@ -32,7 +32,7 @@ resolve_target_version() {
   fi
 
   resolved_version="$(fetch_latest_release_version "${REPOSITORY}" 2>/dev/null || true)"
-  [[ -n "${resolved_version}" ]] || die "Unable to resolve the latest Pantry release from GitHub."
+  [[ -n "${resolved_version}" ]] || die "Unable to resolve the latest Pantro release from GitHub."
   printf '%s' "${resolved_version}"
 }
 
@@ -115,12 +115,12 @@ main() {
   web_url="$(env_get "${env_file}" "WEB_APP_URL" "unknown")"
   api_url="$(env_get "${env_file}" "API_BASE_URL" "unknown")"
 
-  log_step "Preparing Pantry update"
+  log_step "Preparing Pantro update"
   log_info "Current version: ${current_version}"
   log_info "Target version: ${target_version}"
 
   if [[ "${current_version}" == "${target_version}" ]]; then
-    log_info "Pantry is already pinned to ${target_version}."
+    log_info "Pantro is already pinned to ${target_version}."
     exit 0
   fi
 
@@ -135,7 +135,7 @@ main() {
   env_set "${env_file}" "PANTRY_IMAGE_NAMESPACE" "$(env_get "${env_file}" "PANTRY_IMAGE_NAMESPACE" "${PANTRY_DEFAULT_IMAGE_NAMESPACE}")"
   env_set "${env_file}" "RELEASE_CHECK_REPOSITORY" "$(env_get "${env_file}" "RELEASE_CHECK_REPOSITORY" "${REPOSITORY}")"
 
-  log_step "Pulling Pantry images"
+  log_step "Pulling Pantro images"
   docker_compose_in_dir "${INSTALL_DIR}" pull
 
   log_step "Refreshing core services"
@@ -144,7 +144,7 @@ main() {
   log_step "Running database migrations"
   docker_compose_in_dir "${INSTALL_DIR}" --profile manual run --rm migrate
 
-  log_step "Restarting the Pantry stack"
+  log_step "Restarting the Pantro stack"
   docker_compose_in_dir "${INSTALL_DIR}" up -d --remove-orphans
 
   log_step "Running post-update health check"
@@ -152,7 +152,7 @@ main() {
 
   cat <<EOF
 
-${PANTRY_COLOR_GREEN}Pantry update complete.${PANTRY_COLOR_RESET}
+${PANTRY_COLOR_GREEN}Pantro update complete.${PANTRY_COLOR_RESET}
 Current version: ${target_version}
 Web URL: ${web_url}
 API URL: ${api_url}

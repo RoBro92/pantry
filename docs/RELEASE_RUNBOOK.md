@@ -32,7 +32,7 @@ git push origin vX.Y.Z
 
 ## Operator Upgrade Checklist
 
-1. Back up PostgreSQL data and Pantry-managed upload storage before upgrading.
+1. Back up PostgreSQL data and Pantro-managed upload storage before upgrading.
 2. Review the new `infra/env/pantry.env.example` before reusing older environment values.
 3. Run the explicit operator update flow:
 
@@ -51,6 +51,6 @@ git push origin vX.Y.Z
 
 ## Notes
 
-- Pantry is self-hosted and operator-managed in this public repository
-- Pantry does not auto-update
+- Pantro is self-hosted and operator-managed in this public repository
+- Pantro does not auto-update
 - AI features remain optional and may require separate provider validation after an upgrade

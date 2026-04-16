@@ -31,7 +31,7 @@ if git -C "${ROOT_DIR}" rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; the
   exit 1
 fi
 
-git -C "${ROOT_DIR}" tag -a "${TAG}" -m "Pantry ${TAG}"
+git -C "${ROOT_DIR}" tag -a "${TAG}" -m "Pantro ${TAG}"
 printf 'Created tag %s\n' "${TAG}"
 printf 'Push with:\n'
 printf '  git push origin main\n'

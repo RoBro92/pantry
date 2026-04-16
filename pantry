@@ -6,7 +6,7 @@ DEV_STACK_SCRIPT="${ROOT_DIR}/infra/scripts/dev-stack.sh"
 
 usage() {
   cat <<'EOF'
-Pantry local development wrapper.
+Pantro local development wrapper.
 
 Usage:
   ./pantry start --fresh
@@ -40,7 +40,7 @@ EOF
 
 require_repo_root() {
   if [[ ! -x "${DEV_STACK_SCRIPT}" ]]; then
-    echo "Could not find ${DEV_STACK_SCRIPT}. Run this command from the Pantry repository root." >&2
+    echo "Could not find ${DEV_STACK_SCRIPT}. Run this command from the Pantro repository root." >&2
     exit 1
   fi
 }

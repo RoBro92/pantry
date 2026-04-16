@@ -1,17 +1,17 @@
-# Pantry
+# Pantro
 
-Pantry is a self-hosted household inventory application for tracking food, planning around what is already at home, and reducing avoidable waste.
+Pantro is a self-hosted household inventory application for tracking food, planning around what is already at home, and reducing avoidable waste.
 
-It is built for local operation rather than hosted sync. This public repository ships the self-hosted, operator-managed Pantry product only: the web app, API, worker, Docker deployment assets, and the core contributor documentation needed to run and maintain it safely. It does not include hosted control-plane, billing, or other SaaS-only logic.
+It is built for local operation rather than hosted sync. This public repository ships the self-hosted, operator-managed Pantro product only: the web app, API, worker, Docker deployment assets, and the core contributor documentation needed to run and maintain it safely. It does not include hosted control-plane, billing, or other SaaS-only logic.
 
-## What Pantry Includes
+## What Pantro Includes
 
-- Pantry inventory with households, rooms, storage locations, stock lots, and expiry tracking
+- Pantro inventory with households, rooms, storage locations, stock lots, and expiry tracking
 - Shopping lists with review and reconciliation flows
 - Recipes with pantry coverage summaries
 - Optional Open Food Facts lookup for product enrichment
 - Optional AI product intelligence that classifies pantry products into structured recipe-matching metadata
-- Guided first-run setup, including restore from a Pantry backup bundle
+- Guided first-run setup, including restore from a Pantro backup bundle
 - Admin tools for users, backups, diagnostics, updates, SMTP, and optional AI provider configuration
 - Optional guided household AI meal suggestions backed by an instance-level OpenAI, Claude, Ollama, or custom OpenAI-compatible provider, including pantry-aware recipe completion writeback
 
@@ -21,6 +21,12 @@ It is built for local operation rather than hosted sync. This public repository 
 - Optional AI features; the core product remains usable without AI
 - No SaaS billing, hosted sync, or hosted control-plane logic in this repository
 - No automatic updates; operators choose when to upgrade
+
+## Compatibility Notes
+
+Pantro is the product name in user-facing copy and public documentation.
+
+To keep install, update, release, and deployment flows stable, this repository intentionally retains legacy technical identifiers for now, including `PANTRY_*` environment variable prefixes, `infra/compose/pantry.yml`, `infra/env/pantry.env.example`, `install-pantry.sh`, `update-pantry.sh`, `healthcheck-pantry.sh`, the repo-root `./pantry` helper, the `@pantry/*` workspace names, and GHCR image names such as `pantry-api`, `pantry-worker`, and `pantry-web`.
 
 ## Quick Start
 
@@ -45,7 +51,7 @@ The full manual flow lives in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ## Updating
 
-Pantry does not self-update. Operators update it deliberately:
+Pantro does not self-update. Operators update it deliberately:
 
 ```bash
 ./update-pantry.sh
@@ -55,12 +61,12 @@ That flow refreshes release assets by default, updates `PANTRY_VERSION`, pulls i
 
 ## First Run
 
-Fresh installs open into the setup flow. Pantry currently supports two install paths:
+Fresh installs open into the setup flow. Pantro currently supports two install paths:
 
 - Fresh install
 - Restore from backup
 
-Restore accepts Pantry backup bundle JSON files only. Uploaded bundles are validated and staged before any destructive action is applied.
+Restore accepts Pantro backup bundle JSON files only. Uploaded bundles are validated and staged before any destructive action is applied.
 
 ## Local Development
 
@@ -80,7 +86,7 @@ Local branch work uses the Docker-based source stack that stays separate from th
 - `./pantry status` shows the current local stack state
 - `./pantry logs` follows the local service logs
 - the helper uses `.env.local` first, falls back to `.env`, and creates `.env.local` from `.env.local.example` on first run
-- optional `PANTRY_LOCAL_AI_*` and `PANTRY_LOCAL_SMTP_*` values in `.env.local` can pre-populate fresh setup and local demo-mode AI/SMTP settings through Pantry’s normal encrypted local config storage
+- optional `PANTRY_LOCAL_AI_*` and `PANTRY_LOCAL_SMTP_*` values in `.env.local` can pre-populate fresh setup and local demo-mode AI/SMTP settings through Pantro’s normal encrypted local config storage
 - local AI and SMTP bootstrap runs an initial validation pass after demo seed or setup finalize so the admin UI reflects the current status without an extra manual check
 - web changes hot reload in the browser, API changes auto-reload, and worker source changes restart the worker process in the dev stack
 - demo credentials stay in the public repo for contributor use: `demoadmin` / `demopass` and `demouser` / `demopass`

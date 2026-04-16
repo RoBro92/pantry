@@ -1,12 +1,12 @@
 # Support
 
-Pantry is a self hosted, operator managed application. This public repository covers the shipped self hosted product only.
+Pantro is a self hosted, operator managed application. This public repository covers the shipped self hosted product only.
 
 ## Scope
 
-- Pantry is self-hosted and operator-managed
+- Pantro is self-hosted and operator-managed
 - AI features are optional and the core product remains usable without them
-- Pantry does not auto update; operators choose when to upgrade
+- Pantro does not auto update; operators choose when to upgrade
 
 ## Getting Help
 
@@ -19,7 +19,7 @@ General support is best effort. Maintainers may prioritize release blockers, reg
 
 Include:
 
-- Pantry version from `VERSION` or the running diagnostics page
+- Pantro version from `VERSION` or the running diagnostics page
 - install path used: local dev stack or released self-hosted deployment
 - exact reproduction steps
 - relevant logs or screenshots with secrets removed

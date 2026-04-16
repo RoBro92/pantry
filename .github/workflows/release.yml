@@ -150,7 +150,7 @@ jobs:
         run: |
           set -euo pipefail
           tag="${{ steps.release.outputs.tag }}"
-          title="Pantry ${tag}"
+          title="Pantro ${tag}"
           if gh release view "${tag}" >/dev/null 2>&1; then
             gh release edit "${tag}" --title "${title}"
           else

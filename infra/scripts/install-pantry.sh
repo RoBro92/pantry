@@ -101,7 +101,7 @@ resolve_install_version() {
   fi
 
   resolved_version="$(read_local_version || true)"
-  [[ -n "${resolved_version}" ]] || die "Unable to resolve a Pantry version to install."
+  [[ -n "${resolved_version}" ]] || die "Unable to resolve a Pantro version to install."
   log_warn "Falling back to the local repository VERSION because the latest GitHub release could not be read."
   printf '%s' "${resolved_version}"
 }
@@ -175,7 +175,7 @@ configure_env_file() {
 }
 
 run_install() {
-  log_step "Pulling Pantry images"
+  log_step "Pulling Pantro images"
   docker_compose_in_dir "${INSTALL_DIR}" pull
 
   log_step "Starting PostgreSQL and Redis"
@@ -184,7 +184,7 @@ run_install() {
   log_step "Running database migrations"
   docker_compose_in_dir "${INSTALL_DIR}" --profile manual run --rm migrate
 
-  log_step "Starting the Pantry stack"
+  log_step "Starting the Pantro stack"
   docker_compose_in_dir "${INSTALL_DIR}" up -d
 }
 
@@ -195,7 +195,7 @@ print_summary() {
 
   cat <<EOF
 
-${PANTRY_COLOR_GREEN}Pantry install complete.${PANTRY_COLOR_RESET}
+${PANTRY_COLOR_GREEN}Pantro install complete.${PANTRY_COLOR_RESET}
 Installed version: ${selected_version}
 Install directory: ${INSTALL_DIR}
 Web URL: ${browser_url}
@@ -214,7 +214,7 @@ First-run setup:
   Open ${browser_url}/ in a browser
   or run:
   docker compose --env-file .env -f pantry.yml run --rm api \\
-    python -m app.cli bootstrap-platform-admin --email admin@example.com --display-name "Pantry Admin"
+    python -m app.cli bootstrap-platform-admin --email admin@example.com --display-name "Pantro Admin"
 
 Password reset:
   docker compose --env-file .env -f pantry.yml run --rm api \\
@@ -259,14 +259,14 @@ main() {
     esac
   done
 
-  log_step "Pantry self-hosted installer"
+  log_step "Pantro self-hosted installer"
   check_os_and_arch
   check_network
   install_docker_if_needed
 
   resolved_version="$(resolve_install_version)"
   detected_ip="$(detect_primary_ip)"
-  selected_version="$(prompt_with_default "Pantry version to install" "${resolved_version}")"
+  selected_version="$(prompt_with_default "Pantro version to install" "${resolved_version}")"
   host="$(prompt_with_default "Browser host or IP" "${detected_ip}")"
   web_port="$(prompt_with_default "Web port" "3000")"
   api_port="$(prompt_with_default "API port" "8000")"

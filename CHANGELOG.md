@@ -2,7 +2,7 @@
 
 ## 0.2.0 - 2026-04-16
 
-Pantry 0.2.0 focuses on release-readiness polish for the highest-frequency household flows.
+Pantro 0.2.0 focuses on release-readiness polish for the highest-frequency household flows.
 
 - Hardened barcode capture for the web app with clearer browser-scanning fallback, better USB scanner handling, and a practical quick-add multi-scan pantry entry flow.
 - Polished dense pantry and shopping workflows, including faster add/replenish handoff, improved reconciliation ergonomics, and cleaner narrow-width layouts.

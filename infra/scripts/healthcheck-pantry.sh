@@ -74,7 +74,7 @@ main() {
   api_probe_url="http://${api_bind_address}:${api_port}"
   web_api_proxy_url="${web_probe_url}/api/health"
 
-  log_step "Waiting for Pantry services"
+  log_step "Waiting for Pantro services"
   wait_for_http_ok "${web_probe_url}/" "${TIMEOUT_SECONDS}" || die "Web health check timed out at ${web_probe_url}/"
   wait_for_http_ok "${web_api_proxy_url}" "${TIMEOUT_SECONDS}" || die "Web API proxy timed out at ${web_api_proxy_url}"
   wait_for_http_ok "${api_probe_url}/api/health" "${TIMEOUT_SECONDS}" || die "API health check timed out at ${api_probe_url}/api/health"
@@ -105,7 +105,7 @@ if worker_output.get("status") != "ok":
     raise SystemExit("Worker did not report status=ok.")
 
 print()
-print("Pantry health summary")
+print("Pantro health summary")
 print(f"  Web: ok ({web_url})")
 print(f"  API: {api_health.get('status')} ({api_url}/api/health)")
 print(f"  Web API proxy: ok ({web_url}/api/health)")
