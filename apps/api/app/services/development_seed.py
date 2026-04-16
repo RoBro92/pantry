@@ -99,6 +99,7 @@ class DevelopmentSeedManifest:
     mode: str
     entry_path: str
     setup_complete: bool
+    bootstrap_warnings: list[str]
     users: dict[str, dict[str, object]]
     household_external_id: str | None
     household_name: str | None
@@ -113,6 +114,7 @@ class DevelopmentSeedManifest:
                 "mode": self.mode,
                 "entry_path": self.entry_path,
                 "setup_complete": self.setup_complete,
+                "bootstrap_warnings": self.bootstrap_warnings,
                 "users": self.users,
                 "household_external_id": self.household_external_id,
                 "household_name": self.household_name,
@@ -600,57 +602,86 @@ def _load_local_demo_smtp_config() -> LocalDemoSMTPConfig | None:
     )
 
 
-def _apply_local_demo_environment_config(db: Session, *, actor: User) -> None:
-    ai_config = _load_local_demo_ai_config()
-    if ai_config is not None:
-        upsert_instance_provider_config(
-            db,
-            actor=actor,
-            provider_type=ai_config.provider_type,
-            base_url=ai_config.base_url,
-            default_model=ai_config.default_model,
-            api_key=ai_config.api_key,
-            is_enabled=ai_config.is_enabled,
-        )
-        stored_ai_config = get_instance_provider_config(db)
-        if stored_ai_config is None:
-            raise ValueError("Local demo AI bootstrap could not load the saved AI provider config.")
-        health = refresh_provider_health(db, config=stored_ai_config)
-        if not health.is_healthy or health.status != AI_HEALTH_HEALTHY:
-            raise ValueError(health.message or "Local demo AI provider health check failed.")
+def _apply_local_demo_environment_config(db: Session, *, actor: User) -> list[str]:
+    warnings: list[str] = []
 
-    smtp_config = _load_local_demo_smtp_config()
-    if smtp_config is not None:
-        upsert_smtp_settings(
-            db,
-            actor=actor,
-            host=smtp_config.host,
-            port=smtp_config.port,
-            username=smtp_config.username,
-            password=smtp_config.password,
-            from_email=smtp_config.from_email,
-            from_name=smtp_config.from_name,
-            security=smtp_config.security,
-            is_enabled=smtp_config.is_enabled,
-            test_recipient_email=smtp_config.test_recipient_email,
-        )
-        if smtp_config.password_reset_enabled:
-            upsert_password_reset_email_template(
+    try:
+        ai_config = _load_local_demo_ai_config()
+    except ValueError as exc:
+        db.rollback()
+        warnings.append(f"Local demo AI bootstrap skipped: {exc}")
+        ai_config = None
+
+    if ai_config is not None:
+        try:
+            upsert_instance_provider_config(
                 db,
                 actor=actor,
-                is_enabled=True,
-                subject=None,
-                body_template=None,
+                provider_type=ai_config.provider_type,
+                base_url=ai_config.base_url,
+                default_model=ai_config.default_model,
+                api_key=ai_config.api_key,
+                is_enabled=ai_config.is_enabled,
             )
-        result = run_smtp_connectivity_test(db)
-        record_smtp_test_result(
-            db,
-            actor=actor,
-            status=result.status,
-            error=None if result.ok else result.message,
-        )
-        if not result.ok:
-            raise ValueError(result.message or "Local demo SMTP connectivity test failed.")
+            stored_ai_config = get_instance_provider_config(db)
+            if stored_ai_config is None:
+                warnings.append("Local demo AI bootstrap failed: saved AI provider config could not be loaded.")
+            else:
+                health = refresh_provider_health(db, config=stored_ai_config)
+                if not health.is_healthy or health.status != AI_HEALTH_HEALTHY:
+                    warnings.append(
+                        f"Local demo AI health check failed: {health.message or 'Check the local AI base URL, model, or API key.'}"
+                    )
+        except ValueError as exc:
+            db.rollback()
+            warnings.append(f"Local demo AI bootstrap failed: {exc}")
+
+    try:
+        smtp_config = _load_local_demo_smtp_config()
+    except ValueError as exc:
+        db.rollback()
+        warnings.append(f"Local demo SMTP bootstrap skipped: {exc}")
+        smtp_config = None
+
+    if smtp_config is not None:
+        try:
+            upsert_smtp_settings(
+                db,
+                actor=actor,
+                host=smtp_config.host,
+                port=smtp_config.port,
+                username=smtp_config.username,
+                password=smtp_config.password,
+                from_email=smtp_config.from_email,
+                from_name=smtp_config.from_name,
+                security=smtp_config.security,
+                is_enabled=smtp_config.is_enabled,
+                test_recipient_email=smtp_config.test_recipient_email,
+            )
+            if smtp_config.password_reset_enabled:
+                upsert_password_reset_email_template(
+                    db,
+                    actor=actor,
+                    is_enabled=True,
+                    subject=None,
+                    body_template=None,
+                )
+            result = run_smtp_connectivity_test(db)
+            record_smtp_test_result(
+                db,
+                actor=actor,
+                status=result.status,
+                error=None if result.ok else result.message,
+            )
+            if not result.ok:
+                warnings.append(
+                    f"Local demo SMTP connectivity test failed: {result.message or 'Check the local SMTP host or credentials.'}"
+                )
+        except ValueError as exc:
+            db.rollback()
+            warnings.append(f"Local demo SMTP bootstrap failed: {exc}")
+
+    return warnings
 
 
 def bootstrap_development_mode(
@@ -674,6 +705,7 @@ def reset_development_state(db: Session) -> DevelopmentSeedManifest:
         mode=DEV_MODE_FRESH,
         entry_path="/setup",
         setup_complete=False,
+        bootstrap_warnings=[],
         users={},
         household_external_id=None,
         household_name=None,
@@ -777,13 +809,14 @@ def seed_demo_development_state(db: Session, *, off_client=None) -> DevelopmentS
         db.refresh(product)
         product_external_ids[product_seed.name] = product.external_id
 
-    _apply_local_demo_environment_config(db, actor=actor)
+    bootstrap_warnings = _apply_local_demo_environment_config(db, actor=actor)
     mark_setup_completed(db)
 
     return DevelopmentSeedManifest(
         mode=DEV_MODE_DEMO,
         entry_path="/login",
         setup_complete=True,
+        bootstrap_warnings=bootstrap_warnings,
         users={
             user_seed.login: {
                 "password": user_seed.password,

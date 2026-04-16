@@ -97,6 +97,7 @@ def test_fresh_development_mode_resets_to_uninitialized_state(db_session):
     assert manifest.mode == DEV_MODE_FRESH
     assert manifest.entry_path == "/setup"
     assert manifest.setup_complete is False
+    assert manifest.bootstrap_warnings == []
     assert manifest.users == {}
     assert is_setup_complete(db_session) is False
     assert db_session.scalar(select(User)) is None
@@ -110,6 +111,7 @@ def test_demo_development_mode_seeds_expected_fixture_state(db_session):
     assert manifest.mode == DEV_MODE_DEMO
     assert manifest.entry_path == "/login"
     assert manifest.setup_complete is True
+    assert manifest.bootstrap_warnings == []
     assert sorted(manifest.users) == ["demoadmin", "demouser"]
     assert manifest.users["demoadmin"]["password"] == "demopass"
     assert manifest.users["demouser"]["password"] == "demopass"
@@ -301,7 +303,7 @@ def test_demo_development_mode_bootstraps_local_ai_and_smtp_config_from_environm
     assert instance_settings.smtp_last_test_error is None
 
 
-def test_demo_development_mode_fails_when_local_ai_health_check_fails(db_session, monkeypatch):
+def test_demo_development_mode_warns_when_local_ai_health_check_fails(db_session, monkeypatch):
     monkeypatch.setattr(
         "app.services.development_seed.refresh_provider_health",
         lambda db, config: AIProviderHealth(
@@ -315,15 +317,14 @@ def test_demo_development_mode_fails_when_local_ai_health_check_fails(db_session
     monkeypatch.setenv("PANTRY_LOCAL_AI_PROVIDER_TYPE", "openai")
     monkeypatch.setenv("PANTRY_LOCAL_AI_API_KEY", "local-openai-secret")
 
-    try:
-        bootstrap_development_mode(db_session, mode=DEV_MODE_DEMO, off_client=NoOpenFoodFactsClient())
-    except ValueError as exc:
-        assert str(exc) == "OpenAI health failed."
-    else:
-        raise AssertionError("Expected local demo AI bootstrap to fail when health check fails.")
+    manifest = bootstrap_development_mode(db_session, mode=DEV_MODE_DEMO, off_client=NoOpenFoodFactsClient())
+
+    assert manifest.mode == DEV_MODE_DEMO
+    assert manifest.setup_complete is True
+    assert manifest.bootstrap_warnings == ["Local demo AI health check failed: OpenAI health failed."]
 
 
-def test_demo_development_mode_fails_when_local_smtp_connectivity_test_fails(db_session, monkeypatch):
+def test_demo_development_mode_warns_when_local_smtp_connectivity_test_fails(db_session, monkeypatch):
     monkeypatch.setattr(
         "app.services.development_seed.run_smtp_connectivity_test",
         lambda db: SMTPTestResult(status="failed", ok=False, message="SMTP auth failed."),
@@ -335,12 +336,25 @@ def test_demo_development_mode_fails_when_local_smtp_connectivity_test_fails(db_
     monkeypatch.setenv("PANTRY_LOCAL_SMTP_FROM_EMAIL", "pantry@example.com")
     monkeypatch.setenv("PANTRY_LOCAL_SMTP_SECURITY", "starttls")
 
-    try:
-        bootstrap_development_mode(db_session, mode=DEV_MODE_DEMO, off_client=NoOpenFoodFactsClient())
-    except ValueError as exc:
-        assert str(exc) == "SMTP auth failed."
-    else:
-        raise AssertionError("Expected local demo SMTP bootstrap to fail when connectivity test fails.")
+    manifest = bootstrap_development_mode(db_session, mode=DEV_MODE_DEMO, off_client=NoOpenFoodFactsClient())
+
+    assert manifest.mode == DEV_MODE_DEMO
+    assert manifest.setup_complete is True
+    assert manifest.bootstrap_warnings == [
+        "Local demo SMTP connectivity test failed: SMTP auth failed."
+    ]
+
+
+def test_demo_development_mode_warns_when_local_smtp_config_is_incomplete(db_session, monkeypatch):
+    monkeypatch.setenv("PANTRY_LOCAL_SMTP_USERNAME", "mailer")
+
+    manifest = bootstrap_development_mode(db_session, mode=DEV_MODE_DEMO, off_client=NoOpenFoodFactsClient())
+
+    assert manifest.mode == DEV_MODE_DEMO
+    assert manifest.setup_complete is True
+    assert manifest.bootstrap_warnings == [
+        "Local demo SMTP bootstrap skipped: PANTRY_LOCAL_SMTP_HOST is required when local demo SMTP bootstrap is configured."
+    ]
 
 
 def test_demo_development_mode_ignores_open_food_facts_failures(db_session):
