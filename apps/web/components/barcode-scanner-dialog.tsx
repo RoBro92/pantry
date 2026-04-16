@@ -1,90 +1,91 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import {
+  describeScannerError,
+  detectBarcodeScannerSupport,
+  startBarcodeScanner,
+  type ActiveBarcodeScannerSession,
+} from "../lib/browser-barcode-scanner";
 import { ModalShell } from "./modal-shell";
 
 type BarcodeScannerDialogProps = {
   onDetected: (value: string) => void;
   onClose: () => void;
+  mode?: "continuous" | "single";
+  title?: string;
+  description?: string;
 };
-
-type BarcodeDetectionResult = {
-  rawValue?: string;
-};
-
-type BarcodeDetectorConstructor = new (options?: {
-  formats?: string[];
-}) => {
-  detect: (source: HTMLVideoElement) => Promise<BarcodeDetectionResult[]>;
-};
-
-type BarcodeDetectorStatic = BarcodeDetectorConstructor & {
-  getSupportedFormats?: () => Promise<string[]>;
-};
-
-const BARCODE_FORMATS = ["ean_13", "ean_8", "upc_a", "upc_e", "code_128"];
 
 function normalizeBarcodeInput(value: string) {
   return value.trim().replace(/[\s,]+/g, "");
 }
 
-function describeScannerError(error: unknown) {
-  if (error instanceof DOMException) {
-    if (error.name === "NotAllowedError") {
-      return "Camera access was blocked. Allow camera permission or type the barcode instead.";
-    }
-    if (error.name === "NotFoundError") {
-      return "No camera was found on this device.";
-    }
-    if (error.name === "NotReadableError") {
-      return "The camera is already in use by another application or browser tab.";
-    }
-    if (error.name === "OverconstrainedError") {
-      return "This camera could not satisfy Pantry's barcode scanning request.";
-    }
-  }
-  if (error instanceof Error && error.message.trim()) {
-    return error.message;
-  }
-  return "Could not start the barcode scanner.";
-}
-
 export function BarcodeScannerDialog({
   onDetected,
   onClose,
+  mode = "single",
+  title = mode === "continuous" ? "Scan pantry items" : "Scan barcode",
+  description = mode === "continuous"
+    ? "Keep scanning to queue multiple barcodes. If the camera is unavailable, type or scan into the manual field instead."
+    : "Pantry can use the browser camera when supported. If the camera is unavailable, type or scan into the manual field instead.",
 }: BarcodeScannerDialogProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const manualInputRef = useRef<HTMLInputElement | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const frameRequestRef = useRef<number | null>(null);
-  const detectorRef = useRef<InstanceType<BarcodeDetectorConstructor> | null>(null);
-  const detectingRef = useRef(false);
+  const scannerSessionRef = useRef<ActiveBarcodeScannerSession | null>(null);
+  const lastDetectedRef = useRef<{ detectedAt: number; value: string } | null>(null);
+  const onCloseRef = useRef(onClose);
+  const onDetectedRef = useRef(onDetected);
   const [statusMessage, setStatusMessage] = useState("Checking browser support…");
   const [error, setError] = useState<string | null>(null);
   const [manualValue, setManualValue] = useState("");
   const [manualError, setManualError] = useState<string | null>(null);
   const [retryToken, setRetryToken] = useState(0);
   const [canRetryCamera, setCanRetryCamera] = useState(false);
+  const [engineLabel, setEngineLabel] = useState<string | null>(null);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  useEffect(() => {
+    onDetectedRef.current = onDetected;
+  }, [onDetected]);
 
   function stopScanner() {
-    if (frameRequestRef.current !== null) {
-      window.cancelAnimationFrame(frameRequestRef.current);
-      frameRequestRef.current = null;
-    }
-    streamRef.current?.getTracks().forEach((track) => track.stop());
-    streamRef.current = null;
+    scannerSessionRef.current?.stop();
+    scannerSessionRef.current = null;
   }
 
-  function commitManualValue() {
-    const barcode = normalizeBarcodeInput(manualValue);
+  function commitBarcode(value: string) {
+    const barcode = normalizeBarcodeInput(value);
     if (!barcode) {
       setManualError("Enter a barcode first.");
       manualInputRef.current?.focus();
       return;
     }
+
+    const lastDetected = lastDetectedRef.current;
+    const now = Date.now();
+    if (mode === "continuous" && lastDetected && lastDetected.value === barcode && now - lastDetected.detectedAt < 1200) {
+      return;
+    }
+
+    lastDetectedRef.current = {
+      detectedAt: now,
+      value: barcode,
+    };
+
     setManualError(null);
-    onDetected(barcode);
-    onClose();
+    onDetectedRef.current(barcode);
+
+    if (mode === "continuous") {
+      setManualValue("");
+      setStatusMessage(`Queued ${barcode}. Keep scanning or type the next barcode below.`);
+      return;
+    }
+
+    onCloseRef.current();
   }
 
   useEffect(() => {
@@ -97,141 +98,72 @@ export function BarcodeScannerDialog({
   useEffect(() => {
     let cancelled = false;
 
-    async function startScanner() {
+    async function initialiseScanner() {
+      stopScanner();
       setError(null);
-      setCanRetryCamera(false);
+      setEngineLabel(null);
       setStatusMessage("Checking browser support…");
 
-      const detectorClass = (window as Window & {
-        BarcodeDetector?: BarcodeDetectorStatic;
-      }).BarcodeDetector;
-
-      if (!window.isSecureContext) {
-        setError(
-          "Camera scanning needs HTTPS or localhost in a secure browser context.",
-        );
-        return;
-      }
-      if (!detectorClass || !navigator.mediaDevices?.getUserMedia) {
-        setError(
-          "This browser does not expose camera barcode scanning yet.",
-        );
+      const support = await detectBarcodeScannerSupport();
+      if (cancelled) {
         return;
       }
 
-      setCanRetryCamera(true);
+      setCanRetryCamera(support.canRetry);
 
-      let supportedFormats = BARCODE_FORMATS;
-      if (typeof detectorClass.getSupportedFormats === "function") {
-        try {
-          const browserFormats = await detectorClass.getSupportedFormats();
-          supportedFormats = BARCODE_FORMATS.filter((format) =>
-            browserFormats.includes(format),
-          );
-        } catch {
-          supportedFormats = BARCODE_FORMATS;
-        }
+      if (!support.preferredEngine || support.permissionState === "denied") {
+        setError(support.message);
+        return;
       }
 
-      if (supportedFormats.length === 0) {
-        setCanRetryCamera(false);
-        setError(
-          "This browser can open the camera, but it does not expose barcode formats Pantry can read.",
-        );
+      setStatusMessage(support.message);
+
+      const videoElement = videoRef.current;
+      if (!videoElement) {
         return;
       }
 
       try {
-        detectorRef.current = new detectorClass({ formats: supportedFormats });
-        setStatusMessage("Requesting camera permission…");
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: false,
-          video: {
-            facingMode: { ideal: "environment" },
+        const session = await startBarcodeScanner({
+          support,
+          videoElement,
+          onDetected: commitBarcode,
+          onStatus: (message) => {
+            if (!cancelled) {
+              setStatusMessage(message);
+            }
           },
         });
+
         if (cancelled) {
-          stream.getTracks().forEach((track) => track.stop());
+          session.stop();
           return;
         }
 
-        streamRef.current = stream;
-        const video = videoRef.current;
-        if (!video) {
-          return;
-        }
-        video.srcObject = stream;
-        await video.play();
-        setStatusMessage("Point the camera at the barcode, or type it below.");
-        frameRequestRef.current = window.requestAnimationFrame(() => {
-          void detectFrame();
-        });
-      } catch (requestError) {
-        stopScanner();
-        setError(describeScannerError(requestError));
-      }
-    }
-
-    async function detectFrame() {
-      if (detectingRef.current) {
-        frameRequestRef.current = window.requestAnimationFrame(() => {
-          void detectFrame();
-        });
-        return;
-      }
-      const detector = detectorRef.current;
-      const video = videoRef.current;
-      if (!detector || !video) {
-        return;
-      }
-      if (video.readyState < HTMLMediaElement.HAVE_ENOUGH_DATA) {
-        frameRequestRef.current = window.requestAnimationFrame(() => {
-          void detectFrame();
-        });
-        return;
-      }
-
-      detectingRef.current = true;
-      try {
-        const results = await detector.detect(video);
-        const barcode = results
-          .map((result) => normalizeBarcodeInput(result.rawValue ?? ""))
-          .find(Boolean);
-        if (barcode) {
-          onDetected(barcode);
-          onClose();
-          return;
-        }
-      } catch (requestError) {
-        stopScanner();
-        setError(
-          requestError instanceof Error && requestError.message.trim()
-            ? requestError.message
-            : "Camera barcode scanning failed.",
+        scannerSessionRef.current = session;
+        setEngineLabel(
+          session.engine === "native" ? "Built-in browser scanner" : "Compatible browser scanner",
         );
-        return;
-      } finally {
-        detectingRef.current = false;
-      }
+      } catch (scannerError) {
+        if (cancelled) {
+          return;
+        }
 
-      frameRequestRef.current = window.requestAnimationFrame(() => {
-        void detectFrame();
-      });
+        stopScanner();
+        setError(describeScannerError(scannerError));
+      }
     }
 
-    void startScanner();
+    void initialiseScanner();
+
     return () => {
       cancelled = true;
       stopScanner();
     };
-  }, [onClose, onDetected, retryToken]);
+  }, [mode, retryToken]);
 
   return (
-    <ModalShell
-      title="Scan barcode"
-      description="Pantry can use the browser camera when supported. If the camera is unavailable, type or scan into the manual field instead."
-      onClose={onClose}
-    >
+    <ModalShell title={title} description={description} onClose={onClose}>
       <div className="stack" data-testid="barcode-scanner-dialog">
         {error ? (
           <div className="warning-callout">
@@ -254,48 +186,52 @@ export function BarcodeScannerDialog({
             <div className="scanner-frame">
               <video ref={videoRef} className="scanner-video" muted playsInline />
             </div>
-            <p className="helper-text">{statusMessage}</p>
+            <div className="scanner-status-row">
+              {engineLabel ? <span className="pill">{engineLabel}</span> : null}
+              <p className="helper-text">{statusMessage}</p>
+            </div>
           </div>
         )}
 
         <div className="scanner-manual-panel">
           <label className="field">
-            <span>Type or scan barcode</span>
+            <span>{mode === "continuous" ? "Type or scan barcodes" : "Type or scan barcode"}</span>
             <input
               ref={manualInputRef}
               value={manualValue}
               onChange={(event) => {
                 setManualValue(event.target.value);
-                setManualError(null);
+                if (manualError) {
+                  setManualError(null);
+                }
               }}
               onKeyDown={(event) => {
                 if (event.key !== "Enter") {
                   return;
                 }
                 event.preventDefault();
-                commitManualValue();
+                commitBarcode(manualValue);
               }}
-              placeholder="5000111046244"
+              placeholder={mode === "continuous" ? "Scan a barcode and wait for Enter" : "5000111046244"}
               autoComplete="off"
               autoCorrect="off"
               spellCheck={false}
+              inputMode="numeric"
             />
           </label>
+
+          {manualError ? <p className="error-text">{manualError}</p> : null}
+
           <div className="scanner-manual-actions">
-            <button
-              type="button"
-              className="primary-button"
-              disabled={!normalizeBarcodeInput(manualValue)}
-              onClick={commitManualValue}
-            >
-              Use barcode
+            <button type="button" className="primary-button" onClick={() => commitBarcode(manualValue)}>
+              {mode === "continuous" ? "Queue barcode" : "Use barcode"}
             </button>
           </div>
+
           <p className="helper-text">
             USB barcode scanners usually act like a keyboard and finish with Enter, so this field
-            works well on desktop too.
+            stays reliable when camera scanning is unavailable or less practical.
           </p>
-          {manualError ? <p className="error-text">{manualError}</p> : null}
         </div>
       </div>
     </ModalShell>

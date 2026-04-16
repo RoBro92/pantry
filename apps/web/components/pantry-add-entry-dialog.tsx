@@ -392,7 +392,7 @@ export function PantryAddEntryDialog({
                 onScan={() => setIsScannerOpen(true)}
                 lookupPending={lookupPending}
                 lookupDisabled={!form.name.trim() && !getPrimaryBarcode(form.barcodesInput)}
-                helperText="USB scanners can type directly into this field. Camera scanning works only when the browser supports it over HTTPS or localhost. Pantry also tries an Open Food Facts lookup when you leave the field. Extra barcodes can be added as comma-separated values."
+                helperText="USB scanners can type directly into this field. Camera scanning works in secure browser contexts over HTTPS or localhost when the device and browser allow it, and Pantry keeps manual/USB fallback available either way. Pantry also tries an Open Food Facts lookup when you leave the field. Extra barcodes can be added as comma-separated values."
               />
 
               <label className="field">

@@ -50,6 +50,7 @@ export function PantryBarcodeField({
             autoComplete="off"
             autoCorrect="off"
             spellCheck={false}
+            inputMode="numeric"
           />
           <button
             type="button"
