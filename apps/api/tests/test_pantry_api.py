@@ -25,13 +25,20 @@ from app.services.pantry_catalog import create_product as create_product_record
 from app.services.pantry_stock import add_stock_lot as add_stock_lot_record
 from app.services.product_intelligence import (
     PRODUCT_INTELLIGENCE_CLASSIFICATION_VERSION,
+    PRODUCT_INTELLIGENCE_PATH_AI_GAP_FILL,
+    PRODUCT_INTELLIGENCE_PATH_DERIVED_ONLY,
+    PRODUCT_INTELLIGENCE_PATH_FULL_AI,
     PRODUCT_INTELLIGENCE_SCHEMA_VERSION,
     PRODUCT_INTELLIGENCE_SCOPE,
     ProductClassificationBatchOutput,
     ProductIntelligenceStaleness,
+    build_product_intelligence_batch_source_payload,
+    build_product_intelligence_execution_plan,
     build_product_intelligence_source_data_hash,
     build_product_intelligence_source_payload,
     get_product_intelligence_staleness,
+    get_product_intelligence_runtime_trim_level,
+    estimate_product_intelligence_tokens,
 )
 from app.services.product_intelligence_profiles import get_default_supported_model, resolve_product_intelligence_profile
 from app.services.product_intelligence_runs import process_next_product_intelligence_run
@@ -556,6 +563,112 @@ def test_product_intelligence_marks_stale_after_material_product_update(client, 
     assert "source_product_data_changed" in intelligence["stale_reasons"]
 
 
+def test_product_intelligence_run_reports_paths_and_token_diagnostics(client, db_session, monkeypatch):
+    actor, household = create_household_with_role(
+        db_session,
+        email="classification-diagnostics@example.com",
+        household_name="Classification Diagnostics Household",
+        role_code=HOUSEHOLD_ADMIN_ROLE,
+    )
+    stub_adapter = install_stub_product_intelligence_provider(db_session, monkeypatch)
+    login(client, email="classification-diagnostics@example.com")
+
+    sauce = create_product_record(
+        db_session,
+        household=household,
+        actor=actor,
+        name="Brown sauce",
+        default_unit="bottle",
+        aliases=["HP sauce"],
+        barcodes=["5000111046244"],
+    )
+    tomatoes = create_product_record(
+        db_session,
+        household=household,
+        actor=actor,
+        name="Chopped tomatoes",
+        default_unit="can",
+        aliases=[],
+        barcodes=["1234567890123"],
+    )
+    bacon = create_product_record(
+        db_session,
+        household=household,
+        actor=actor,
+        name="Bacon",
+        default_unit="pack",
+        aliases=[],
+        barcodes=[],
+        notes="Smoked rashers for quick breakfasts.",
+        manual_ingredient_tags=["Pork"],
+    )
+    db_session.add_all(
+        [
+            ProductEnrichment(
+                household_id=household.id,
+                product=sauce,
+                source_name="open_food_facts",
+                source_product_id="5000111046244",
+                source_barcode="5000111046244",
+                source_product_name="HP Brown Sauce",
+                ingredients_text="Tomatoes, vinegar, barley malt",
+                ingredient_tags=["tomatoes", "vinegar", "barley-malt"],
+                allergen_tags=["Gluten"],
+                dietary_tags=["vegetarian"],
+                categories=["Condiments", "Brown Sauces"],
+            ),
+            ProductEnrichment(
+                household_id=household.id,
+                product=tomatoes,
+                source_name="open_food_facts",
+                source_product_id="1234567890123",
+                source_barcode="1234567890123",
+                source_product_name="Chopped tomatoes in tomato juice",
+                ingredients_text="Tomatoes, tomato juice",
+                ingredient_tags=["tomatoes"],
+                allergen_tags=[],
+                dietary_tags=["vegan"],
+                categories=["Tomatoes", "Chopped tomatoes"],
+            ),
+        ]
+    )
+    db_session.commit()
+
+    queued = client.post(
+        f"/api/households/{household.external_id}/product-intelligence/classify",
+        json={"mode": "all"},
+    )
+    assert queued.status_code == 200
+
+    assert process_next_product_intelligence_run() is True
+
+    run_detail = client.get(
+        f"/api/households/{household.external_id}/product-intelligence/runs/{queued.json()['external_id']}"
+    )
+    assert run_detail.status_code == 200
+    payload = run_detail.json()
+    assert payload["status"] == "completed"
+    assert payload["diagnostics"]["path_counts"] == {
+        "derived_only": 1,
+        "ai_gap_fill": 1,
+        "full_ai": 1,
+    }
+    assert payload["diagnostics"]["ai_batch_count"] == 2
+    assert payload["diagnostics"]["completed_ai_batch_count"] == 2
+    assert payload["diagnostics"]["token_summary"]["approx_total_tokens"] > 0
+    assert {batch["path"] for batch in payload["diagnostics"]["batches"]} == {
+        PRODUCT_INTELLIGENCE_PATH_AI_GAP_FILL,
+        PRODUCT_INTELLIGENCE_PATH_FULL_AI,
+    }
+    item_paths = {item["product_name"]: item["path"] for item in payload["items"]}
+    assert item_paths == {
+        "Bacon": PRODUCT_INTELLIGENCE_PATH_FULL_AI,
+        "Brown sauce": PRODUCT_INTELLIGENCE_PATH_DERIVED_ONLY,
+        "Chopped tomatoes": PRODUCT_INTELLIGENCE_PATH_AI_GAP_FILL,
+    }
+    assert sauce.external_id not in [external_id for batch in stub_adapter.batches for external_id in batch]
+
+
 def test_product_intelligence_source_payload_slims_off_enrichment_fields(db_session):
     actor, household = create_household_with_role(
         db_session,
@@ -700,6 +813,139 @@ def test_product_intelligence_source_payload_keeps_short_ingredients_text_when_t
     assert payload["enrichment"]["category_hint"] == "Chickpeas"
 
 
+def test_product_intelligence_execution_plan_prefers_derived_only_for_packaged_staples(db_session):
+    actor, household = create_household_with_role(
+        db_session,
+        email="classification-derived@example.com",
+        household_name="Classification Derived Household",
+        role_code=HOUSEHOLD_ADMIN_ROLE,
+    )
+    product = create_product_record(
+        db_session,
+        household=household,
+        actor=actor,
+        name="Brown sauce",
+        default_unit="bottle",
+        aliases=["HP sauce"],
+        barcodes=["5000111046244"],
+    )
+    db_session.add(
+        ProductEnrichment(
+            household_id=household.id,
+            product=product,
+            source_name="open_food_facts",
+            source_product_id="5000111046244",
+            source_barcode="5000111046244",
+            source_product_name="HP Brown Sauce",
+            ingredients_text="Tomatoes, vinegar, barley malt",
+            ingredient_tags=["tomatoes", "vinegar", "barley-malt"],
+            allergen_tags=["Gluten"],
+            dietary_tags=["vegetarian"],
+            categories=["Condiments", "Brown Sauces"],
+        )
+    )
+    db_session.flush()
+
+    plan = build_product_intelligence_execution_plan(
+        product,
+        provider_type="ollama",
+        model="llama3.2",
+    )
+
+    assert plan.path == PRODUCT_INTELLIGENCE_PATH_DERIVED_ONLY
+    assert plan.ai_payload is None
+    assert plan.approx_input_tokens == 0
+    assert plan.derived_output is not None
+    assert plan.derived_output.food_category == "Condiment"
+    assert plan.derived_output.structured_metadata.storage_profile == "Shelf stable"
+
+
+def test_product_intelligence_execution_plan_uses_smaller_ai_gap_fill_payload_for_enriched_products(db_session):
+    actor, household = create_household_with_role(
+        db_session,
+        email="classification-gap-fill@example.com",
+        household_name="Classification Gap Fill Household",
+        role_code=HOUSEHOLD_ADMIN_ROLE,
+    )
+    product = create_product_record(
+        db_session,
+        household=household,
+        actor=actor,
+        name="Chopped tomatoes",
+        default_unit="can",
+        aliases=["Tinned tomatoes", "Italian plum tomatoes"],
+        barcodes=["1234567890123"],
+        notes="Useful for sauces, soups, and braises.",
+    )
+    db_session.add(
+        ProductEnrichment(
+            household_id=household.id,
+            product=product,
+            source_name="open_food_facts",
+            source_product_id="1234567890123",
+            source_barcode="1234567890123",
+            source_product_name="Chopped tomatoes in tomato juice",
+            ingredients_text="Tomatoes, tomato juice",
+            ingredient_tags=["tomatoes"],
+            allergen_tags=[],
+            dietary_tags=["vegan"],
+            categories=["Tomatoes", "Chopped tomatoes"],
+        )
+    )
+    db_session.flush()
+
+    plan = build_product_intelligence_execution_plan(
+        product,
+        provider_type="ollama",
+        model="llama3.2",
+    )
+    full_payload = build_product_intelligence_batch_source_payload(
+        product,
+        trim_level=get_product_intelligence_runtime_trim_level(
+            product,
+            provider_type="ollama",
+            model="llama3.2",
+        ),
+    )
+
+    assert plan.path == PRODUCT_INTELLIGENCE_PATH_AI_GAP_FILL
+    assert plan.ai_payload is not None
+    assert plan.derived_output is not None
+    assert plan.derived_output.dietary_tags == ["Vegan"]
+    assert plan.derived_output.structured_metadata.storage_profile == "Shelf stable"
+    assert plan.approx_input_tokens < estimate_product_intelligence_tokens(full_payload)
+
+
+def test_product_intelligence_execution_plan_keeps_manual_products_on_full_ai(db_session):
+    actor, household = create_household_with_role(
+        db_session,
+        email="classification-full-ai@example.com",
+        household_name="Classification Full AI Household",
+        role_code=HOUSEHOLD_ADMIN_ROLE,
+    )
+    product = create_product_record(
+        db_session,
+        household=household,
+        actor=actor,
+        name="Bacon",
+        default_unit="pack",
+        aliases=["Smoked bacon"],
+        barcodes=[],
+        notes="Rashers for sandwiches and breakfasts.",
+        manual_ingredient_tags=["Pork"],
+    )
+
+    plan = build_product_intelligence_execution_plan(
+        product,
+        provider_type="ollama",
+        model="llama3.2",
+    )
+
+    assert plan.path == PRODUCT_INTELLIGENCE_PATH_FULL_AI
+    assert plan.ai_payload is not None
+    assert plan.approx_input_tokens > 0
+
+
 def test_product_intelligence_staleness_uses_runtime_payload_fields_only(db_session):
     actor, household = create_household_with_role(
         db_session,
@@ -816,6 +1062,9 @@ def test_product_intelligence_worker_batches_requests_and_recovers_from_429s(cli
     assert len(stub_adapter.batches) == 3
     assert all(len(batch) <= 3 for batch in stub_adapter.batches)
     assert any("Retrying batch" in event["message"] for event in payload["events"])
+    assert payload["diagnostics"]["path_counts"]["full_ai"] == 7
+    assert payload["diagnostics"]["retry_count"] >= 2
+    assert payload["diagnostics"]["rate_limit_count"] >= 2
     assert len(sleep_calls) >= 2
 
 
@@ -1169,24 +1418,36 @@ def test_product_intelligence_profiles_choose_gemini_default_and_token_aware_bat
 
     large_candidate = PreparedClassificationCandidate(
         product=large_product,
+        path=PRODUCT_INTELLIGENCE_PATH_FULL_AI,
+        trim_level=0,
         payload={"product_external_id": large_product.external_id},
         approx_input_tokens=4_000,
+        approx_output_tokens=profile.per_product_output_tokens,
         staleness=ProductIntelligenceStaleness(is_stale=False, reasons=[]),
         existing_intelligence=None,
+        derived_output=None,
     )
     second_candidate = PreparedClassificationCandidate(
         product=large_product,
+        path=PRODUCT_INTELLIGENCE_PATH_FULL_AI,
+        trim_level=0,
         payload={"product_external_id": "second"},
         approx_input_tokens=2_800,
+        approx_output_tokens=profile.per_product_output_tokens,
         staleness=ProductIntelligenceStaleness(is_stale=False, reasons=[]),
         existing_intelligence=None,
+        derived_output=None,
     )
     third_candidate = PreparedClassificationCandidate(
         product=large_product,
+        path=PRODUCT_INTELLIGENCE_PATH_FULL_AI,
+        trim_level=0,
         payload={"product_external_id": "third"},
         approx_input_tokens=1_000,
+        approx_output_tokens=profile.per_product_output_tokens,
         staleness=ProductIntelligenceStaleness(is_stale=False, reasons=[]),
         existing_intelligence=None,
+        derived_output=None,
     )
 
     batches = _build_batches([large_candidate, second_candidate, third_candidate], profile=profile)
