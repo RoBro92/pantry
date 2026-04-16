@@ -603,7 +603,7 @@ test("pantry add flow warns when an alias is already used by another product", a
   await addEntryForm.getByLabel("Quantity").fill("1");
   await addEntryForm.getByLabel("Unit").selectOption("count");
   await addEntryForm.getByLabel("Aliases").fill("Dry pasta");
-  await addEntryForm.getByRole("button", { name: "Add to pantry" }).click();
+  await addEntryForm.getByRole("button", { name: "Add to inventory" }).click();
 
   await expect(page.getByText("Dry pasta is already used by Pasta")).toBeVisible();
 });
@@ -968,8 +968,12 @@ test("ai flow covers unconfigured and configured-but-unavailable states", async 
   });
 
   await page.goto(`/app/households/${manifest.household_external_id}/ai`);
+  await expect(page.getByText("openai")).toBeVisible();
+  await expect(page.getByText("gpt-4.1-mini")).toBeVisible();
+  await expect(page.getByText("unhealthy")).toBeVisible();
+  await page.getByRole("button", { name: "Build meal shortlist" }).click();
   await expect(
-    page.getByText("Pantro could not authenticate with the AI provider.")
+    page.getByText("OpenAI rejected the configured credentials. Check the API key and project access.")
   ).toBeVisible();
 });
 
@@ -1100,7 +1104,7 @@ test("platform admin can manage household memberships from the consolidated pane
   await expect(page.locator(".household-card").getByText("Weekday Household")).toBeVisible();
   await page
     .locator(".household-card", { hasText: "Weekday Household" })
-    .getByRole("link", { name: "Open pantry" })
+    .getByRole("link", { name: "Open Inventory" })
     .click();
 
   await expect(page.getByRole("heading", { name: "Weekday Household" })).toBeVisible();
