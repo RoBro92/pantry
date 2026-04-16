@@ -174,16 +174,32 @@ export function providerSupportsManualModelEntry(_providerType: AIProviderType) 
 }
 
 function normalizeModelId(value: string) {
-  return value.trim().toLowerCase();
+  const normalized = value.trim().toLowerCase();
+  if (normalized.startsWith("models/")) {
+    return normalized.slice("models/".length);
+  }
+  if (normalized.startsWith("openai/")) {
+    return normalized.slice("openai/".length);
+  }
+  return normalized;
+}
+
+function matchesRecommendedModel(candidate: string, recommendedModel: string) {
+  const normalizedCandidate = normalizeModelId(candidate);
+  const normalizedRecommended = normalizeModelId(recommendedModel);
+  return (
+    normalizedCandidate === normalizedRecommended ||
+    normalizedCandidate.startsWith(`${normalizedRecommended}:`) ||
+    normalizedCandidate.startsWith(`${normalizedRecommended}-`)
+  );
 }
 
 function resolveRecommendedModel(availableModels: string[], desiredModel: string) {
-  const desired = normalizeModelId(desiredModel);
-  const exactMatch = availableModels.find((model) => normalizeModelId(model) === desired);
+  const exactMatch = availableModels.find((model) => matchesRecommendedModel(model, desiredModel));
   if (exactMatch) {
     return exactMatch;
   }
-  return availableModels.find((model) => normalizeModelId(model).includes(desired)) ?? desiredModel;
+  return availableModels.find((model) => normalizeModelId(model).includes(normalizeModelId(desiredModel))) ?? desiredModel;
 }
 
 export function getRecommendedModels(providerType: AIProviderType, availableModels: string[]) {
@@ -197,9 +213,8 @@ export function getRecommendedModels(providerType: AIProviderType, availableMode
 }
 
 export function isRecommendedModel(providerType: AIProviderType, model: string) {
-  const normalizedModel = normalizeModelId(model);
   return AI_PROVIDER_RECOMMENDED_MODELS[providerType].some(
-    (pick) => normalizeModelId(pick.model) === normalizedModel
+    (pick) => matchesRecommendedModel(model, pick.model)
   );
 }
 

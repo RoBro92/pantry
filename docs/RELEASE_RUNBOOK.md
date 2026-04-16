@@ -12,10 +12,11 @@ Concise public checklist for maintainers publishing a release and operators appl
 ```bash
 npm run typecheck:web
 npm run build:web
-cd apps/api && pytest -q
-docker compose --env-file infra/env/pantry.env.example -f infra/compose/pantry.yml config
+(cd apps/api && pytest -q)
 ./infra/scripts/validate-release.sh
 ```
+
+The enforced release gate now lives in `./infra/scripts/validate-release.sh`. It includes source-stack smoke validation and full Playwright E2E before the existing release-oriented checks continue.
 
 4. Confirm `VERSION` matches the intended release version.
 5. Create the release tag with:
@@ -25,7 +26,7 @@ docker compose --env-file infra/env/pantry.env.example -f infra/compose/pantry.y
 git push origin vX.Y.Z
 ```
 
-6. Verify the `Release Publish` workflow completed successfully and published the expected GHCR images and GitHub Release metadata.
+6. Verify the `Release Publish` workflow completed successfully. That workflow now enforces the release validation gate, including smoke validation and Playwright E2E, before publishing images and GitHub Release metadata.
 7. Check the released install and update entry points still match the docs:
    `infra/compose/pantry.yml`, `infra/env/pantry.env.example`, `infra/scripts/install-pantry.sh`, `infra/scripts/update-pantry.sh`, and `infra/scripts/healthcheck-pantry.sh`.
 

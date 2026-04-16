@@ -223,6 +223,7 @@ export function AdminAIConfigForm({
     if (!resolveApiKeyForSave()) {
       return;
     }
+    setIsModelPickerOpen(false);
     const saved = await saveDraft(buildCurrentDraft(), { syncLocalState: true });
     if (saved) {
       await runAutoHealthCheck();

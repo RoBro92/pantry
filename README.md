@@ -79,7 +79,8 @@ Local branch work uses the Docker-based source stack that stays separate from th
 - `./pantry rebuild` is only needed after Dockerfile or dependency changes
 - `./pantry status` shows the current local stack state
 - `./pantry logs` follows the local service logs
-- the helper uses `.env.local` first, falls back to `.env`, and creates `.env.local` from `.env.example` on first run
+- the helper uses `.env.local` first, falls back to `.env`, and creates `.env.local` from `.env.local.example` on first run
+- optional `PANTRY_LOCAL_AI_*` and `PANTRY_LOCAL_SMTP_*` values in `.env.local` can pre-populate local demo-mode AI and SMTP settings through Pantry’s normal encrypted local config storage
 - web changes hot reload in the browser, API changes auto-reload, and worker source changes restart the worker process in the dev stack
 - demo credentials stay in the public repo for contributor use: `demoadmin` / `demopass` and `demouser` / `demopass`
 

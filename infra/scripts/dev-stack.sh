@@ -7,6 +7,7 @@ DOCKER_COMPOSE_BIN="${DOCKER_COMPOSE_BIN:-docker compose}"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 DEFAULT_DEV_ENV_FILE="${ROOT_DIR}/.env.local"
 LEGACY_DEV_ENV_FILE="${ROOT_DIR}/.env"
+LOCAL_DEV_ENV_TEMPLATE_FILE="${ROOT_DIR}/.env.local.example"
 EXAMPLE_ENV_FILE="${ROOT_DIR}/.env.example"
 
 read -r -a COMPOSE_CMD <<<"${DOCKER_COMPOSE_BIN}"
@@ -34,9 +35,16 @@ bootstrap_dev_env() {
   elif [[ -f "${LEGACY_DEV_ENV_FILE}" ]]; then
     DEV_ENV_FILE="${LEGACY_DEV_ENV_FILE}"
   else
-    cp "${EXAMPLE_ENV_FILE}" "${DEFAULT_DEV_ENV_FILE}"
+    local template_source
+    if [[ -f "${LOCAL_DEV_ENV_TEMPLATE_FILE}" ]]; then
+      cp "${LOCAL_DEV_ENV_TEMPLATE_FILE}" "${DEFAULT_DEV_ENV_FILE}"
+      template_source="${LOCAL_DEV_ENV_TEMPLATE_FILE}"
+    else
+      cp "${EXAMPLE_ENV_FILE}" "${DEFAULT_DEV_ENV_FILE}"
+      template_source="${EXAMPLE_ENV_FILE}"
+    fi
     DEV_ENV_FILE="${DEFAULT_DEV_ENV_FILE}"
-    echo "Created ${DEV_ENV_FILE} from .env.example for local development."
+    echo "Created ${DEV_ENV_FILE} from $(basename "${template_source}") for local development."
   fi
 
   export PANTRY_WEB_WATCHPACK_POLLING="${PANTRY_WEB_WATCHPACK_POLLING:-$(detect_polling_default)}"
@@ -63,7 +71,7 @@ Modes:
   demo   Reset and seed stable demo data, then land on /login
 
 Notes:
-  - Uses .env.local by default, falls back to .env if present, and bootstraps .env.local from .env.example when needed.
+  - Uses .env.local by default, falls back to .env if present, and bootstraps .env.local from .env.local.example when needed.
   - Start replaces the whole local dev stack so web, api, and worker all come up fresh together.
   - Reset re-seeds the running stack without forcing container replacement.
   - Use rebuild after Dockerfile or dependency changes.

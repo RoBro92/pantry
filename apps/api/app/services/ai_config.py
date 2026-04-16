@@ -13,6 +13,7 @@ from app.domain.ai import (
     AI_HEALTH_UNKNOWN,
     AI_PROVIDER_API_KEY_REQUIRED,
     AI_PROVIDER_OLLAMA,
+    AI_PROVIDER_OPENAI,
     AI_PROVIDER_TYPES,
     AI_SCOPE_HOUSEHOLD,
     AI_SCOPE_INSTANCE,
@@ -22,6 +23,7 @@ from app.domain.ai import (
 from app.models.ai_provider_config import AIProviderConfig
 from app.models.household import Household
 from app.models.user import User
+from app.services.ai_providers.openai_compat import canonicalize_openai_model_id
 from app.services.ai_providers import AIProviderHealth, AIProviderRuntimeConfig, build_ai_provider_adapter
 from app.services.audit import record_audit_event
 from app.services.secrets import decrypt_secret, encrypt_secret
@@ -57,6 +59,13 @@ def normalize_provider_type(provider_type: str, *, base_url: str | None = None) 
     if normalized_provider_type is None or normalized_provider_type not in AI_PROVIDER_TYPES:
         raise ValueError("Unsupported AI provider type.")
     return normalized_provider_type
+
+
+def normalize_provider_model(provider_type: str, model: str) -> str:
+    normalized_model = model.strip()
+    if canonical_provider_type(provider_type) == AI_PROVIDER_OPENAI:
+        return canonicalize_openai_model_id(normalized_model)
+    return normalized_model
 
 
 def has_selected_model(config: AIProviderConfig) -> bool:
@@ -128,7 +137,7 @@ def resolve_provider_config(
         runtime=AIProviderRuntimeConfig(
             provider_type=provider_type,
             base_url=config.base_url,
-            default_model=config.default_model,
+            default_model=normalize_provider_model(provider_type, config.default_model),
             api_key=api_key,
         ),
     )
@@ -151,7 +160,7 @@ def upsert_instance_provider_config(
     provider_type = normalize_provider_type(provider_type, base_url=base_url)
 
     normalized_base_url = _normalize_base_url(base_url)
-    normalized_model = default_model.strip()
+    normalized_model = normalize_provider_model(provider_type, default_model)
     if not normalized_model:
         raise ValueError("Default model is required.")
 
@@ -223,6 +232,7 @@ def refresh_provider_health(
     validate_provider_health_check_ready(config)
     provider_type = normalize_provider_type(config.provider_type, base_url=config.base_url)
     config.provider_type = provider_type
+    config.default_model = normalize_provider_model(provider_type, config.default_model)
     api_key = decrypt_secret(config.encrypted_api_key) if config.encrypted_api_key else None
     adapter = build_ai_provider_adapter(
         AIProviderRuntimeConfig(
@@ -270,7 +280,7 @@ def serialize_provider_config(config: AIProviderConfig | None) -> dict[str, obje
         "scope_type": config.scope_type,
         "provider_type": canonical_provider_type(config.provider_type),
         "base_url": config.base_url,
-        "default_model": config.default_model,
+        "default_model": normalize_provider_model(config.provider_type, config.default_model),
         "is_enabled": config.is_enabled,
         "has_api_key": bool(config.encrypted_api_key),
         "health_status": config.health_status,

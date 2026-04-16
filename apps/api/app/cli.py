@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from getpass import getpass
 from pathlib import Path
 
@@ -73,6 +74,9 @@ def seed_development_mode(args: argparse.Namespace) -> None:
 
     with SessionLocal() as db:
         manifest = bootstrap_development_mode(db, mode=args.mode)
+
+    for warning in manifest.bootstrap_warnings:
+        print(f"WARNING: {warning}", file=sys.stderr)
 
     if getattr(args, "json_output", False):
         print(manifest.to_json())
