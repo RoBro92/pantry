@@ -8,6 +8,7 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 
 from app.domain.roles import HOUSEHOLD_ADMIN_ROLE, HOUSEHOLD_USER_ROLE
+from app.services.ai_config import upsert_instance_provider_config
 from app.models.household import Household
 from app.models.product import Product
 from app.models.user import User
@@ -35,6 +36,7 @@ from app.services.product_enrichment import (
     apply_confirmed_product_enrichment,
     get_default_open_food_facts_client,
 )
+from app.services.instance_settings import upsert_smtp_settings
 from app.services.setup import mark_setup_completed
 
 DEV_MODE_FRESH = "fresh"
@@ -73,6 +75,7 @@ class DevelopmentSeedManifest:
     mode: str
     entry_path: str
     setup_complete: bool
+    bootstrap_warnings: list[str]
     users: dict[str, dict[str, object]]
     household_external_id: str | None
     household_name: str | None
@@ -87,6 +90,7 @@ class DevelopmentSeedManifest:
                 "mode": self.mode,
                 "entry_path": self.entry_path,
                 "setup_complete": self.setup_complete,
+                "bootstrap_warnings": self.bootstrap_warnings,
                 "users": self.users,
                 "household_external_id": self.household_external_id,
                 "household_name": self.household_name,
@@ -499,6 +503,7 @@ def reset_development_state(db: Session) -> DevelopmentSeedManifest:
         mode=DEV_MODE_FRESH,
         entry_path="/setup",
         setup_complete=False,
+        bootstrap_warnings=[],
         users={},
         household_external_id=None,
         household_name=None,
@@ -636,12 +641,14 @@ def seed_demo_development_state(db: Session, *, off_client=None) -> DevelopmentS
         db.refresh(product)
         product_external_ids[product_seed.name] = product.external_id
 
+    bootstrap_warnings: list[str] = []
     mark_setup_completed(db)
 
     return DevelopmentSeedManifest(
         mode=DEV_MODE_DEMO,
         entry_path="/login",
         setup_complete=True,
+        bootstrap_warnings=bootstrap_warnings,
         users={
             user_seed.login: {
                 "password": user_seed.password,

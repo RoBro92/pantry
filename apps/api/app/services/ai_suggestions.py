@@ -18,12 +18,14 @@ from app.schemas.ai import (
 from app.services.ai_config import (
     get_ai_feature_enabled,
     has_selected_model,
+    normalize_provider_model,
     normalize_provider_type,
     provider_is_ready_for_runtime,
     record_provider_runtime_failure,
     refresh_provider_health,
     resolve_provider_config,
 )
+from app.services.ai_providers.openai_compat import is_supported_openai_model
 from app.services.ai_context import build_household_ai_context
 from app.services.platform_features import FLAG_AI_SUGGESTIONS, get_effective_feature_flag, require_feature_enabled
 from app.services.ai_prompts import build_suggestion_prompt_plan
@@ -74,13 +76,14 @@ def build_household_ai_feature_status(
 
     config = resolved.record
     provider_type = normalize_provider_type(config.provider_type, base_url=config.base_url)
+    default_model = normalize_provider_model(provider_type, config.default_model)
     if not config.is_enabled:
         return AIFeatureStatusSummary(
             feature_enabled=True,
             available=False,
             reason="The configured AI provider is currently disabled.",
             provider_type=provider_type,
-            default_model=config.default_model,
+            default_model=default_model,
             config_external_id=config.external_id,
             health_status=config.health_status,
             health_checked_at=config.health_checked_at,
@@ -93,18 +96,28 @@ def build_household_ai_feature_status(
             available=False,
             reason=runtime_reason,
             provider_type=provider_type,
-            default_model=config.default_model if has_selected_model(config) else None,
+            default_model=default_model if has_selected_model(config) else None,
             config_external_id=config.external_id,
             health_status=config.health_status,
             health_checked_at=config.health_checked_at,
         )
 
     if config.health_status == AI_HEALTH_UNHEALTHY:
+        if provider_type == "openai" and is_supported_openai_model(default_model):
+            return AIFeatureStatusSummary(
+                feature_enabled=True,
+                available=True,
+                provider_type=provider_type,
+                default_model=default_model,
+                config_external_id=config.external_id,
+                health_status=config.health_status,
+                health_checked_at=config.health_checked_at,
+            )
         reason = str(
             normalize_ai_error(
                 config.health_error or "The configured AI provider is unhealthy.",
                 provider_type=provider_type,
-                model=config.default_model,
+                model=default_model,
             )
         )
         return AIFeatureStatusSummary(
@@ -112,7 +125,7 @@ def build_household_ai_feature_status(
             available=False,
             reason=reason,
             provider_type=provider_type,
-            default_model=config.default_model,
+            default_model=default_model,
             config_external_id=config.external_id,
             health_status=config.health_status,
             health_checked_at=config.health_checked_at,
@@ -122,7 +135,7 @@ def build_household_ai_feature_status(
         feature_enabled=True,
         available=True,
         provider_type=provider_type,
-        default_model=config.default_model,
+        default_model=default_model,
         config_external_id=config.external_id,
         health_status=config.health_status,
         health_checked_at=config.health_checked_at,

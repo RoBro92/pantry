@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 import httpx
+import pytest
 
 from app.services.ai_providers import AIProviderRuntimeConfig, StructuredCompletionRequest
 from app.services.ai_providers.openai import OpenAIProviderAdapter
-from app.services.ai_providers.openai_compat import normalize_openai_json_schema
+from app.services.ai_providers.openai_compat import (
+    canonicalize_openai_model_id,
+    normalize_openai_json_schema,
+    resolve_supported_openai_model,
+)
 from app.services.product_intelligence import ProductClassificationBatchOutput, ProductClassificationOutput
 from app.schemas.ai import AIProviderMealSuggestionOutput
 
@@ -146,6 +151,7 @@ def test_openai_adapter_posts_compact_payload_and_normalized_schema_for_structur
             system_prompt="Return valid JSON only.",
             user_payload={"request": {"pantry_only": True}, "context": {"items": ["pasta"]}},
             output_schema=AIProviderMealSuggestionOutput.model_json_schema(),
+            max_output_tokens=1200,
         )
     )
 
@@ -156,6 +162,8 @@ def test_openai_adapter_posts_compact_payload_and_normalized_schema_for_structur
     payload = captured["json"]
     assert payload["messages"][1]["content"] == '{"request":{"pantry_only":true},"context":{"items":["pasta"]}}'
     assert payload["response_format"]["json_schema"]["name"] == "pantry_meal_suggestion"
+    assert payload["max_completion_tokens"] == 1200
+    assert "max_tokens" not in payload
     _assert_strict_openai_schema(payload["response_format"]["json_schema"]["schema"])
 
 
@@ -262,6 +270,48 @@ def test_openai_adapter_retries_with_alternate_output_token_parameter(monkeypatc
     assert "max_tokens" not in requests[1]
 
 
+def test_openai_adapter_uses_max_tokens_for_gpt_4_1_requests(monkeypatch):
+    captured: dict[str, object] = {}
+
+    def handler(method, url, json_body):
+        captured["json"] = json_body
+        return _json_response(
+            method,
+            url,
+            {
+                "id": "chatcmpl_test",
+                "choices": [
+                    {
+                        "message": {
+                            "content": '{"suggestions":[]}',
+                        }
+                    }
+                ],
+            },
+        )
+
+    monkeypatch.setattr(
+        "app.services.ai_providers.openai.httpx.Client",
+        lambda *args, **kwargs: FakeHTTPXClient(handler, *args, **kwargs),
+    )
+
+    adapter = OpenAIProviderAdapter(_runtime_config(model="gpt-4.1-mini"))
+    result = adapter.generate_structured_output(
+        StructuredCompletionRequest(
+            model="gpt-4.1-mini",
+            system_prompt="Return valid JSON only.",
+            user_payload={"task": "test"},
+            output_schema=AIProviderMealSuggestionOutput.model_json_schema(),
+            max_output_tokens=800,
+        )
+    )
+
+    assert result.parsed_output == {"suggestions": []}
+    payload = captured["json"]
+    assert payload["max_tokens"] == 800
+    assert "max_completion_tokens" not in payload
+
+
 def test_openai_health_check_marks_provider_unhealthy_when_models_list_but_structured_probe_fails(monkeypatch):
     def handler(method, url, json_body):
         if url.endswith("/models"):
@@ -295,7 +345,8 @@ def test_openai_health_check_marks_provider_unhealthy_when_models_list_but_struc
     assert health.is_healthy is False
     assert health.models == ["gpt-4.1-mini", "gpt-5.4", "gpt-5.4-mini"]
     assert health.capabilities["recommended_models"] == ["gpt-4.1-mini", "gpt-5.4-mini", "gpt-5.4"]
-    assert "not compatible with Pantry's structured AI requests" in (health.message or "")
+    assert "could not complete a structured AI request" in (health.message or "")
+    assert "gpt-5.4-mini" in (health.message or "")
     assert "400 Bad Request" not in (health.message or "")
 
 
@@ -329,6 +380,21 @@ def test_openai_health_check_allows_unprofiled_models_that_pass_the_compatibilit
     assert health.is_healthy is True
     assert health.capabilities["default_model_profile"] == "unprofiled"
     assert health.models == ["custom-openai-model"]
+
+
+@pytest.mark.parametrize(
+    ("raw_model", "expected_supported"),
+    [
+        (" gpt-4.1-mini ", "gpt-4.1-mini"),
+        ("GPT-5.4-MINI", "gpt-5.4-mini"),
+        ("gpt-5.4-preview", "gpt-5.4"),
+        ("models/gpt-5.4-mini", "gpt-5.4-mini"),
+        ("openai/gpt-5.4", "gpt-5.4"),
+    ],
+)
+def test_openai_supported_model_resolution_normalizes_aliases(raw_model, expected_supported):
+    assert resolve_supported_openai_model(raw_model) == expected_supported
+    assert canonicalize_openai_model_id(raw_model) == expected_supported
 
 
 def test_openai_adapter_parses_text_content_arrays(monkeypatch):

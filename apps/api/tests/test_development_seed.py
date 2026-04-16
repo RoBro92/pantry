@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
@@ -24,6 +24,7 @@ from app.services.development_seed import (
     DEV_MODE_FRESH,
     bootstrap_development_mode,
 )
+from app.services.secrets import decrypt_secret
 from app.services.open_food_facts import OpenFoodFactsUnavailableError
 from app.services.smtp import SMTPTestResult
 from app.services.setup import is_setup_complete
@@ -96,6 +97,7 @@ def test_fresh_development_mode_resets_to_uninitialized_state(db_session):
     assert manifest.mode == DEV_MODE_FRESH
     assert manifest.entry_path == "/setup"
     assert manifest.setup_complete is False
+    assert manifest.bootstrap_warnings == []
     assert manifest.users == {}
     assert is_setup_complete(db_session) is False
     assert db_session.scalar(select(User)) is None
@@ -109,6 +111,7 @@ def test_demo_development_mode_seeds_expected_fixture_state(db_session):
     assert manifest.mode == DEV_MODE_DEMO
     assert manifest.entry_path == "/login"
     assert manifest.setup_complete is True
+    assert manifest.bootstrap_warnings == []
     assert sorted(manifest.users) == ["demoadmin", "demouser"]
     assert manifest.users["demoadmin"]["password"] == "demopass"
     assert manifest.users["demouser"]["password"] == "demopass"
@@ -222,6 +225,151 @@ def test_demo_development_mode_seeds_expected_fixture_state(db_session):
 
     enrichments = db_session.scalars(select(ProductEnrichment)).all()
     assert enrichments == []
+
+
+def test_demo_development_mode_bootstraps_local_ai_and_smtp_config_from_environment(
+    db_session,
+    monkeypatch,
+):
+    def stub_refresh_provider_health(db, config):
+        config.health_status = AI_HEALTH_HEALTHY
+        config.health_checked_at = datetime.now(timezone.utc)
+        config.health_error = None
+        db.add(config)
+        db.commit()
+        db.refresh(config)
+        return AIProviderHealth(
+            is_healthy=True,
+            status=AI_HEALTH_HEALTHY,
+            message=None,
+            models=["gpt-5.4-mini"],
+            capabilities={"supports_structured_output": True},
+        )
+
+    monkeypatch.setattr(
+        "app.services.instance_integration_checks.refresh_provider_health",
+        stub_refresh_provider_health,
+    )
+    monkeypatch.setattr(
+        "app.services.instance_integration_checks.run_smtp_connectivity_test",
+        lambda db: SMTPTestResult(status="passed", ok=True, message="250 OK"),
+    )
+    monkeypatch.setenv("PANTRY_LOCAL_AI_PROVIDER_TYPE", "openai")
+    monkeypatch.setenv("PANTRY_LOCAL_AI_BASE_URL", "https://api.openai.com/v1")
+    monkeypatch.setenv("PANTRY_LOCAL_AI_DEFAULT_MODEL", "gpt-5.4-mini")
+    monkeypatch.setenv("PANTRY_LOCAL_AI_API_KEY", "local-openai-secret")
+    monkeypatch.setenv("PANTRY_LOCAL_SMTP_HOST", "smtp.example.com")
+    monkeypatch.setenv("PANTRY_LOCAL_SMTP_PORT", "587")
+    monkeypatch.setenv("PANTRY_LOCAL_SMTP_USERNAME", "mailer")
+    monkeypatch.setenv("PANTRY_LOCAL_SMTP_PASSWORD", "local-smtp-secret")
+    monkeypatch.setenv("PANTRY_LOCAL_SMTP_FROM_EMAIL", "pantry@example.com")
+    monkeypatch.setenv("PANTRY_LOCAL_SMTP_FROM_NAME", "Pantry Local")
+    monkeypatch.setenv("PANTRY_LOCAL_SMTP_SECURITY", "starttls")
+    monkeypatch.setenv("PANTRY_LOCAL_SMTP_ENABLED", "true")
+    monkeypatch.setenv("PANTRY_LOCAL_SMTP_TEST_RECIPIENT_EMAIL", "test@example.com")
+    monkeypatch.setenv("PANTRY_LOCAL_SMTP_PASSWORD_RESET_ENABLED", "true")
+
+    manifest = bootstrap_development_mode(db_session, mode=DEV_MODE_DEMO, off_client=NoOpenFoodFactsClient())
+
+    assert manifest.mode == DEV_MODE_DEMO
+
+    ai_config = db_session.scalar(select(AIProviderConfig))
+    assert ai_config is not None
+    assert ai_config.provider_type == "openai"
+    assert ai_config.base_url == "https://api.openai.com/v1"
+    assert ai_config.default_model == "gpt-5.4-mini"
+    assert ai_config.encrypted_api_key is not None
+    assert ai_config.encrypted_api_key != "local-openai-secret"
+    assert decrypt_secret(ai_config.encrypted_api_key) == "local-openai-secret"
+    assert ai_config.health_status == "healthy"
+    assert ai_config.health_checked_at is not None
+
+    instance_settings = db_session.scalar(select(InstanceSetting))
+    assert instance_settings is not None
+    assert instance_settings.smtp_host == "smtp.example.com"
+    assert instance_settings.smtp_port == 587
+    assert instance_settings.smtp_username == "mailer"
+    assert instance_settings.encrypted_smtp_password is not None
+    assert instance_settings.encrypted_smtp_password != "local-smtp-secret"
+    assert decrypt_secret(instance_settings.encrypted_smtp_password) == "local-smtp-secret"
+    assert instance_settings.smtp_from_email == "pantry@example.com"
+    assert instance_settings.smtp_from_name == "Pantry Local"
+    assert instance_settings.smtp_test_recipient_email == "test@example.com"
+    assert instance_settings.smtp_security == "starttls"
+    assert instance_settings.smtp_enabled is True
+    assert instance_settings.password_reset_enabled is True
+    assert instance_settings.smtp_last_test_status == "passed"
+    assert instance_settings.smtp_last_tested_at is not None
+    assert instance_settings.smtp_last_test_error is None
+
+
+def test_demo_development_mode_warns_when_local_ai_health_check_fails(db_session, monkeypatch):
+    def stub_refresh_provider_health(db, config):
+        config.health_status = "unhealthy"
+        config.health_checked_at = datetime.now(timezone.utc)
+        config.health_error = "OpenAI health failed."
+        db.add(config)
+        db.commit()
+        db.refresh(config)
+        return AIProviderHealth(
+            is_healthy=False,
+            status="unhealthy",
+            message="OpenAI health failed.",
+            models=[],
+            capabilities={},
+        )
+
+    monkeypatch.setattr(
+        "app.services.instance_integration_checks.refresh_provider_health",
+        stub_refresh_provider_health,
+    )
+    monkeypatch.setenv("PANTRY_LOCAL_AI_PROVIDER_TYPE", "openai")
+    monkeypatch.setenv("PANTRY_LOCAL_AI_API_KEY", "local-openai-secret")
+
+    manifest = bootstrap_development_mode(db_session, mode=DEV_MODE_DEMO, off_client=NoOpenFoodFactsClient())
+
+    assert manifest.mode == DEV_MODE_DEMO
+    assert manifest.setup_complete is True
+    assert manifest.bootstrap_warnings == []
+    ai_config = db_session.scalar(select(AIProviderConfig))
+    assert ai_config is not None
+    assert ai_config.health_status == "unhealthy"
+    assert ai_config.health_error == "OpenAI health failed."
+
+
+def test_demo_development_mode_warns_when_local_smtp_connectivity_test_fails(db_session, monkeypatch):
+    monkeypatch.setattr(
+        "app.services.instance_integration_checks.run_smtp_connectivity_test",
+        lambda db: SMTPTestResult(status="failed", ok=False, message="SMTP auth failed."),
+    )
+    monkeypatch.setenv("PANTRY_LOCAL_SMTP_HOST", "smtp.example.com")
+    monkeypatch.setenv("PANTRY_LOCAL_SMTP_PORT", "587")
+    monkeypatch.setenv("PANTRY_LOCAL_SMTP_USERNAME", "mailer")
+    monkeypatch.setenv("PANTRY_LOCAL_SMTP_PASSWORD", "local-smtp-secret")
+    monkeypatch.setenv("PANTRY_LOCAL_SMTP_FROM_EMAIL", "pantry@example.com")
+    monkeypatch.setenv("PANTRY_LOCAL_SMTP_SECURITY", "starttls")
+
+    manifest = bootstrap_development_mode(db_session, mode=DEV_MODE_DEMO, off_client=NoOpenFoodFactsClient())
+
+    assert manifest.mode == DEV_MODE_DEMO
+    assert manifest.setup_complete is True
+    assert manifest.bootstrap_warnings == []
+    instance_settings = db_session.scalar(select(InstanceSetting))
+    assert instance_settings is not None
+    assert instance_settings.smtp_last_test_status == "failed"
+    assert instance_settings.smtp_last_test_error == "SMTP auth failed."
+
+
+def test_demo_development_mode_warns_when_local_smtp_config_is_incomplete(db_session, monkeypatch):
+    monkeypatch.setenv("PANTRY_LOCAL_SMTP_USERNAME", "mailer")
+
+    manifest = bootstrap_development_mode(db_session, mode=DEV_MODE_DEMO, off_client=NoOpenFoodFactsClient())
+
+    assert manifest.mode == DEV_MODE_DEMO
+    assert manifest.setup_complete is True
+    assert manifest.bootstrap_warnings == []
+    instance_settings = db_session.scalar(select(InstanceSetting))
+    assert instance_settings is None or instance_settings.smtp_host is None
 
 
 def test_demo_development_mode_ignores_open_food_facts_failures(db_session):

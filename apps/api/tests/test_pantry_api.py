@@ -4,6 +4,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 import httpx
+import pytest
 from sqlalchemy import select
 
 from app.domain.ai import AI_PROVIDER_OLLAMA, AI_PROVIDER_OPENAI
@@ -729,6 +730,84 @@ def test_product_intelligence_run_surfaces_friendly_openai_errors(client, db_ses
     assert "https://api.openai.com/v1/chat/completions" not in payload["last_error"]
 
 
+@pytest.mark.parametrize("default_model", ["gpt-4.1-mini", "gpt-5.4-mini", "gpt-5.4"])
+def test_product_intelligence_run_supports_recommended_openai_models(
+    client,
+    db_session,
+    monkeypatch,
+    default_model,
+):
+    model_slug = default_model.replace(".", "-")
+    _, household = create_household_with_role(
+        db_session,
+        email=f"classification-openai-{model_slug}@example.com",
+        household_name=f"Classification {default_model} Household",
+        role_code=HOUSEHOLD_ADMIN_ROLE,
+    )
+    platform_admin = create_platform_admin(
+        db_session,
+        email=f"classification-openai-{model_slug}-admin@example.com",
+        password=PASSWORD,
+        display_name="OpenAI Classification Admin",
+    )
+    upsert_instance_provider_config(
+        db_session,
+        actor=platform_admin,
+        provider_type=AI_PROVIDER_OPENAI,
+        base_url="https://api.openai.com/v1",
+        default_model=default_model,
+        api_key="openai-secret",
+        is_enabled=True,
+    )
+    monkeypatch.setattr(
+        "app.services.product_intelligence_runs.refresh_provider_health",
+        lambda db, config: AIProviderHealth(
+            is_healthy=True,
+            status="healthy",
+            message=None,
+            models=["gpt-4.1-mini", "gpt-5.4-mini", "gpt-5.4"],
+            capabilities={"supports_structured_output": True},
+        ),
+    )
+
+    class SuccessfulOpenAIClassificationAdapter(StubProductIntelligenceAdapter):
+        def generate_structured_output(self, request) -> StructuredCompletionResult:
+            assert request.model == default_model
+            return super().generate_structured_output(request)
+
+    monkeypatch.setattr(
+        "app.services.product_intelligence_runs.build_ai_provider_adapter",
+        lambda runtime: SuccessfulOpenAIClassificationAdapter(),
+    )
+
+    login(client, email=f"classification-openai-{model_slug}@example.com")
+    create_product(
+        client,
+        household.external_id,
+        name="Pasta",
+        default_unit="pack",
+        aliases=[],
+        barcodes=[],
+    )
+
+    queued = client.post(
+        f"/api/households/{household.external_id}/product-intelligence/classify",
+        json={"mode": "all"},
+    )
+    assert queued.status_code == 200
+
+    assert process_next_product_intelligence_run() is True
+
+    run_detail = client.get(
+        f"/api/households/{household.external_id}/product-intelligence/runs/{queued.json()['external_id']}"
+    )
+    assert run_detail.status_code == 200
+    payload = run_detail.json()
+    assert payload["status"] == "completed"
+    assert payload["classified_count"] == 1
+    assert payload["default_model"] == default_model
+
+
 def test_product_intelligence_run_does_not_call_supported_openai_model_unsupported_for_token_param_errors(
     client, db_session, monkeypatch
 ):
@@ -759,7 +838,7 @@ def test_product_intelligence_run_does_not_call_supported_openai_model_unsupport
             is_healthy=True,
             status="healthy",
             message=None,
-            models=["gpt-5.4-mini"],
+            models=["gpt-4.1-mini", "gpt-5.4-mini", "gpt-5.4"],
             capabilities={"supports_structured_output": True},
         ),
     )

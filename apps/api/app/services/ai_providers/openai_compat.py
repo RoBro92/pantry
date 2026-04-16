@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import re
 from typing import Any
 
 import httpx
@@ -14,7 +15,11 @@ OPENAI_PROFILED_MODEL_PREFIXES = (
     "o4-mini",
 )
 OPENAI_RECOMMENDED_MODELS = ("gpt-4.1-mini", "gpt-5.4-mini", "gpt-5.4")
-OPENAI_MAX_COMPLETION_TOKEN_PREFIXES = ("gpt-5",)
+_OPENAI_SUPPORTED_MODEL_MATCH_ORDER = tuple(
+    sorted(OPENAI_RECOMMENDED_MODELS, key=len, reverse=True)
+)
+_OPENAI_MODEL_NAMESPACE_PREFIXES = ("models/", "openai/")
+_OPENAI_VERSION_SUFFIX = re.compile(r"^(?P<base>.+?)(?:[-:](?:latest|preview|[0-9]{4}.*))$")
 
 _OPENAI_UNSUPPORTED_VALIDATION_KEYS = {
     "default",
@@ -35,6 +40,46 @@ _OPENAI_UNSUPPORTED_VALIDATION_KEYS = {
 }
 
 
+def normalize_openai_model_id(model: str | None) -> str:
+    normalized = (model or "").strip().casefold()
+    for prefix in _OPENAI_MODEL_NAMESPACE_PREFIXES:
+        if normalized.startswith(prefix):
+            normalized = normalized[len(prefix) :]
+    return normalized
+
+
+def canonicalize_openai_model_id(model: str | None) -> str:
+    normalized = normalize_openai_model_id(model)
+    return resolve_supported_openai_model(normalized) or normalized
+
+
+def resolve_supported_openai_model(model: str | None) -> str | None:
+    normalized = normalize_openai_model_id(model)
+    if not normalized:
+        return None
+    for supported in _OPENAI_SUPPORTED_MODEL_MATCH_ORDER:
+        if normalized == supported:
+            return supported
+        if normalized.startswith(f"{supported}:"):
+            return supported
+        if normalized.startswith(f"{supported}-"):
+            suffix = normalized[len(supported) + 1 :]
+            if suffix and (suffix[:1].isdigit() or suffix.startswith("latest") or suffix.startswith("preview")):
+                return supported
+    version_match = _OPENAI_VERSION_SUFFIX.match(normalized)
+    if version_match is not None:
+        return resolve_supported_openai_model(version_match.group("base"))
+    return None
+
+
+def is_supported_openai_model(model: str | None) -> bool:
+    return resolve_supported_openai_model(model) is not None
+
+
+def describe_openai_model(model: str | None) -> str:
+    return resolve_supported_openai_model(model) or canonicalize_openai_model_id(model) or "unknown"
+
+
 def normalize_openai_json_schema(schema: dict[str, Any]) -> dict[str, Any]:
     copied = deepcopy(schema)
     normalized = _normalize_schema_node(copied)
@@ -44,15 +89,15 @@ def normalize_openai_json_schema(schema: dict[str, Any]) -> dict[str, Any]:
 
 
 def openai_model_profile(model: str) -> str:
-    normalized = model.strip().lower()
+    normalized = canonicalize_openai_model_id(model)
     if normalized.startswith(OPENAI_PROFILED_MODEL_PREFIXES):
         return "profiled"
     return "unprofiled"
 
 
 def openai_output_token_parameter_name(model: str) -> str:
-    normalized = model.strip().lower()
-    if normalized.startswith(OPENAI_MAX_COMPLETION_TOKEN_PREFIXES):
+    normalized = canonicalize_openai_model_id(model)
+    if normalized.startswith(("gpt-5", "o3", "o4")):
         return "max_completion_tokens"
     return "max_tokens"
 
@@ -68,6 +113,27 @@ def is_openai_output_token_parameter_error(message: str | None) -> bool:
     return (
         ("unsupported parameter" in lowered or "unsupported_parameter" in lowered)
         and ("max_tokens" in lowered or "max_completion_tokens" in lowered)
+    )
+
+
+def openai_completion_token_param(model: str | None) -> str:
+    return openai_output_token_parameter_name(model or "")
+
+
+def build_openai_supported_model_failure_message(model: str | None) -> str:
+    model_name = describe_openai_model(model)
+    return (
+        f"Pantry could not complete a structured AI request with the OpenAI model '{model_name}'. "
+        "Re-run the health check and try again. "
+        f"If it still fails, switch to another Pantry-supported OpenAI model: {recommended_openai_models_text()}."
+    )
+
+
+def build_openai_unsupported_model_message(model: str | None) -> str:
+    model_name = describe_openai_model(model)
+    return (
+        f"The OpenAI model '{model_name}' is not a good fit for Pantry's structured AI workflow. "
+        f"Use one of Pantry's supported OpenAI models: {recommended_openai_models_text()}."
     )
 
 
@@ -142,17 +208,27 @@ def map_openai_http_error(exc: httpx.HTTPStatusError, *, model: str) -> AIProvid
             "unsupported",
         )
     ):
+        if is_supported_openai_model(model):
+            return AIProviderError(
+                build_openai_supported_model_failure_message(model),
+                diagnostic_message=provider_message,
+                category="invalid_request",
+            )
         return AIProviderError(
-            (
-                f"The selected OpenAI model ({model}) is not compatible with Pantry's structured AI "
-                f"requests on Chat Completions. Choose a recommended OpenAI model such as {recommended_models}."
-            ),
+            build_openai_unsupported_model_message(model),
             diagnostic_message=provider_message,
             category="unsupported_model",
         )
     if status_code == 400:
         return AIProviderError(
-            "OpenAI rejected Pantry's structured AI request. Re-run the health check or choose a recommended OpenAI model.",
+            (
+                build_openai_supported_model_failure_message(model)
+                if is_supported_openai_model(model)
+                else (
+                    "OpenAI rejected Pantry's structured AI request. "
+                    f"Re-run the health check or choose a recommended OpenAI model such as {recommended_models}."
+                )
+            ),
             diagnostic_message=provider_message,
             category="invalid_request",
         )

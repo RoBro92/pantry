@@ -66,6 +66,18 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install workspace dependencies
+        run: npm ci
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
       - name: Install API test dependencies
         shell: bash
         run: |
@@ -73,7 +85,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r apps/api/requirements-dev.txt
 
-      - name: Validate release inputs
+      - name: Run enforced release validation gate
         shell: bash
         run: ./infra/scripts/validate-release.sh
 

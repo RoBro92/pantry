@@ -22,7 +22,8 @@ from app.schemas.pantry import (
     ProductIntelligenceStructuredMetadata,
     ProductIntelligenceSummary,
 )
-from app.services.ai_config import get_ai_feature_enabled, resolve_provider_config
+from app.services.ai_config import get_ai_feature_enabled, normalize_provider_model, resolve_provider_config
+from app.services.ai_providers.openai_compat import is_supported_openai_model
 from app.services.ai_providers import StructuredCompletionRequest
 from app.services.ai_runtime import normalize_ai_error
 from app.services.audit import record_audit_event
@@ -105,6 +106,68 @@ class ProductClassificationBatchOutput(BaseModel):
         return [] if value is None else value
 
 
+def build_product_classification_batch_schema() -> dict[str, object]:
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["items"],
+        "properties": {
+            "items": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": [
+                        "product_external_id",
+                        "confidence",
+                        "rationale_short",
+                        "primary_ingredient_type",
+                        "ingredient_families",
+                        "food_category",
+                        "dietary_tags",
+                        "allergen_tags",
+                        "recipe_role_tags",
+                        "substitution_groups",
+                        "pantry_use_tags",
+                        "structured_metadata",
+                    ],
+                    "properties": {
+                        "product_external_id": {"type": "string"},
+                        "confidence": {"type": ["number", "null"]},
+                        "rationale_short": {"type": ["string", "null"]},
+                        "primary_ingredient_type": {"type": ["string", "null"]},
+                        "ingredient_families": {"type": "array", "items": {"type": "string"}},
+                        "food_category": {"type": ["string", "null"]},
+                        "dietary_tags": {"type": "array", "items": {"type": "string"}},
+                        "allergen_tags": {"type": "array", "items": {"type": "string"}},
+                        "recipe_role_tags": {"type": "array", "items": {"type": "string"}},
+                        "substitution_groups": {"type": "array", "items": {"type": "string"}},
+                        "pantry_use_tags": {"type": "array", "items": {"type": "string"}},
+                        "structured_metadata": {
+                            "type": "object",
+                            "additionalProperties": False,
+                            "required": [
+                                "product_format",
+                                "storage_profile",
+                                "cuisine_tags",
+                                "flavour_tags",
+                                "preparation_tags",
+                            ],
+                            "properties": {
+                                "product_format": {"type": ["string", "null"]},
+                                "storage_profile": {"type": ["string", "null"]},
+                                "cuisine_tags": {"type": "array", "items": {"type": "string"}},
+                                "flavour_tags": {"type": "array", "items": {"type": "string"}},
+                                "preparation_tags": {"type": "array", "items": {"type": "string"}},
+                            },
+                        },
+                    },
+                },
+            }
+        },
+    }
+
+
 @dataclass(frozen=True)
 class ProductIntelligenceStaleness:
     is_stale: bool
@@ -148,12 +211,13 @@ def build_product_intelligence_status(
         )
 
     record = resolved.record
+    default_model = normalize_provider_model(record.provider_type, record.default_model)
     if not record.is_enabled:
         return ProductIntelligenceStatusResponse(
             available=False,
             reason="The configured AI provider is disabled.",
             provider_type=record.provider_type,
-            default_model=record.default_model,
+            default_model=default_model,
             health_status=record.health_status,
             counts=counts,
             classification_scope=PRODUCT_INTELLIGENCE_SCOPE,
@@ -163,17 +227,29 @@ def build_product_intelligence_status(
         )
 
     if record.health_status == AI_HEALTH_UNHEALTHY:
+        if record.provider_type == "openai" and is_supported_openai_model(default_model):
+            return ProductIntelligenceStatusResponse(
+                available=True,
+                provider_type=record.provider_type,
+                default_model=default_model,
+                health_status=record.health_status,
+                counts=counts,
+                classification_scope=PRODUCT_INTELLIGENCE_SCOPE,
+                classification_version=PRODUCT_INTELLIGENCE_CLASSIFICATION_VERSION,
+                schema_version=PRODUCT_INTELLIGENCE_SCHEMA_VERSION,
+                latest_run=latest_run,
+            )
         return ProductIntelligenceStatusResponse(
             available=False,
             reason=str(
                 normalize_ai_error(
                     record.health_error or "The configured AI provider is unhealthy.",
                     provider_type=record.provider_type,
-                    model=record.default_model,
+                    model=default_model,
                 )
             ),
             provider_type=record.provider_type,
-            default_model=record.default_model,
+            default_model=default_model,
             health_status=record.health_status,
             counts=counts,
             classification_scope=PRODUCT_INTELLIGENCE_SCOPE,
@@ -185,7 +261,7 @@ def build_product_intelligence_status(
     return ProductIntelligenceStatusResponse(
         available=True,
         provider_type=record.provider_type,
-        default_model=record.default_model,
+        default_model=default_model,
         health_status=record.health_status,
         counts=counts,
         classification_scope=PRODUCT_INTELLIGENCE_SCOPE,

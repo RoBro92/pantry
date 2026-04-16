@@ -9,6 +9,7 @@ from app.domain.ai import (
     AI_PROVIDER_OPENAI,
     canonical_provider_type,
 )
+from app.services.ai_providers.openai_compat import normalize_openai_model_id, resolve_supported_openai_model
 
 PROFILE_TUNED = "supported"
 PROFILE_STANDARD = "provider_default"
@@ -362,7 +363,12 @@ def _normalize_model_id(value: str | None) -> str:
     return (value or "").strip().lower()
 
 
-def _matches_supported_model(candidate: str, supported_model: str) -> bool:
+def _matches_supported_model(candidate: str, supported_model: str, *, provider_type: str | None = None) -> bool:
+    normalized_provider = canonical_provider_type(provider_type)
+    if normalized_provider == AI_PROVIDER_OPENAI:
+        resolved = resolve_supported_openai_model(candidate)
+        return resolved == normalize_openai_model_id(supported_model)
+
     normalized_candidate = _normalize_model_id(candidate)
     normalized_supported = _normalize_model_id(supported_model)
     if not normalized_candidate or not normalized_supported:
@@ -383,7 +389,7 @@ def resolve_product_intelligence_profile(
         return GENERIC_FALLBACK_PROFILE
 
     for supported in get_supported_provider_models(canonical_provider):
-        if _matches_supported_model(model or "", supported.model):
+        if _matches_supported_model(model or "", supported.model, provider_type=canonical_provider):
             return supported.execution_profile
 
     return PROVIDER_FALLBACK_PROFILES.get(canonical_provider, GENERIC_FALLBACK_PROFILE)

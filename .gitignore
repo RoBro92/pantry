@@ -1,5 +1,6 @@
 .DS_Store
 .env
+# Local-only developer env files.
 .env.local
 .env.*.local
 node_modules/

@@ -9,6 +9,13 @@ from pydantic import ValidationError
 
 from app.domain.ai import AI_PROVIDER_OPENAI, canonical_provider_type
 from app.services.ai_providers.errors import AIProviderError
+from app.services.ai_providers.openai_compat import (
+    build_openai_supported_model_failure_message,
+    build_openai_unsupported_model_message,
+    describe_openai_model,
+    is_supported_openai_model,
+    recommended_openai_models_text,
+)
 
 OPENAI_SUPPORTED_MODELS = ("gpt-4.1-mini", "gpt-5.4-mini", "gpt-5.4")
 TRANSIENT_STATUS_CODES = {408, 409, 425, 429, 500, 502, 503, 504}
@@ -48,7 +55,7 @@ class PantryAIError(ValueError):
 def get_provider_support_copy(provider_type: str | None) -> str:
     provider = canonical_provider_type(provider_type)
     if provider == AI_PROVIDER_OPENAI:
-        return "Use one of Pantry's supported OpenAI models: gpt-4.1-mini, gpt-5.4-mini, or gpt-5.4."
+        return f"Use one of Pantry's supported OpenAI models: {recommended_openai_models_text()}."
     return "Pantry currently supports OpenAI for product classification and guided meal suggestions."
 
 
@@ -64,6 +71,45 @@ def normalize_ai_error(
     technical_message = _extract_technical_message(error)
     normalized_provider = canonical_provider_type(provider_type)
     lower_message = technical_message.lower()
+
+    if isinstance(error, AIProviderError):
+        if error.category == "unsupported_model":
+            return PantryAIError(
+                error.user_message,
+                category=AI_ERROR_UNSUPPORTED_MODEL,
+                technical_message=error.diagnostic_message,
+            )
+        if error.category == "rate_limited":
+            return PantryAIError(
+                error.user_message,
+                category=AI_ERROR_RATE_LIMIT,
+                technical_message=error.diagnostic_message,
+                retryable=True,
+            )
+        if error.category == "invalid_configuration":
+            return PantryAIError(
+                error.user_message,
+                category=AI_ERROR_CONFIGURATION,
+                technical_message=error.diagnostic_message,
+            )
+        if error.category in {"upstream_unavailable", "network_error"}:
+            return PantryAIError(
+                error.user_message,
+                category=AI_ERROR_TEMPORARY_UPSTREAM,
+                technical_message=error.diagnostic_message,
+                retryable=True,
+            )
+        if error.category == "invalid_response":
+            return PantryAIError(
+                error.user_message,
+                category=AI_ERROR_INVALID_RESPONSE,
+                technical_message=error.diagnostic_message,
+            )
+        return PantryAIError(
+            error.user_message,
+            category=AI_ERROR_REQUEST_FAILED,
+            technical_message=error.diagnostic_message,
+        )
 
     if normalized_provider and normalized_provider != AI_PROVIDER_OPENAI and any(
         token in lower_message for token in ("not currently supported", "foundation only")
@@ -96,6 +142,16 @@ def normalize_ai_error(
                 technical_message=technical_message,
             )
         if status_code == 404 and any(token in combined for token in ("model", "not found", "does not exist")):
+            if normalized_provider == AI_PROVIDER_OPENAI and is_supported_openai_model(model):
+                return PantryAIError(
+                    (
+                        f"The configured OpenAI account could not access the model "
+                        f"'{describe_openai_model(model)}'. Confirm model access, or use another "
+                        f"Pantry-supported OpenAI model: {recommended_openai_models_text()}."
+                    ),
+                    category=AI_ERROR_CONFIGURATION,
+                    technical_message=technical_message,
+                )
             return PantryAIError(
                 _unsupported_model_message(normalized_provider, model),
                 category=AI_ERROR_UNSUPPORTED_MODEL,
@@ -118,6 +174,12 @@ def normalize_ai_error(
                 "strict",
             )
         ):
+            if normalized_provider == AI_PROVIDER_OPENAI and is_supported_openai_model(model):
+                return PantryAIError(
+                    build_openai_supported_model_failure_message(model),
+                    category=AI_ERROR_REQUEST_FAILED,
+                    technical_message=technical_message,
+                )
             return PantryAIError(
                 _unsupported_model_message(normalized_provider, model),
                 category=AI_ERROR_UNSUPPORTED_MODEL,
@@ -180,7 +242,25 @@ def normalize_ai_error(
             technical_message=technical_message,
         )
 
-    if any(token in lower_message for token in ("model", "not supported", "does not support")):
+    if normalized_provider == AI_PROVIDER_OPENAI and is_supported_openai_model(model) and any(
+        token in lower_message
+        for token in (
+            "structured ai workflow",
+            "structured ai request",
+            "structured ai requests",
+            "structured output",
+            "not compatible with pantry",
+            "not a good fit",
+            "does not support",
+        )
+    ):
+        return PantryAIError(
+            build_openai_supported_model_failure_message(model),
+            category=AI_ERROR_REQUEST_FAILED,
+            technical_message=technical_message,
+        )
+
+    if any(token in lower_message for token in ("unsupported model", "model not found", "model does not exist")):
         return PantryAIError(
             _unsupported_model_message(normalized_provider, model),
             category=AI_ERROR_UNSUPPORTED_MODEL,
@@ -261,8 +341,5 @@ def _looks_like_output_token_parameter_error(message: str) -> bool:
 def _unsupported_model_message(provider_type: str | None, model: str | None) -> str:
     provider_hint = get_provider_support_copy(provider_type)
     if provider_type == AI_PROVIDER_OPENAI and model:
-        return (
-            f"The OpenAI model '{model}' is not a good fit for Pantry's structured AI workflow. "
-            f"{provider_hint}"
-        )
+        return build_openai_unsupported_model_message(model)
     return f"This AI model/provider combination is not currently supported for Pantry's structured AI workflow. {provider_hint}"

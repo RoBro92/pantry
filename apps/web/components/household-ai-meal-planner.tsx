@@ -209,6 +209,14 @@ export function HouseholdAIMealPlanner({
           removed_preference_pills: removedPreferencePills,
         },
       );
+      if (response.suggestions.length === 0) {
+        setResult(null);
+        setSelectedSuggestionId(null);
+        setError(
+          "Pantry could not build a usable meal shortlist from the AI response. Try again or adjust the meal request.",
+        );
+        return;
+      }
       setResult(response);
       setSelectedSuggestionId(response.suggestions[0]?.id ?? null);
     } catch (requestError) {
