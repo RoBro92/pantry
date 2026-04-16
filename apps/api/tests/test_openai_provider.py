@@ -5,7 +5,7 @@ import httpx
 from app.services.ai_providers import AIProviderRuntimeConfig, StructuredCompletionRequest
 from app.services.ai_providers.openai import OpenAIProviderAdapter
 from app.services.ai_providers.openai_compat import normalize_openai_json_schema
-from app.services.product_intelligence import ProductClassificationOutput
+from app.services.product_intelligence import ProductClassificationBatchOutput, ProductClassificationOutput
 from app.schemas.ai import AIProviderMealSuggestionOutput
 
 
@@ -80,12 +80,18 @@ def _assert_strict_openai_schema(node):
 
 def test_openai_schema_normalization_rewrites_product_and_meal_schemas_for_strict_mode():
     product_schema = normalize_openai_json_schema(ProductClassificationOutput.model_json_schema())
+    batch_schema = normalize_openai_json_schema(ProductClassificationBatchOutput.model_json_schema())
     meal_schema = normalize_openai_json_schema(AIProviderMealSuggestionOutput.model_json_schema())
 
     _assert_strict_openai_schema(product_schema)
+    _assert_strict_openai_schema(batch_schema)
     _assert_strict_openai_schema(meal_schema)
 
     assert product_schema["properties"]["confidence"]["type"] == ["number", "null"]
+    ingredient_family_schema = batch_schema["$defs"]["ProductBatchClassificationOutput"]["properties"]["ingredient_families"]
+    assert ingredient_family_schema["anyOf"][0]["type"] == "array"
+    assert ingredient_family_schema["anyOf"][0]["items"]["type"] == "string"
+    assert ingredient_family_schema["anyOf"][1]["type"] == "null"
     assert sorted(product_schema["$defs"]["ProductClassificationMetadataPayload"]["required"]) == [
         "cuisine_tags",
         "flavour_tags",
@@ -151,6 +157,109 @@ def test_openai_adapter_posts_compact_payload_and_normalized_schema_for_structur
     assert payload["messages"][1]["content"] == '{"request":{"pantry_only":true},"context":{"items":["pasta"]}}'
     assert payload["response_format"]["json_schema"]["name"] == "pantry_meal_suggestion"
     _assert_strict_openai_schema(payload["response_format"]["json_schema"]["schema"])
+
+
+def test_openai_adapter_uses_max_completion_tokens_for_gpt5_models(monkeypatch):
+    captured: dict[str, object] = {}
+
+    def handler(method, url, json_body):
+        captured["json"] = json_body
+        return _json_response(
+            method,
+            url,
+            {
+                "id": "chatcmpl_tokens",
+                "choices": [
+                    {
+                        "message": {
+                            "content": '{"items":[]}',
+                        }
+                    }
+                ],
+            },
+        )
+
+    monkeypatch.setattr(
+        "app.services.ai_providers.openai.httpx.Client",
+        lambda *args, **kwargs: FakeHTTPXClient(handler, *args, **kwargs),
+    )
+
+    adapter = OpenAIProviderAdapter(_runtime_config(model="gpt-5.4-mini"))
+    result = adapter.generate_structured_output(
+        StructuredCompletionRequest(
+            model="gpt-5.4-mini",
+            system_prompt="Return valid JSON only.",
+            user_payload={"products": []},
+            output_schema=ProductClassificationBatchOutput.model_json_schema(),
+            max_output_tokens=640,
+        )
+    )
+
+    assert result.parsed_output == {"items": []}
+    payload = captured["json"]
+    assert payload["max_completion_tokens"] == 640
+    assert "max_tokens" not in payload
+
+
+def test_openai_adapter_retries_with_alternate_output_token_parameter(monkeypatch):
+    requests: list[dict[str, object]] = []
+
+    def handler(method, url, json_body):
+        requests.append(json_body)
+        if len(requests) == 1:
+            return _error_response(
+                method,
+                url,
+                400,
+                {
+                    "error": {
+                        "message": (
+                            "Unsupported parameter: 'max_tokens' is not supported with this model. "
+                            "Use 'max_completion_tokens' instead."
+                        ),
+                        "type": "invalid_request_error",
+                        "param": "max_tokens",
+                        "code": "unsupported_parameter",
+                    }
+                },
+            )
+        return _json_response(
+            method,
+            url,
+            {
+                "id": "chatcmpl_retry",
+                "choices": [
+                    {
+                        "message": {
+                            "content": '{"items":[]}',
+                        }
+                    }
+                ],
+            },
+        )
+
+    monkeypatch.setattr(
+        "app.services.ai_providers.openai.httpx.Client",
+        lambda *args, **kwargs: FakeHTTPXClient(handler, *args, **kwargs),
+    )
+
+    adapter = OpenAIProviderAdapter(_runtime_config(model="custom-openai-model"))
+    result = adapter.generate_structured_output(
+        StructuredCompletionRequest(
+            model="custom-openai-model",
+            system_prompt="Return valid JSON only.",
+            user_payload={"products": []},
+            output_schema=ProductClassificationBatchOutput.model_json_schema(),
+            max_output_tokens=320,
+        )
+    )
+
+    assert result.parsed_output == {"items": []}
+    assert len(requests) == 2
+    assert requests[0]["max_tokens"] == 320
+    assert "max_completion_tokens" not in requests[0]
+    assert requests[1]["max_completion_tokens"] == 320
+    assert "max_tokens" not in requests[1]
 
 
 def test_openai_health_check_marks_provider_unhealthy_when_models_list_but_structured_probe_fails(monkeypatch):
