@@ -571,11 +571,64 @@ test("pantry add flow warns when an alias is already used by another product", a
   await addEntryForm.getByLabel("Product name").fill("Soup base");
   await addEntryForm.getByLabel("Storage location").selectOption({ label: "Kitchen / Shelf A" });
   await addEntryForm.getByLabel("Quantity").fill("1");
-  await addEntryForm.getByLabel("Unit").fill("count");
+  await addEntryForm.getByLabel("Unit").selectOption("count");
   await addEntryForm.getByLabel("Aliases").fill("Dry pasta");
   await addEntryForm.getByRole("button", { name: "Add to pantry" }).click();
 
   await expect(page.getByText("Dry pasta is already used by Pasta")).toBeVisible();
+});
+
+test("quick add queues repeated scans and saves the reviewed batch into Pantry", async ({
+  page
+}) => {
+  await loginThroughApi(page, {
+    email: manifest.member_email,
+    password: manifest.password
+  });
+
+  await page.goto(`/app/households/${manifest.household_external_id}`);
+  await page.getByRole("button", { name: "Quick add" }).click();
+
+  const quickAddDialog = page.getByTestId("pantry-quick-add-dialog");
+  await quickAddDialog.getByLabel("Common storage location").selectOption({
+    label: "Kitchen / Shelf A"
+  });
+
+  const captureField = quickAddDialog.getByLabel("Barcode capture");
+  await captureField.fill("00123");
+  await captureField.press("Enter");
+  await captureField.fill("00123");
+  await captureField.press("Enter");
+  await captureField.fill("5555555555555");
+  await captureField.press("Enter");
+
+  const pastaQuickRow = quickAddDialog
+    .locator(".quick-add-item-card")
+    .filter({ hasText: "Barcode 00123" });
+  await expect(pastaQuickRow).toContainText("2 scans");
+  await expect(pastaQuickRow.getByLabel("Product name")).toHaveValue("Pasta");
+  await expect(pastaQuickRow).toContainText("Add lot to existing product");
+
+  const oatsQuickRow = quickAddDialog
+    .locator(".quick-add-item-card")
+    .filter({ hasText: "Barcode 5555555555555" });
+  await oatsQuickRow.getByLabel("Product name").fill("Oats");
+  await oatsQuickRow.getByLabel("Unit").fill("bag");
+
+  await quickAddDialog.getByRole("button", { name: "Add 2 queued items" }).click();
+  await expect(quickAddDialog).toContainText("Added 2 items to Pantry.");
+  await page.getByRole("button", { name: "Close" }).click();
+
+  const pastaRow = page
+    .locator('[data-testid^="product-card-"]')
+    .filter({ hasText: "Pasta" });
+  await expect(pastaRow).toContainText("3 count across 1 lot");
+
+  const oatsRow = page
+    .locator('[data-testid^="product-card-"]')
+    .filter({ hasText: "Oats" });
+  await expect(oatsRow).toContainText("1 bag across 1 lot");
+  await expect(oatsRow).toContainText("Kitchen / Shelf A");
 });
 
 test("shopping reconciliation uses dense rows, full Pantry product creation, and product editing", async ({
@@ -595,7 +648,7 @@ test("shopping reconciliation uses dense rows, full Pantry product creation, and
   await addForm.getByLabel("Note").fill("Extra virgin");
   await addForm.getByRole("button", { name: "Add item" }).click();
 
-  await page.getByRole("button", { name: "Export checklist (.txt)" }).click();
+  await page.getByRole("button", { name: "Export List (.txt)" }).click();
   const pendingTrips = page
     .locator(".content-grid.shopping-columns article.panel")
     .nth(1)
@@ -619,10 +672,11 @@ test("shopping reconciliation uses dense rows, full Pantry product creation, and
   await oliveOilRow.getByRole("button", { name: "Create Pantry product" }).click();
 
   const productForm = page.getByTestId("pantry-product-form");
-  await expect(productForm.getByLabel("Barcode")).toBeVisible();
+  const barcodeInput = productForm.locator('input[name="barcodes"]');
+  await expect(barcodeInput).toBeVisible();
   await expect(productForm.getByLabel("Aliases")).toBeVisible();
   await expect(productForm.getByLabel("Product notes")).toBeVisible();
-  await productForm.getByLabel("Barcode").fill("5060000000001");
+  await barcodeInput.fill("5060000000001");
   await productForm.getByLabel("Aliases").fill("EVOO, extra virgin oil");
   await productForm.getByLabel("Product notes").fill("Use for dressings and low-heat cooking.");
   await productForm.getByLabel("Manual ingredients").fill("Olives");
@@ -683,6 +737,16 @@ test("recipe flow covers create, detail view, and pantry coverage display", asyn
   await expect(page.getByRole("heading", { name: "Weeknight Pasta" })).toBeVisible();
   await expect(page.getByText("Partially covered")).toBeVisible();
   await expect(page.getByText("Tomatoes · 1.000 can")).toBeVisible();
+  await page.getByRole("button", { name: "Add gap to shopping list" }).click();
+  await expect(page.getByText("Added the recipe gap to the active shopping list.")).toBeVisible();
+
+  await page.getByRole("link", { name: "Open shopping list" }).click();
+  const tomatoesShoppingItem = page
+    .locator(".shopping-item-card")
+    .filter({ hasText: "Tomatoes" })
+    .first();
+  await expect(tomatoesShoppingItem).toContainText("recipe gap");
+  await expect(tomatoesShoppingItem).toContainText("Recipe gap · Weeknight Pasta");
 });
 
 test("import flow covers upload, review lines, and confirm into pantry", async ({ page }) => {
