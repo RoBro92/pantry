@@ -967,6 +967,20 @@ export type PantryEntryMutationResponse = {
   alias_conflicts: PantryAliasConflictSummary[];
 };
 
+export type BulkPantryEntryItemResponse = PantryEntryMutationResponse & {
+  request_index: number;
+  request_name: string;
+  request_barcode: string | null;
+  ok: boolean;
+};
+
+export type BulkPantryEntryMutationResponse = {
+  attempted_count: number;
+  added_count: number;
+  failed_count: number;
+  items: BulkPantryEntryItemResponse[];
+};
+
 export type PantryDuplicateCheckResponse = {
   status: string;
   message: string;

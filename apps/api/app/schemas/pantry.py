@@ -52,6 +52,10 @@ class CreatePantryEntryRequest(BaseModel):
     confirmed_enrichment: "ConfirmedProductEnrichmentRequest | None" = None
 
 
+class BulkCreatePantryEntryRequest(BaseModel):
+    entries: list[CreatePantryEntryRequest] = Field(default_factory=list)
+
+
 class ProductNutritionSummaryItem(BaseModel):
     key: str
     label: str
@@ -485,6 +489,20 @@ class PantryEntryMutationResponse(BaseModel):
     duplicate_match_reason: str | None = None
     can_keep_separate_product: bool = False
     alias_conflicts: list[ProductAliasConflictSummary] = Field(default_factory=list)
+
+
+class BulkPantryEntryItemResponse(PantryEntryMutationResponse):
+    request_index: int
+    request_name: str
+    request_barcode: str | None = None
+    ok: bool = False
+
+
+class BulkPantryEntryMutationResponse(BaseModel):
+    attempted_count: int
+    added_count: int
+    failed_count: int
+    items: list[BulkPantryEntryItemResponse] = Field(default_factory=list)
 
 
 class PantryDuplicateCheckResponse(BaseModel):

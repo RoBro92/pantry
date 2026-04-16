@@ -11,6 +11,9 @@ from app.domain.roles import HOUSEHOLD_ADMIN_ROLE
 from app.models.user import User
 from app.schemas.pantry import (
     AddStockLotRequest,
+    BulkCreatePantryEntryRequest,
+    BulkPantryEntryItemResponse,
+    BulkPantryEntryMutationResponse,
     ConfirmedProductEnrichmentRequest,
     CreatePantryEntryRequest,
     CreateLocationGroupRequest,
@@ -81,6 +84,49 @@ router = APIRouter(prefix="/households/{household_external_id}", tags=["pantry"]
 
 def _bad_request(exc: ValueError) -> HTTPException:
     return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+
+def _serialize_product_match(
+    matched_product,
+    *,
+    match_reason: str | None,
+    can_keep_separate_product: bool,
+):
+    if matched_product is None:
+        return None
+
+    return {
+        "external_id": matched_product.external_id,
+        "name": matched_product.name,
+        "default_unit": matched_product.default_unit,
+        "aliases": [alias.name for alias in matched_product.aliases],
+        "match_reason": match_reason,
+        "match_confidence": None,
+        "can_keep_separate_product": can_keep_separate_product,
+    }
+
+
+def _serialize_pantry_entry_mutation(result: dict[str, object]) -> PantryEntryMutationResponse:
+    product = result.get("product")
+    lot = result.get("lot")
+    matched_product = result.get("matched_product")
+    duplicate_match_reason = str(result.get("duplicate_match_reason") or "") or None
+    can_keep_separate_product = bool(result.get("can_keep_separate_product", False))
+
+    return PantryEntryMutationResponse(
+        status=str(result["status"]),
+        message=str(result["message"]),
+        product=serialize_product_summary(product) if product is not None else None,
+        lot=build_stock_lot_summary(lot) if lot is not None else None,
+        matched_product=_serialize_product_match(
+            matched_product,
+            match_reason=duplicate_match_reason,
+            can_keep_separate_product=can_keep_separate_product,
+        ),
+        duplicate_match_reason=duplicate_match_reason,
+        can_keep_separate_product=can_keep_separate_product,
+        alias_conflicts=list(result.get("alias_conflicts", [])),
+    )
 
 
 @router.get("/pantry/overview", response_model=PantryOverviewResponse)
@@ -399,34 +445,66 @@ def post_pantry_entry(
     except ValueError as exc:
         raise _bad_request(exc) from exc
 
-    product = result.get("product")
-    lot = result.get("lot")
-    matched_product = result.get("matched_product")
-    return PantryEntryMutationResponse(
-        status=str(result["status"]),
-        message=str(result["message"]),
-        product=(
-            serialize_product_summary(product)
-            if product is not None
-            else None
-        ),
-        lot=build_stock_lot_summary(lot) if lot is not None else None,
-        matched_product=(
-            {
-                "external_id": matched_product.external_id,
-                "name": matched_product.name,
-                "default_unit": matched_product.default_unit,
-                "aliases": [alias.name for alias in matched_product.aliases],
-                "match_reason": str(result.get("duplicate_match_reason") or ""),
-                "match_confidence": None,
-                "can_keep_separate_product": bool(result.get("can_keep_separate_product", False)),
-            }
-            if matched_product is not None
-            else None
-        ),
-        duplicate_match_reason=str(result.get("duplicate_match_reason") or "") or None,
-        can_keep_separate_product=bool(result.get("can_keep_separate_product", False)),
-        alias_conflicts=list(result.get("alias_conflicts", [])),
+    return _serialize_pantry_entry_mutation(result)
+
+
+@router.post("/pantry/entries/bulk", response_model=BulkPantryEntryMutationResponse)
+def post_bulk_pantry_entries(
+    payload: BulkCreatePantryEntryRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
+    access: HouseholdAccess = Depends(require_household_access()),
+):
+    items: list[BulkPantryEntryItemResponse] = []
+    added_count = 0
+
+    for index, entry in enumerate(payload.entries):
+        try:
+            result = create_or_add_pantry_entry(
+                db,
+                household=access.household,
+                actor=current_user,
+                name=entry.name,
+                quantity=entry.quantity,
+                unit=entry.unit,
+                location_external_id=entry.location_external_id,
+                barcode=entry.barcode,
+                aliases=entry.aliases,
+                product_notes=entry.product_notes,
+                manual_ingredient_tags=entry.manual_ingredient_tags,
+                note=entry.note,
+                purchased_on=entry.purchased_on,
+                expires_on=entry.expires_on,
+                existing_product_external_id=entry.existing_product_external_id,
+                allow_separate_product=entry.allow_separate_product,
+                confirmed_enrichment=entry.confirmed_enrichment,
+                allow_create_product=access.can_administer,
+            )
+            mutation = _serialize_pantry_entry_mutation(result)
+        except ValueError as exc:
+            db.rollback()
+            mutation = PantryEntryMutationResponse(status="error", message=str(exc))
+
+        ok = mutation.status in {"added_to_existing", "created"}
+        if ok:
+            added_count += 1
+
+        items.append(
+            BulkPantryEntryItemResponse(
+                request_index=index,
+                request_name=entry.name,
+                request_barcode=entry.barcode,
+                ok=ok,
+                **mutation.model_dump(mode="python"),
+            )
+        )
+
+    attempted_count = len(payload.entries)
+    return BulkPantryEntryMutationResponse(
+        attempted_count=attempted_count,
+        added_count=added_count,
+        failed_count=attempted_count - added_count,
+        items=items,
     )
 
 

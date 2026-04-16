@@ -608,7 +608,71 @@ test("pantry add flow warns when an alias is already used by another product", a
   await expect(page.getByText("Dry pasta is already used by Pasta")).toBeVisible();
 });
 
-test("quick add queues repeated scans and saves the reviewed batch into Pantry", async ({
+test("scanner dialog falls back cleanly to manual entry when camera access is blocked", async ({
+  page
+}) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "permissions", {
+      configurable: true,
+      value: {
+        query: async () => ({ state: "denied" })
+      }
+    });
+  });
+
+  await loginThroughApi(page, {
+    email: manifest.member_email,
+    password: manifest.password
+  });
+
+  await page.goto(`/app/households/${manifest.household_external_id}`);
+  await page.getByRole("button", { name: "Add product" }).click();
+
+  const addEntryForm = page.getByTestId("pantry-add-entry-form");
+  await addEntryForm.getByLabel("Scan barcode").click();
+
+  const scannerDialog = page.getByTestId("barcode-scanner-dialog");
+  await expect(scannerDialog).toContainText("Camera scanning unavailable");
+  await expect(scannerDialog).toContainText("Camera permission is blocked for this site.");
+
+  const manualField = scannerDialog.getByLabel("Type or scan barcode");
+  await manualField.fill("5060000000001");
+  await manualField.press("Enter");
+
+  await expect(scannerDialog).toBeHidden();
+  await expect(addEntryForm.locator('input[name="barcode"]')).toHaveValue("5060000000001");
+});
+
+test("scanner dialog explains the secure-context requirement when camera scanning is unavailable on HTTP", async ({
+  page
+}) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(window, "isSecureContext", {
+      configurable: true,
+      value: false
+    });
+  });
+
+  await loginThroughApi(page, {
+    email: manifest.member_email,
+    password: manifest.password
+  });
+
+  await page.goto(`/app/households/${manifest.household_external_id}`);
+  await page.getByRole("button", { name: "Add product" }).click();
+
+  const addEntryForm = page.getByTestId("pantry-add-entry-form");
+  await addEntryForm.getByLabel("Scan barcode").click();
+
+  const scannerDialog = page.getByTestId("barcode-scanner-dialog");
+  await expect(scannerDialog).toContainText("Camera scanning unavailable");
+  await expect(scannerDialog).toContainText(
+    "Camera scanning needs HTTPS or localhost in a secure browser context."
+  );
+  await expect(scannerDialog.getByLabel("Type or scan barcode")).toBeVisible();
+});
+
+test("bulk scan queues repeated scans and saves the reviewed batch into Pantry", async ({
   page
 }) => {
   await loginThroughApi(page, {
@@ -617,7 +681,7 @@ test("quick add queues repeated scans and saves the reviewed batch into Pantry",
   });
 
   await page.goto(`/app/households/${manifest.household_external_id}`);
-  await page.getByRole("button", { name: "Quick add" }).click();
+  await page.getByRole("button", { name: "Bulk scan" }).click();
 
   const quickAddDialog = page.getByTestId("pantry-quick-add-dialog");
   await quickAddDialog.getByLabel("Common storage location").selectOption({
@@ -633,19 +697,21 @@ test("quick add queues repeated scans and saves the reviewed batch into Pantry",
   await captureField.press("Enter");
 
   const pastaQuickRow = quickAddDialog
-    .locator(".quick-add-item-card")
-    .filter({ hasText: "Barcode 00123" });
+    .locator(".pantry-bulk-queue-item")
+    .filter({ hasText: "Pasta" });
   await expect(pastaQuickRow).toContainText("2 scans");
-  await expect(pastaQuickRow.getByLabel("Product name")).toHaveValue("Pasta");
-  await expect(pastaQuickRow).toContainText("Add lot to existing product");
+  await expect(quickAddDialog.getByRole("heading", { name: "Review item 1 of 2" })).toBeVisible();
+  await expect(quickAddDialog.getByLabel("Product name")).toHaveValue("Pasta");
+  await expect(quickAddDialog).toContainText("Add lot to existing product");
 
-  const oatsQuickRow = quickAddDialog
-    .locator(".quick-add-item-card")
-    .filter({ hasText: "Barcode 5555555555555" });
-  await oatsQuickRow.getByLabel("Product name").fill("Oats");
-  await oatsQuickRow.getByLabel("Unit").fill("bag");
+  await quickAddDialog.getByRole("button", { name: "Next item" }).click();
+  await expect(quickAddDialog.getByRole("heading", { name: "Review item 2 of 2" })).toBeVisible();
+  await quickAddDialog.getByLabel("Product name").fill("Oats");
+  await quickAddDialog.getByLabel("Unit").fill("bag");
+  await quickAddDialog.getByRole("button", { name: "Review complete" }).click();
+  await expect(quickAddDialog).toContainText("All queued items are reviewed. Save all when you are ready.");
 
-  await quickAddDialog.getByRole("button", { name: "Add 2 queued items" }).click();
+  await quickAddDialog.getByRole("button", { name: "Save all 2 items" }).click();
   await expect(quickAddDialog).toContainText("Added 2 items to Pantry.");
   await page.getByRole("button", { name: "Close" }).click();
 
