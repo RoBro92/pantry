@@ -16,7 +16,7 @@ npm run build:web
 ./infra/scripts/validate-release.sh
 ```
 
-The enforced release gate now lives in `./infra/scripts/validate-release.sh`. It includes source-stack smoke validation and full Playwright E2E before the existing release-oriented checks continue.
+The enforced release gate lives in `./infra/scripts/validate-release.sh`. It includes source-stack smoke validation and full Playwright E2E before the existing release-oriented checks continue.
 
 4. Confirm `VERSION` matches the intended release version.
 5. Create the release tag with:
@@ -26,31 +26,34 @@ The enforced release gate now lives in `./infra/scripts/validate-release.sh`. It
 git push origin vX.Y.Z
 ```
 
-6. Verify the `Release Publish` workflow completed successfully. That workflow now enforces the release validation gate, including smoke validation and Playwright E2E, before publishing images and GitHub Release metadata.
+6. Verify the `Release Publish` workflow completed successfully. That workflow enforces the release validation gate before publishing images and GitHub Release metadata.
 7. Check the released install and update entry points still match the docs:
+   `infra/compose/pantro.yml`, `infra/env/pantro.env.example`, `infra/scripts/install-pantro.sh`, `infra/scripts/update-pantro.sh`, and `infra/scripts/healthcheck-pantro.sh`.
+8. Keep the compatibility aliases healthy during the migration window:
    `infra/compose/pantry.yml`, `infra/env/pantry.env.example`, `infra/scripts/install-pantry.sh`, `infra/scripts/update-pantry.sh`, and `infra/scripts/healthcheck-pantry.sh`.
 
 ## Operator Upgrade Checklist
 
-1. Back up PostgreSQL data and Pantry-managed upload storage before upgrading.
-2. Review the new `infra/env/pantry.env.example` before reusing older environment values.
+1. Back up PostgreSQL data and Pantro-managed upload storage before upgrading.
+2. Review the new `infra/env/pantro.env.example` before reusing older environment values.
 3. Run the explicit operator update flow:
 
 ```bash
-./update-pantry.sh
+./update-pantro.sh
 ```
 
 4. Run the bundled health check:
 
 ```bash
-./healthcheck-pantry.sh --install-dir /opt/pantry
+./healthcheck-pantro.sh --install-dir /opt/pantro
 ```
 
 5. Confirm the browser UI, API health endpoint, worker status, and any optional integrations you rely on.
 6. Treat restore compatibility as stricter than normal upgrades and verify backup format support before using older backup bundles on a newer build.
+7. If your install still uses Pantry-named asset paths, the legacy `update-pantry.sh` and `healthcheck-pantry.sh` aliases remain supported during this migration.
 
 ## Notes
 
-- Pantry is self-hosted and operator-managed in this public repository
-- Pantry does not auto-update
+- Pantro is self-hosted and operator-managed in this public repository
+- Pantro does not auto-update
 - AI features remain optional and may require separate provider validation after an upgrade

@@ -1,8 +1,18 @@
 # Deployment
 
-Pantry’s supported public deployment path is a self hosted Docker installation using released images and repository hosted deployment assets. The public repository is self-hosted and operator-managed only: there is no hosted control plane and no auto-update service.
+Pantro’s supported public deployment path is a self hosted Docker installation using released images and repository hosted deployment assets. The public repository is self-hosted and operator-managed only: there is no hosted control plane and no auto-update service.
 
 ## Public Deployment Files
+
+Canonical files:
+
+- `infra/compose/pantro.yml`
+- `infra/env/pantro.env.example`
+- `infra/scripts/install-pantro.sh`
+- `infra/scripts/update-pantro.sh`
+- `infra/scripts/healthcheck-pantro.sh`
+
+Compatibility aliases kept for existing installs:
 
 - `infra/compose/pantry.yml`
 - `infra/env/pantry.env.example`
@@ -15,7 +25,7 @@ Pantry’s supported public deployment path is a self hosted Docker installation
 For a supported Debian host:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/RoBro92/pantry/main/infra/scripts/install-pantry.sh | bash
+curl -fsSL https://raw.githubusercontent.com/RoBro92/pantry/main/infra/scripts/install-pantro.sh | bash
 ```
 
 The installer:
@@ -23,7 +33,7 @@ The installer:
 - checks Debian compatibility and network access
 - installs Docker Engine and the Compose plugin when needed
 - creates the install and data directories
-- downloads `pantry.yml`, `pantry.env.example`, and helper scripts
+- downloads `pantro.yml`, `pantro.env.example`, and the legacy alias files
 - writes `.env` and generates required secrets
 - pulls images, runs migrations, starts the stack, and runs a health check
 
@@ -34,18 +44,18 @@ When the install completes, open `http://<your-ip>:3000/`.
 1. Download the release assets for the version you want to run.
 
 ```bash
-export PANTRY_VERSION=0.1.0
-mkdir -p /opt/pantry
-cd /opt/pantry
-curl -fsSLO "https://raw.githubusercontent.com/RoBro92/pantry/v${PANTRY_VERSION}/infra/compose/pantry.yml"
-curl -fsSLo pantry.env.example "https://raw.githubusercontent.com/RoBro92/pantry/v${PANTRY_VERSION}/infra/env/pantry.env.example"
-cp pantry.env.example .env
+export PANTRO_VERSION=0.2.0
+mkdir -p /opt/pantro
+cd /opt/pantro
+curl -fsSLO "https://raw.githubusercontent.com/RoBro92/pantry/v${PANTRO_VERSION}/infra/compose/pantro.yml"
+curl -fsSLo pantro.env.example "https://raw.githubusercontent.com/RoBro92/pantry/v${PANTRO_VERSION}/infra/env/pantro.env.example"
+cp pantro.env.example .env
 ```
 
 2. Edit `.env` and set at least:
 
-- `PANTRY_VERSION`
-- `PANTRY_IMAGE_NAMESPACE`
+- `PANTRO_VERSION`
+- `PANTRO_IMAGE_NAMESPACE`
 - `WEB_APP_URL`
 - `API_BASE_URL`
 - `PUBLIC_BROWSER_BASE_URL`
@@ -58,44 +68,46 @@ Browser-side web requests use the web container's same-origin `/api/*` proxy in 
 3. Validate and start the stack.
 
 ```bash
-docker compose --env-file .env -f pantry.yml config
-docker compose --env-file .env -f pantry.yml pull
-docker compose --env-file .env -f pantry.yml up -d postgres redis
-docker compose --env-file .env -f pantry.yml --profile manual run --rm migrate
-docker compose --env-file .env -f pantry.yml up -d
+docker compose --env-file .env -f pantro.yml config
+docker compose --env-file .env -f pantro.yml pull
+docker compose --env-file .env -f pantro.yml up -d postgres redis
+docker compose --env-file .env -f pantro.yml --profile manual run --rm migrate
+docker compose --env-file .env -f pantro.yml up -d
 ```
 
 4. Verify the installation.
 
 ```bash
-./healthcheck-pantry.sh --install-dir /opt/pantry
+./healthcheck-pantro.sh --install-dir /opt/pantro
 ```
 
 Then complete first-run setup in the browser.
 
 ## Updating
 
-Pantry updates are explicit operator actions.
+Pantro updates are explicit operator actions.
 
 Update to the latest release:
 
 ```bash
-./update-pantry.sh
+./update-pantro.sh
 ```
 
 Pin a specific release:
 
 ```bash
-./update-pantry.sh --version 0.1.0
+./update-pantro.sh --version 0.2.0
 ```
 
-Keep your existing `pantry.yml` and `pantry.env.example` if you manage them manually:
+Keep your existing `pantro.yml` and `pantro.env.example` if you manage them manually:
 
 ```bash
-./update-pantry.sh --skip-assets
+./update-pantro.sh --skip-assets
 ```
 
-The update script refreshes release assets by default, updates `PANTRY_VERSION`, pulls images, runs migrations, restarts services, and runs the bundled health check.
+If you are upgrading an older Pantry-named install, `./update-pantry.sh`, `pantry.yml`, and `pantry.env.example` remain supported as compatibility aliases for this migration.
+
+The update script refreshes release assets by default, updates `PANTRO_VERSION`, pulls images, runs migrations, restarts services, and runs the bundled health check.
 
 For a concise maintainer and operator checklist, see [docs/RELEASE_RUNBOOK.md](RELEASE_RUNBOOK.md).
 
@@ -104,21 +116,21 @@ For a concise maintainer and operator checklist, see [docs/RELEASE_RUNBOOK.md](R
 Bootstrap a platform admin from the API container:
 
 ```bash
-docker compose --env-file .env -f pantry.yml run --rm api python -m app.cli bootstrap-platform-admin \
+docker compose --env-file .env -f pantro.yml run --rm api python -m app.cli bootstrap-platform-admin \
   --email admin@example.com \
-  --display-name "Pantry Admin"
+  --display-name "Pantro Admin"
 ```
 
 Reset a password from the API container:
 
 ```bash
-docker compose --env-file .env -f pantry.yml run --rm api python -m app.cli reset-password \
+docker compose --env-file .env -f pantro.yml run --rm api python -m app.cli reset-password \
   --email admin@example.com
 ```
 
 ## Restore Notes
 
-- Restore currently accepts Pantry backup bundle JSON files only
+- Restore currently accepts Pantro backup bundle JSON files only
 - Restore is validated before application and remains an explicit operator action
 - Uploaded restore bundles are staged under `BACKUP_STORAGE_ROOT`
 - Admin household restore creates a new household only and does not merge into an existing household
