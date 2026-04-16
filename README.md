@@ -7,6 +7,7 @@ It is built for local operation rather than hosted sync. This public repository 
 ## What Pantry Includes
 
 - Pantry inventory with households, rooms, storage locations, stock lots, and expiry tracking
+- Bulk barcode entry with camera, USB wedge scanners, and manual fallback, plus sequential review before saving to Pantry
 - Shopping lists with review and reconciliation flows
 - Recipes with pantry coverage summaries
 - Optional Open Food Facts lookup for product enrichment

@@ -127,6 +127,15 @@ def create_pantry_entry(client, household_external_id: str, **payload) -> dict:
     return response.json()
 
 
+def create_bulk_pantry_entries(client, household_external_id: str, entries: list[dict]) -> dict:
+    response = client.post(
+        f"/api/households/{household_external_id}/pantry/entries/bulk",
+        json={"entries": entries},
+    )
+    assert response.status_code == 200
+    return response.json()
+
+
 def build_enrichment_candidate(
     *,
     source_product_id: str,
@@ -2025,6 +2034,82 @@ def test_pantry_entry_reports_alias_conflicts(client, db_session):
             "product_name": "Pasta",
         }
     ]
+
+
+def test_bulk_pantry_entries_mix_successful_adds_and_duplicate_review(client, db_session):
+    _, household = create_household_with_role(
+        db_session,
+        email="bulk-entry@example.com",
+        household_name="Bulk Entry Household",
+        role_code=HOUSEHOLD_ADMIN_ROLE,
+    )
+    login(client, email="bulk-entry@example.com")
+
+    room = create_location_group(client, household.external_id, "Kitchen")
+    shelf = create_location(client, household.external_id, room["external_id"], "Shelf")
+
+    first_entry = create_pantry_entry(
+        client,
+        household.external_id,
+        name="Pasta",
+        quantity="1.000",
+        unit="count",
+        location_external_id=shelf["external_id"],
+        barcode="00123",
+    )
+    assert first_entry["status"] == "created"
+
+    batch = create_bulk_pantry_entries(
+        client,
+        household.external_id,
+        [
+            {
+                "name": "Pasta",
+                "quantity": "2.000",
+                "unit": "count",
+                "location_external_id": shelf["external_id"],
+                "barcode": "00123",
+            },
+            {
+                "name": "Oats",
+                "quantity": "1.000",
+                "unit": "bag",
+                "location_external_id": shelf["external_id"],
+                "barcode": "5555555555555",
+            },
+            {
+                "name": "Pasta",
+                "quantity": "2.000",
+                "unit": "count",
+                "location_external_id": shelf["external_id"],
+                "barcode": "00123",
+                "existing_product_external_id": first_entry["product"]["external_id"],
+            },
+        ],
+    )
+
+    assert batch["attempted_count"] == 3
+    assert batch["added_count"] == 2
+    assert batch["failed_count"] == 1
+    assert [item["status"] for item in batch["items"]] == [
+        "existing_product",
+        "created",
+        "added_to_existing",
+    ]
+    assert batch["items"][0]["ok"] is False
+    assert batch["items"][0]["matched_product"]["name"] == "Pasta"
+    assert batch["items"][1]["ok"] is True
+    assert batch["items"][1]["product"]["name"] == "Oats"
+    assert batch["items"][2]["ok"] is True
+    assert batch["items"][2]["product"]["name"] == "Pasta"
+
+    overview = client.get(f"/api/households/{household.external_id}/pantry/overview")
+    assert overview.status_code == 200
+    products = overview.json()["products"]
+    pasta_payload = next(product for product in products if product["product_name"] == "Pasta")
+    oats_payload = next(product for product in products if product["product_name"] == "Oats")
+    assert pasta_payload["total_quantity"] == "3.000"
+    assert oats_payload["total_quantity"] == "1.000"
 
 
 def test_product_enrichment_preview_and_confirmed_persistence(client, db_session, monkeypatch):
