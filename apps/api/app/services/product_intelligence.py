@@ -43,6 +43,14 @@ PRODUCT_INTELLIGENCE_SOURCE_PROVIDER_DERIVED = "pantry_derived"
 PRODUCT_INTELLIGENCE_EXECUTION_FULL_AI = "full_ai"
 PRODUCT_INTELLIGENCE_EXECUTION_AI_GAP_FILL = "ai_gap_fill"
 PRODUCT_INTELLIGENCE_EXECUTION_DERIVED_ONLY = "derived_only"
+PRODUCT_INTELLIGENCE_PATH_DERIVED_ONLY = PRODUCT_INTELLIGENCE_EXECUTION_DERIVED_ONLY
+PRODUCT_INTELLIGENCE_PATH_AI_GAP_FILL = PRODUCT_INTELLIGENCE_EXECUTION_AI_GAP_FILL
+PRODUCT_INTELLIGENCE_PATH_FULL_AI = PRODUCT_INTELLIGENCE_EXECUTION_FULL_AI
+PRODUCT_INTELLIGENCE_RUN_PATHS = {
+    PRODUCT_INTELLIGENCE_PATH_DERIVED_ONLY,
+    PRODUCT_INTELLIGENCE_PATH_AI_GAP_FILL,
+    PRODUCT_INTELLIGENCE_PATH_FULL_AI,
+}
 
 STRONG_OFF_MATCH_STATUSES = frozenset({"barcode_exact"})
 SEMANTIC_GAP_FILL_KEYWORDS = frozenset(
@@ -319,6 +327,16 @@ class ProductIntelligenceExecutionPlan:
     ai_payload: dict[str, object] | None = None
     derived_output: ProductClassificationOutput | None = None
 
+    @property
+    def path(self) -> str:
+        return self.strategy
+
+    @property
+    def approx_input_tokens(self) -> int:
+        if self.strategy == PRODUCT_INTELLIGENCE_EXECUTION_DERIVED_ONLY:
+            return 0
+        return estimate_product_intelligence_tokens(self.ai_payload or self.source_payload)
+
 
 def get_primary_product_intelligence(product: Product) -> ProductIntelligence | None:
     return product.intelligence_records[0] if product.intelligence_records else None
@@ -529,9 +547,16 @@ def build_product_intelligence_execution_plan(
     *,
     provider_type: str | None = None,
     model: str | None = None,
-    trim_level: int,
-    include_external_id: bool,
+    trim_level: int | None = None,
+    include_external_id: bool = False,
 ) -> ProductIntelligenceExecutionPlan:
+    if trim_level is None:
+        trim_level = get_product_intelligence_runtime_trim_level(
+            product,
+            provider_type=provider_type,
+            model=model,
+        )
+
     enrichment = get_primary_enrichment(product)
     product_payload = _build_product_base_runtime_payload(
         product,
@@ -638,6 +663,47 @@ def build_product_intelligence_execution_plan(
             reason="semantic_gap_fill",
         ),
         derived_output=derived_base,
+    )
+
+
+def merge_product_intelligence_output(
+    ai_output: ProductClassificationOutput,
+    *,
+    seed_output: ProductClassificationOutput | None,
+) -> ProductClassificationOutput:
+    if seed_output is None:
+        return ai_output
+    merged_metadata = ProductClassificationMetadataPayload(
+        product_format=seed_output.structured_metadata.product_format or ai_output.structured_metadata.product_format,
+        storage_profile=seed_output.structured_metadata.storage_profile or ai_output.structured_metadata.storage_profile,
+        cuisine_tags=(
+            list(seed_output.structured_metadata.cuisine_tags)
+            if seed_output.structured_metadata.cuisine_tags
+            else list(ai_output.structured_metadata.cuisine_tags)
+        ),
+        flavour_tags=(
+            list(seed_output.structured_metadata.flavour_tags)
+            if seed_output.structured_metadata.flavour_tags
+            else list(ai_output.structured_metadata.flavour_tags)
+        ),
+        preparation_tags=(
+            list(seed_output.structured_metadata.preparation_tags)
+            if seed_output.structured_metadata.preparation_tags
+            else list(ai_output.structured_metadata.preparation_tags)
+        ),
+    )
+    return ProductClassificationOutput(
+        confidence=seed_output.confidence if seed_output.confidence is not None else ai_output.confidence,
+        rationale_short=seed_output.rationale_short or ai_output.rationale_short,
+        primary_ingredient_type=seed_output.primary_ingredient_type or ai_output.primary_ingredient_type,
+        ingredient_families=list(seed_output.ingredient_families or ai_output.ingredient_families),
+        food_category=seed_output.food_category or ai_output.food_category,
+        dietary_tags=list(seed_output.dietary_tags or ai_output.dietary_tags),
+        allergen_tags=list(seed_output.allergen_tags or ai_output.allergen_tags),
+        recipe_role_tags=list(seed_output.recipe_role_tags or ai_output.recipe_role_tags),
+        substitution_groups=list(seed_output.substitution_groups or ai_output.substitution_groups),
+        pantry_use_tags=list(seed_output.pantry_use_tags or ai_output.pantry_use_tags),
+        structured_metadata=merged_metadata,
     )
 
 
@@ -1075,8 +1141,6 @@ def _safe_lookup_tokens(value: str | None) -> list[str]:
     if value is None or not value.strip():
         return []
     return lookup_tokens(value)
-
-
 def estimate_product_intelligence_tokens(payload: object) -> int:
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
     return max(math.ceil(len(encoded) / 4), 1)

@@ -19,6 +19,8 @@ from app.models.product_intelligence import ProductIntelligence
 from app.models.product_intelligence_run import ProductIntelligenceRun
 from app.models.user import User
 from app.schemas.pantry import (
+    ProductIntelligenceRunBatchDiagnostics,
+    ProductIntelligenceRunDiagnostics,
     ProductIntelligenceRunEvent,
     ProductIntelligenceRunItem,
     ProductIntelligenceRunRequest,
@@ -35,6 +37,9 @@ from app.services.product_intelligence import (
     PRODUCT_INTELLIGENCE_EXECUTION_FULL_AI,
     PRODUCT_INTELLIGENCE_BASE_PROMPT_TOKEN_OVERHEAD,
     PRODUCT_INTELLIGENCE_CLASSIFICATION_VERSION,
+    PRODUCT_INTELLIGENCE_PATH_AI_GAP_FILL,
+    PRODUCT_INTELLIGENCE_PATH_DERIVED_ONLY,
+    PRODUCT_INTELLIGENCE_PATH_FULL_AI,
     PRODUCT_INTELLIGENCE_SCHEMA_VERSION,
     PRODUCT_INTELLIGENCE_SCOPE,
     PRODUCT_INTELLIGENCE_SOURCE_PROVIDER_DERIVED,
@@ -80,8 +85,11 @@ RUN_EVENT_LIMIT = 24
 @dataclass(frozen=True)
 class PreparedClassificationCandidate:
     product: Product
+    path: str
+    trim_level: int
     payload: dict[str, object]
     approx_input_tokens: int
+    approx_output_tokens: int
     staleness: ProductIntelligenceStaleness
     existing_intelligence: ProductIntelligence | None
     execution_strategy: str = PRODUCT_INTELLIGENCE_EXECUTION_FULL_AI
@@ -132,6 +140,7 @@ def queue_product_intelligence_run(
         target_product_count=len(products),
         items_payload=[],
         events_payload=[],
+        diagnostics_payload=ProductIntelligenceRunDiagnostics().model_dump(mode="json"),
     )
     db.add(run)
     db.flush()
@@ -216,6 +225,7 @@ def serialize_product_intelligence_run(run: ProductIntelligenceRun | None) -> Pr
         completed_batch_count=run.completed_batch_count,
         last_error=run.last_error,
         requested_by_display=requested_by_display,
+        diagnostics=_load_run_diagnostics(run),
         items=[ProductIntelligenceRunItem.model_validate(item) for item in (run.items_payload or [])],
         events=[ProductIntelligenceRunEvent.model_validate(item) for item in (run.events_payload or [])],
         created_at=run.created_at,
@@ -297,8 +307,8 @@ def _process_claimed_run(db: Session, run: ProductIntelligenceRun) -> None:
     processed_ids = _processed_product_ids(run)
     candidates: list[PreparedClassificationCandidate] = []
     newly_skipped = 0
-    newly_derived = 0
     missing_products = 0
+    derived_only_count = 0
 
     for external_id in run.target_product_external_ids:
         if external_id in processed_ids:
@@ -340,7 +350,20 @@ def _process_claimed_run(db: Session, run: ProductIntelligenceRun) -> None:
             profile=profile,
             model=effective_model,
         )
-        if plan.strategy == PRODUCT_INTELLIGENCE_EXECUTION_DERIVED_ONLY and plan.derived_output is not None:
+        trim_level = get_product_intelligence_runtime_trim_level(
+            product,
+            provider_type=profile.provider_type,
+            model=effective_model,
+        )
+        path = plan.strategy
+        approx_input_tokens = 0
+        approx_output_tokens = 0
+        if path != PRODUCT_INTELLIGENCE_EXECUTION_DERIVED_ONLY:
+            approx_input_tokens = estimate_product_intelligence_tokens(plan.ai_payload or plan.source_payload)
+            approx_output_tokens = _estimate_output_tokens(profile, execution_strategy=path)
+
+        _record_candidate_diagnostics(run, path=path, trim_level=trim_level)
+        if path == PRODUCT_INTELLIGENCE_EXECUTION_DERIVED_ONLY and plan.derived_output is not None:
             apply_product_intelligence_classification(
                 db,
                 household=run.household,
@@ -359,20 +382,28 @@ def _process_claimed_run(db: Session, run: ProductIntelligenceRun) -> None:
                     product_external_id=refreshed.external_id,
                     product_name=refreshed.name,
                     status="reclassified" if intelligence is not None else "classified",
+                    path=path,
                     message="Derived product intelligence saved from OFF facts.",
                     confidence=refreshed_intelligence.confidence if refreshed_intelligence is not None else None,
                     stale_before_run=staleness.is_stale,
+                    trim_level=trim_level,
+                    approx_input_tokens=0,
+                    approx_output_tokens=0,
+                    approx_total_tokens=0,
                     intelligence=serialize_product_intelligence(refreshed_intelligence, product=refreshed),
                 ),
             )
-            newly_derived += 1
+            derived_only_count += 1
             continue
 
         candidates.append(
             PreparedClassificationCandidate(
                 product=product,
+                path=path,
+                trim_level=trim_level,
                 payload=plan.ai_payload or plan.source_payload,
-                approx_input_tokens=estimate_product_intelligence_tokens(plan.ai_payload or plan.source_payload),
+                approx_input_tokens=approx_input_tokens,
+                approx_output_tokens=approx_output_tokens,
                 staleness=staleness,
                 existing_intelligence=intelligence,
                 execution_strategy=plan.strategy,
@@ -380,12 +411,12 @@ def _process_claimed_run(db: Session, run: ProductIntelligenceRun) -> None:
             )
         )
 
-    if newly_skipped or newly_derived or missing_products:
+    if newly_skipped or missing_products or derived_only_count:
         message_parts: list[str] = []
+        if derived_only_count:
+            message_parts.append(f"Derived {derived_only_count} high-confidence OFF product(s) without AI.")
         if newly_skipped:
             message_parts.append(f"Skipped {newly_skipped} already-classified product(s).")
-        if newly_derived:
-            message_parts.append(f"Derived {newly_derived} high-confidence OFF product(s) without AI.")
         if missing_products:
             message_parts.append(f"Marked {missing_products} missing product(s) as failed.")
         _append_run_event(run, level="info", message=" ".join(message_parts))
@@ -397,6 +428,10 @@ def _process_claimed_run(db: Session, run: ProductIntelligenceRun) -> None:
 
     batches = _build_batches(candidates, profile=profile)
     run.batch_count = run.completed_batch_count + len(batches)
+    diagnostics = _load_run_diagnostics(run)
+    diagnostics.ai_batch_count = run.batch_count
+    diagnostics.completed_ai_batch_count = run.completed_batch_count
+    _store_run_diagnostics(run, diagnostics)
     db.add(run)
     db.commit()
     run = _load_run_by_id(db, run_id=run.id) or run
@@ -500,12 +535,14 @@ def _process_batch(
     actor: User | None,
     profile: ProductIntelligenceExecutionProfile,
 ) -> None:
+    batch_path = batch[0].path if batch else PRODUCT_INTELLIGENCE_PATH_FULL_AI
     parsed_items = _execute_batch_with_retry(
         adapter=adapter,
         provider_type=provider_type,
         model=model,
         batch=batch,
         batch_index=batch_index,
+        batch_path=batch_path,
         profile=profile,
         run=run,
     )
@@ -519,22 +556,28 @@ def _process_batch(
                     product_external_id=candidate.product.external_id,
                     product_name=candidate.product.name,
                     status="failed",
+                    path=candidate.path,
                     message="Provider response omitted this product.",
                     stale_before_run=candidate.staleness.is_stale,
                     batch_index=batch_index,
+                    trim_level=candidate.trim_level,
+                    approx_input_tokens=candidate.approx_input_tokens,
+                    approx_output_tokens=candidate.approx_output_tokens,
+                    approx_total_tokens=candidate.approx_input_tokens + candidate.approx_output_tokens,
                 ),
             )
             continue
 
-        parsed = ProductClassificationOutput.model_validate(
+        ai_output = ProductClassificationOutput.model_validate(
             batch_output.model_dump(exclude={"product_external_id"})
         )
+        parsed = ai_output
         if (
             candidate.execution_strategy == PRODUCT_INTELLIGENCE_EXECUTION_AI_GAP_FILL
             and candidate.derived_output is not None
         ):
             parsed = merge_gap_fill_product_classification(
-                parsed,
+                ai_output,
                 derived_output=candidate.derived_output,
             )
         apply_product_intelligence_classification(
@@ -555,19 +598,32 @@ def _process_batch(
                 product_external_id=refreshed.external_id,
                 product_name=refreshed.name,
                 status="reclassified" if candidate.existing_intelligence is not None else "classified",
-                message="AI product intelligence saved.",
+                path=candidate.path,
+                message=(
+                    "AI gap fill saved structured intelligence."
+                    if candidate.path == PRODUCT_INTELLIGENCE_PATH_AI_GAP_FILL
+                    else "AI product intelligence saved."
+                ),
                 confidence=refreshed_intelligence.confidence if refreshed_intelligence is not None else None,
                 stale_before_run=candidate.staleness.is_stale,
                 batch_index=batch_index,
+                trim_level=candidate.trim_level,
+                approx_input_tokens=candidate.approx_input_tokens,
+                approx_output_tokens=candidate.approx_output_tokens,
+                approx_total_tokens=candidate.approx_input_tokens + candidate.approx_output_tokens,
                 intelligence=serialize_product_intelligence(refreshed_intelligence, product=refreshed),
             ),
         )
 
     run.completed_batch_count += 1
+    _record_batch_completion(run, batch=batch, batch_index=batch_index)
     _append_run_event(
         run,
         level="info",
-        message=f"Completed batch {batch_index} with {len(batch)} product(s).",
+        message=(
+            f"Completed batch {batch_index} with {len(batch)} product(s) via {batch_path}. "
+            f"Approx {sum(candidate.approx_input_tokens for candidate in batch)} input tokens."
+        ),
         batch_index=batch_index,
     )
     _refresh_run_counters(run)
@@ -584,31 +640,47 @@ def _execute_batch_with_retry(
     model: str,
     batch: list[PreparedClassificationCandidate],
     batch_index: int,
+    batch_path: str,
     profile: ProductIntelligenceExecutionProfile,
     run: ProductIntelligenceRun,
 ) -> list[ProductBatchClassificationOutput]:
     attempts = 0
+    batch_output_token_budget = min(
+        profile.max_output_tokens,
+        max(sum(candidate.approx_output_tokens for candidate in batch) + 80, 120),
+    )
     while True:
         attempts += 1
         try:
+            system_prompt = (
+                "You classify pantry products into structured recipe-matching metadata. "
+                "Only use the supplied evidence for each product. "
+                "Prefer empty values over guesses. "
+                "Keep rationale_short under 160 characters. "
+                "Use concise human-readable tags and categories. "
+                "Return valid JSON only."
+            )
+            task_description = "Classify pantry products for recipe matching and pantry suggestions."
+            if batch_path == PRODUCT_INTELLIGENCE_PATH_AI_GAP_FILL:
+                system_prompt = (
+                    "You fill only the remaining semantic gaps in pantry product classification. "
+                    "Keep supplied known facts aligned. "
+                    "Only use the supplied evidence. "
+                    "Prefer empty values over guesses. "
+                    "Keep rationale_short under 160 characters. "
+                    "Use concise human-readable tags and categories. "
+                    "Return valid JSON only."
+                )
+                task_description = (
+                    "Fill the remaining semantic classification gaps for these pantry products "
+                    "while preserving the supplied Pantry facts."
+                )
             completion = adapter.generate_structured_output(
                 StructuredCompletionRequest(
                     model=model,
-                    system_prompt=(
-                        "You classify pantry products into structured recipe-matching metadata. "
-                        "Only use the supplied evidence for each product. "
-                        "Each product includes a classification_strategy. "
-                        "When classification_strategy is ai_gap_fill, trust derived_facts for factual fields "
-                        "such as category, ingredient families, dietary tags, allergen tags, product format, "
-                        "and storage profile. Use AI mainly for recipe roles, substitution groups, pantry uses, "
-                        "cuisine, flavour, preparation, confidence, and a short rationale. "
-                        "Prefer empty values over guesses. "
-                        "Keep rationale_short under 160 characters. "
-                        "Use concise human-readable tags and categories. "
-                        "Return valid JSON only."
-                    ),
+                    system_prompt=system_prompt,
                     user_payload={
-                        "task": "Classify pantry products for recipe matching and pantry suggestions.",
+                        "task": task_description,
                         "classification_scope": PRODUCT_INTELLIGENCE_SCOPE,
                         "classification_version": PRODUCT_INTELLIGENCE_CLASSIFICATION_VERSION,
                         "schema_version": PRODUCT_INTELLIGENCE_SCHEMA_VERSION,
@@ -644,10 +716,10 @@ def _execute_batch_with_retry(
                             ],
                     },
                     "products": [candidate.payload for candidate in batch],
-                },
+                    },
                     output_schema=build_product_classification_batch_schema(),
                     temperature=0.1,
-                    max_output_tokens=profile.max_output_tokens,
+                    max_output_tokens=batch_output_token_budget,
                     timeout_seconds=profile.request_timeout_seconds,
                 )
             )
@@ -668,6 +740,7 @@ def _execute_batch_with_retry(
                 provider_type=provider_type,
                 model=model,
             )
+            _record_retry_event(run, batch_index=batch_index, batch_path=batch_path, exc=exc)
             if attempts >= profile.retry.max_attempts:
                 raise TransientProviderError(
                     f"Batch {batch_index} failed after {attempts} attempt(s). {ai_error}"
@@ -696,14 +769,15 @@ def _build_batches(
     current_input_tokens = PRODUCT_INTELLIGENCE_BASE_PROMPT_TOKEN_OVERHEAD
     current_output_tokens = 0
     for candidate in candidates:
+        would_change_path = current and current[0].path != candidate.path
         would_exceed_input = current and (
             current_input_tokens + candidate.approx_input_tokens > profile.max_input_tokens
         )
         would_exceed_output = current and (
-            current_output_tokens + profile.per_product_output_tokens > profile.max_output_tokens
+            current_output_tokens + candidate.approx_output_tokens > profile.max_output_tokens
         )
         would_exceed_count = current and len(current) >= profile.max_products_per_batch
-        if would_exceed_input or would_exceed_output or would_exceed_count:
+        if would_change_path or would_exceed_input or would_exceed_output or would_exceed_count:
             batches.append(current)
             current = []
             current_input_tokens = PRODUCT_INTELLIGENCE_BASE_PROMPT_TOKEN_OVERHEAD
@@ -711,7 +785,7 @@ def _build_batches(
 
         current.append(candidate)
         current_input_tokens += candidate.approx_input_tokens
-        current_output_tokens += profile.per_product_output_tokens
+        current_output_tokens += candidate.approx_output_tokens
 
     if current:
         batches.append(current)
@@ -738,6 +812,18 @@ def _fit_batch_plan(
     )
 
 
+def _estimate_output_tokens(
+    profile: ProductIntelligenceExecutionProfile,
+    *,
+    execution_strategy: str,
+) -> int:
+    if execution_strategy == PRODUCT_INTELLIGENCE_EXECUTION_AI_GAP_FILL:
+        return max((profile.per_product_output_tokens * 7 + 9) // 10, 90)
+    if execution_strategy == PRODUCT_INTELLIGENCE_EXECUTION_DERIVED_ONLY:
+        return 0
+    return profile.per_product_output_tokens
+
+
 def _is_transient_provider_error(exc: Exception) -> bool:
     if isinstance(exc, PantryAIError):
         return exc.retryable
@@ -751,6 +837,15 @@ def _is_transient_provider_error(exc: Exception) -> bool:
     return "rate limit" in message or "429" in message or "timed out" in message or "temporarily unavailable" in message
 
 
+def _is_rate_limit_provider_error(exc: Exception) -> bool:
+    if isinstance(exc, PantryAIError):
+        return exc.status_code == 429 or "rate limit" in str(exc).lower()
+    if isinstance(exc, httpx.HTTPStatusError) and exc.response is not None:
+        return exc.response.status_code == 429
+    message = str(exc).lower()
+    return "rate limit" in message or "429" in message
+
+
 def _compute_retry_delay(retry: RetryProfile, *, attempt: int) -> float:
     raw_delay = min(retry.initial_delay_seconds * (retry.multiplier ** max(attempt - 1, 0)), retry.max_delay_seconds)
     jitter = raw_delay * retry.jitter_ratio
@@ -759,6 +854,10 @@ def _compute_retry_delay(retry: RetryProfile, *, attempt: int) -> float:
 
 def _finish_run(db: Session, run: ProductIntelligenceRun, *, actor: User | None) -> None:
     _refresh_run_counters(run)
+    diagnostics = _load_run_diagnostics(run)
+    diagnostics.ai_batch_count = run.batch_count
+    diagnostics.completed_ai_batch_count = run.completed_batch_count
+    _store_run_diagnostics(run, diagnostics)
     run.completed_at = utc_now()
     run.last_progress_at = run.completed_at
     if run.failed_count and (run.classified_count or run.skipped_count):
@@ -797,9 +896,111 @@ def _finish_run(db: Session, run: ProductIntelligenceRun, *, actor: User | None)
             "stale_reclassified_count": run.stale_reclassified_count,
             "batch_count": run.batch_count,
             "completed_batch_count": run.completed_batch_count,
+            "path_counts": diagnostics.path_counts.model_dump(mode="json"),
+            "token_summary": diagnostics.token_summary.model_dump(mode="json"),
+            "retry_count": diagnostics.retry_count,
+            "rate_limit_count": diagnostics.rate_limit_count,
         },
     )
     db.commit()
+
+
+def _load_run_diagnostics(run: ProductIntelligenceRun) -> ProductIntelligenceRunDiagnostics:
+    payload = run.diagnostics_payload or {}
+    diagnostics = ProductIntelligenceRunDiagnostics.model_validate(payload)
+    if diagnostics.path_counts == ProductIntelligenceRunDiagnostics().path_counts and run.items_payload:
+        items = [ProductIntelligenceRunItem.model_validate(payload) for payload in (run.items_payload or [])]
+        for item in items:
+            if item.path == PRODUCT_INTELLIGENCE_PATH_DERIVED_ONLY:
+                diagnostics.path_counts.derived_only += 1
+            elif item.path == PRODUCT_INTELLIGENCE_PATH_AI_GAP_FILL:
+                diagnostics.path_counts.ai_gap_fill += 1
+            elif item.path == PRODUCT_INTELLIGENCE_PATH_FULL_AI:
+                diagnostics.path_counts.full_ai += 1
+    return diagnostics
+
+
+def _store_run_diagnostics(run: ProductIntelligenceRun, diagnostics: ProductIntelligenceRunDiagnostics) -> None:
+    run.diagnostics_payload = diagnostics.model_dump(mode="json")
+
+
+def _record_candidate_diagnostics(run: ProductIntelligenceRun, *, path: str, trim_level: int) -> None:
+    diagnostics = _load_run_diagnostics(run)
+    if path == PRODUCT_INTELLIGENCE_PATH_DERIVED_ONLY:
+        diagnostics.path_counts.derived_only += 1
+    elif path == PRODUCT_INTELLIGENCE_PATH_AI_GAP_FILL:
+        diagnostics.path_counts.ai_gap_fill += 1
+    elif path == PRODUCT_INTELLIGENCE_PATH_FULL_AI:
+        diagnostics.path_counts.full_ai += 1
+    trim_key = str(trim_level)
+    diagnostics.trim_level_counts[trim_key] = diagnostics.trim_level_counts.get(trim_key, 0) + 1
+    _store_run_diagnostics(run, diagnostics)
+
+
+def _record_batch_completion(
+    run: ProductIntelligenceRun,
+    *,
+    batch: list[PreparedClassificationCandidate],
+    batch_index: int,
+) -> None:
+    diagnostics = _load_run_diagnostics(run)
+    batch_input_tokens = sum(candidate.approx_input_tokens for candidate in batch)
+    batch_output_tokens = sum(candidate.approx_output_tokens for candidate in batch)
+    diagnostics.completed_ai_batch_count = run.completed_batch_count
+    diagnostics.ai_batch_count = max(diagnostics.ai_batch_count, run.batch_count)
+    diagnostics.token_summary.approx_input_tokens += batch_input_tokens
+    diagnostics.token_summary.approx_output_tokens += batch_output_tokens
+    diagnostics.token_summary.approx_total_tokens = (
+        diagnostics.token_summary.approx_input_tokens + diagnostics.token_summary.approx_output_tokens
+    )
+    batch_entry = next((entry for entry in diagnostics.batches if entry.batch_index == batch_index), None)
+    if batch_entry is None:
+        diagnostics.batches.append(
+            ProductIntelligenceRunBatchDiagnostics(
+                batch_index=batch_index,
+                path=batch[0].path,
+                product_count=len(batch),
+                approx_input_tokens=batch_input_tokens,
+                approx_output_tokens=batch_output_tokens,
+                approx_total_tokens=batch_input_tokens + batch_output_tokens,
+            )
+        )
+    else:
+        batch_entry.path = batch[0].path
+        batch_entry.product_count = len(batch)
+        batch_entry.approx_input_tokens = batch_input_tokens
+        batch_entry.approx_output_tokens = batch_output_tokens
+        batch_entry.approx_total_tokens = batch_input_tokens + batch_output_tokens
+    _store_run_diagnostics(run, diagnostics)
+
+
+def _record_retry_event(
+    run: ProductIntelligenceRun,
+    *,
+    batch_index: int,
+    batch_path: str,
+    exc: Exception,
+) -> None:
+    diagnostics = _load_run_diagnostics(run)
+    diagnostics.retry_count += 1
+    if _is_rate_limit_provider_error(exc):
+        diagnostics.rate_limit_count += 1
+    batch_entry = next((entry for entry in diagnostics.batches if entry.batch_index == batch_index), None)
+    if batch_entry is None:
+        diagnostics.batches.append(
+            ProductIntelligenceRunBatchDiagnostics(
+                batch_index=batch_index,
+                path=batch_path,
+                product_count=0,
+                retry_count=1,
+                rate_limit_count=1 if _is_rate_limit_provider_error(exc) else 0,
+            )
+        )
+    else:
+        batch_entry.retry_count += 1
+        if _is_rate_limit_provider_error(exc):
+            batch_entry.rate_limit_count += 1
+    _store_run_diagnostics(run, diagnostics)
 
 
 def _append_run_event(
@@ -865,9 +1066,14 @@ def _mark_batch_failed(
                 product_external_id=candidate.product.external_id,
                 product_name=candidate.product.name,
                 status="failed",
+                path=candidate.path,
                 message=message,
                 stale_before_run=candidate.staleness.is_stale,
                 batch_index=batch_index,
+                trim_level=candidate.trim_level,
+                approx_input_tokens=candidate.approx_input_tokens,
+                approx_output_tokens=candidate.approx_output_tokens,
+                approx_total_tokens=candidate.approx_input_tokens + candidate.approx_output_tokens,
             ),
         )
 

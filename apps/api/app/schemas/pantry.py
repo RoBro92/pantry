@@ -300,10 +300,15 @@ class ProductIntelligenceRunItem(BaseModel):
     product_external_id: str
     product_name: str
     status: str
+    path: str | None = None
     message: str
     confidence: float | None = None
     stale_before_run: bool = False
     batch_index: int | None = None
+    trim_level: int | None = None
+    approx_input_tokens: int | None = None
+    approx_output_tokens: int | None = None
+    approx_total_tokens: int | None = None
     intelligence: ProductIntelligenceSummary | None = None
 
 
@@ -312,6 +317,41 @@ class ProductIntelligenceRunEvent(BaseModel):
     level: str
     message: str
     batch_index: int | None = None
+
+
+class ProductIntelligenceRunPathCounts(BaseModel):
+    derived_only: int = 0
+    ai_gap_fill: int = 0
+    full_ai: int = 0
+
+
+class ProductIntelligenceRunTokenSummary(BaseModel):
+    source: str = "estimated"
+    approx_input_tokens: int = 0
+    approx_output_tokens: int = 0
+    approx_total_tokens: int = 0
+
+
+class ProductIntelligenceRunBatchDiagnostics(BaseModel):
+    batch_index: int
+    path: str
+    product_count: int
+    approx_input_tokens: int = 0
+    approx_output_tokens: int = 0
+    approx_total_tokens: int = 0
+    retry_count: int = 0
+    rate_limit_count: int = 0
+
+
+class ProductIntelligenceRunDiagnostics(BaseModel):
+    path_counts: ProductIntelligenceRunPathCounts = Field(default_factory=ProductIntelligenceRunPathCounts)
+    ai_batch_count: int = 0
+    completed_ai_batch_count: int = 0
+    retry_count: int = 0
+    rate_limit_count: int = 0
+    token_summary: ProductIntelligenceRunTokenSummary = Field(default_factory=ProductIntelligenceRunTokenSummary)
+    trim_level_counts: dict[str, int] = Field(default_factory=dict)
+    batches: list[ProductIntelligenceRunBatchDiagnostics] = Field(default_factory=list)
 
 
 class ProductIntelligenceRunSummary(BaseModel):
@@ -334,6 +374,7 @@ class ProductIntelligenceRunSummary(BaseModel):
     completed_batch_count: int
     last_error: str | None = None
     requested_by_display: str | None = None
+    diagnostics: ProductIntelligenceRunDiagnostics = Field(default_factory=ProductIntelligenceRunDiagnostics)
     items: list[ProductIntelligenceRunItem] = Field(default_factory=list)
     events: list[ProductIntelligenceRunEvent] = Field(default_factory=list)
     created_at: datetime
