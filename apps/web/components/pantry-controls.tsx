@@ -9,6 +9,7 @@ import type {
   PantryLocationSummary,
 } from "../lib/api-types";
 import { PantryAddEntryDialog } from "./pantry-add-entry-dialog";
+import { PantryQuickAddDialog } from "./pantry-quick-add-dialog";
 import { ProductIntelligenceRunDialog } from "./product-intelligence-run-dialog";
 import { PantryRoomDialog } from "./pantry-room-dialog";
 
@@ -50,6 +51,7 @@ export function PantryControls({
   const roomSelectRef = useRef<HTMLSelectElement | null>(null);
   const locationSelectRef = useRef<HTMLSelectElement | null>(null);
   const [isAddOpen, setIsAddOpen] = useState(false);
+  const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
   const [isRoomOpen, setIsRoomOpen] = useState(false);
   const [isProductIntelligenceOpen, setIsProductIntelligenceOpen] = useState(false);
   const [query, setQuery] = useState(filters.q ?? "");
@@ -114,6 +116,17 @@ export function PantryControls({
           <div className="pantry-action-pills">
             <button type="button" className="primary-button" onClick={() => setIsAddOpen(true)}>
               Add product
+            </button>
+            <button
+              type="button"
+              className="ghost-button"
+              disabled={locations.length === 0}
+              onClick={() => setIsQuickAddOpen(true)}
+              title={
+                locations.length === 0 ? "Create a storage location before using quick add." : undefined
+              }
+            >
+              Quick add
             </button>
             {canAdminister ? (
               <button type="button" className="ghost-button" onClick={() => setIsRoomOpen(true)}>
@@ -282,6 +295,15 @@ export function PantryControls({
           canAdminister={canAdminister}
           locations={locations}
           onClose={() => setIsAddOpen(false)}
+        />
+      ) : null}
+
+      {isQuickAddOpen ? (
+        <PantryQuickAddDialog
+          householdExternalId={householdExternalId}
+          canAdminister={canAdminister}
+          locations={locations}
+          onClose={() => setIsQuickAddOpen(false)}
         />
       ) : null}
 
