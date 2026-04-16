@@ -30,25 +30,31 @@ from app.services.ai_providers import StructuredCompletionRequest, build_ai_prov
 from app.services.ai_runtime import PantryAIError, normalize_ai_error
 from app.services.audit import record_audit_event
 from app.services.product_intelligence import (
+    PRODUCT_INTELLIGENCE_EXECUTION_AI_GAP_FILL,
+    PRODUCT_INTELLIGENCE_EXECUTION_DERIVED_ONLY,
+    PRODUCT_INTELLIGENCE_EXECUTION_FULL_AI,
     PRODUCT_INTELLIGENCE_BASE_PROMPT_TOKEN_OVERHEAD,
     PRODUCT_INTELLIGENCE_CLASSIFICATION_VERSION,
     PRODUCT_INTELLIGENCE_SCHEMA_VERSION,
     PRODUCT_INTELLIGENCE_SCOPE,
+    PRODUCT_INTELLIGENCE_SOURCE_PROVIDER_DERIVED,
     ProductBatchClassificationOutput,
     ProductClassificationBatchOutput,
     ProductClassificationOutput,
+    ProductIntelligenceExecutionPlan,
     ProductIntelligenceStaleness,
     _get_product_by_id,
     _load_household_products,
     _load_target_products,
     apply_product_intelligence_classification,
+    build_product_intelligence_execution_plan,
     build_product_classification_batch_schema,
-    build_product_intelligence_batch_source_payload,
     build_product_intelligence_status,
     estimate_product_intelligence_tokens,
     get_primary_product_intelligence,
     get_product_intelligence_staleness,
     get_product_intelligence_runtime_trim_level,
+    merge_gap_fill_product_classification,
     serialize_product_intelligence,
 )
 from app.services.product_intelligence_profiles import (
@@ -78,6 +84,8 @@ class PreparedClassificationCandidate:
     approx_input_tokens: int
     staleness: ProductIntelligenceStaleness
     existing_intelligence: ProductIntelligence | None
+    execution_strategy: str = PRODUCT_INTELLIGENCE_EXECUTION_FULL_AI
+    derived_output: ProductClassificationOutput | None = None
 
 
 class TransientProviderError(RuntimeError):
@@ -289,6 +297,7 @@ def _process_claimed_run(db: Session, run: ProductIntelligenceRun) -> None:
     processed_ids = _processed_product_ids(run)
     candidates: list[PreparedClassificationCandidate] = []
     newly_skipped = 0
+    newly_derived = 0
     missing_products = 0
 
     for external_id in run.target_product_external_ids:
@@ -318,7 +327,7 @@ def _process_claimed_run(db: Session, run: ProductIntelligenceRun) -> None:
                     product_external_id=product.external_id,
                     product_name=product.name,
                     status="skipped",
-                    message="Product already has AI classification attached.",
+                    message="Product already has product intelligence attached.",
                     stale_before_run=staleness.is_stale,
                     intelligence=serialize_product_intelligence(intelligence, product=product),
                 ),
@@ -326,25 +335,57 @@ def _process_claimed_run(db: Session, run: ProductIntelligenceRun) -> None:
             newly_skipped += 1
             continue
 
-        payload = _fit_batch_payload(
+        plan = _fit_batch_plan(
             product,
             profile=profile,
             model=effective_model,
         )
+        if plan.strategy == PRODUCT_INTELLIGENCE_EXECUTION_DERIVED_ONLY and plan.derived_output is not None:
+            apply_product_intelligence_classification(
+                db,
+                household=run.household,
+                actor=run.requested_by_user,
+                product=product,
+                parsed=plan.derived_output,
+                model=None,
+                provider_type=PRODUCT_INTELLIGENCE_SOURCE_PROVIDER_DERIVED,
+            )
+            db.expire_all()
+            refreshed = _get_product_by_id(db, household=run.household, product_id=product.id) or product
+            refreshed_intelligence = get_primary_product_intelligence(refreshed)
+            _store_run_item(
+                run,
+                ProductIntelligenceRunItem(
+                    product_external_id=refreshed.external_id,
+                    product_name=refreshed.name,
+                    status="reclassified" if intelligence is not None else "classified",
+                    message="Derived product intelligence saved from OFF facts.",
+                    confidence=refreshed_intelligence.confidence if refreshed_intelligence is not None else None,
+                    stale_before_run=staleness.is_stale,
+                    intelligence=serialize_product_intelligence(refreshed_intelligence, product=refreshed),
+                ),
+            )
+            newly_derived += 1
+            continue
+
         candidates.append(
             PreparedClassificationCandidate(
                 product=product,
-                payload=payload,
-                approx_input_tokens=estimate_product_intelligence_tokens(payload),
+                payload=plan.ai_payload or plan.source_payload,
+                approx_input_tokens=estimate_product_intelligence_tokens(plan.ai_payload or plan.source_payload),
                 staleness=staleness,
                 existing_intelligence=intelligence,
+                execution_strategy=plan.strategy,
+                derived_output=plan.derived_output,
             )
         )
 
-    if newly_skipped or missing_products:
+    if newly_skipped or newly_derived or missing_products:
         message_parts: list[str] = []
         if newly_skipped:
             message_parts.append(f"Skipped {newly_skipped} already-classified product(s).")
+        if newly_derived:
+            message_parts.append(f"Derived {newly_derived} high-confidence OFF product(s) without AI.")
         if missing_products:
             message_parts.append(f"Marked {missing_products} missing product(s) as failed.")
         _append_run_event(run, level="info", message=" ".join(message_parts))
@@ -488,6 +529,14 @@ def _process_batch(
         parsed = ProductClassificationOutput.model_validate(
             batch_output.model_dump(exclude={"product_external_id"})
         )
+        if (
+            candidate.execution_strategy == PRODUCT_INTELLIGENCE_EXECUTION_AI_GAP_FILL
+            and candidate.derived_output is not None
+        ):
+            parsed = merge_gap_fill_product_classification(
+                parsed,
+                derived_output=candidate.derived_output,
+            )
         apply_product_intelligence_classification(
             db,
             household=run.household,
@@ -548,6 +597,11 @@ def _execute_batch_with_retry(
                     system_prompt=(
                         "You classify pantry products into structured recipe-matching metadata. "
                         "Only use the supplied evidence for each product. "
+                        "Each product includes a classification_strategy. "
+                        "When classification_strategy is ai_gap_fill, trust derived_facts for factual fields "
+                        "such as category, ingredient families, dietary tags, allergen tags, product format, "
+                        "and storage profile. Use AI mainly for recipe roles, substitution groups, pantry uses, "
+                        "cuisine, flavour, preparation, confidence, and a short rationale. "
                         "Prefer empty values over guesses. "
                         "Keep rationale_short under 160 characters. "
                         "Use concise human-readable tags and categories. "
@@ -664,18 +718,24 @@ def _build_batches(
     return batches
 
 
-def _fit_batch_payload(
+def _fit_batch_plan(
     product: Product,
     *,
     profile: ProductIntelligenceExecutionProfile,
     model: str | None,
-) -> dict[str, object]:
+) -> ProductIntelligenceExecutionPlan:
     trim_level = get_product_intelligence_runtime_trim_level(
         product,
         provider_type=profile.provider_type,
         model=model,
     )
-    return build_product_intelligence_batch_source_payload(product, trim_level=trim_level)
+    return build_product_intelligence_execution_plan(
+        product,
+        provider_type=profile.provider_type,
+        model=model,
+        trim_level=trim_level,
+        include_external_id=True,
+    )
 
 
 def _is_transient_provider_error(exc: Exception) -> bool:
