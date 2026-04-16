@@ -1,8 +1,7 @@
 {
-  "name": "@pantry/shared-types",
+  "name": "@pantro/shared-types",
   "private": true,
   "type": "module",
   "exports": "./src/index.ts",
   "types": "./src/index.ts"
 }
-

@@ -1,5 +1,5 @@
 {
-  "name": "@pantry/web",
+  "name": "@pantro/web",
   "private": true,
   "engines": {
     "node": ">=20 <21",
@@ -12,7 +12,7 @@
     "typecheck": "rm -rf .next/types && next typegen && tsc --noEmit"
   },
   "dependencies": {
-    "@pantry/shared-types": "file:../../packages/shared-types",
+    "@pantro/shared-types": "file:../../packages/shared-types",
     "@zxing/browser": "^0.1.5",
     "@zxing/library": "^0.21.3",
     "next": ">=15.0.0 <16.0.0",

@@ -16,7 +16,7 @@ from worker.status import build_status_snapshot
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Pantry background worker")
+    parser = argparse.ArgumentParser(description="Pantro background worker")
     parser.add_argument("--status", action="store_true", help="Print a status snapshot")
     parser.add_argument("--once", action="store_true", help="Run a single placeholder cycle")
     args = parser.parse_args()

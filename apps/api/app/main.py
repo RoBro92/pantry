@@ -87,7 +87,7 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(
-    title="Pantry API",
+    title="Pantro API",
     version=settings.app_version,
     lifespan=lifespan,
 )

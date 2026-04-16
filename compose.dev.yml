@@ -3,9 +3,9 @@ services:
     environment:
       ENVIRONMENT: development
       NODE_ENV: development
-      WATCHPACK_POLLING: ${PANTRY_WEB_WATCHPACK_POLLING:-false}
-      CHOKIDAR_USEPOLLING: ${PANTRY_WEB_CHOKIDAR_USEPOLLING:-false}
-      CHOKIDAR_INTERVAL: ${PANTRY_WEB_CHOKIDAR_INTERVAL:-500}
+      WATCHPACK_POLLING: ${PANTRO_WEB_WATCHPACK_POLLING:-false}
+      CHOKIDAR_USEPOLLING: ${PANTRO_WEB_CHOKIDAR_USEPOLLING:-false}
+      CHOKIDAR_INTERVAL: ${PANTRO_WEB_CHOKIDAR_INTERVAL:-500}
     volumes:
       - .:/workspace
       - web_node_modules:/workspace/node_modules
@@ -14,13 +14,13 @@ services:
   api:
     environment:
       ENVIRONMENT: development
-      WATCHFILES_FORCE_POLLING: ${PANTRY_API_WATCHFILES_FORCE_POLLING:-false}
+      WATCHFILES_FORCE_POLLING: ${PANTRO_API_WATCHFILES_FORCE_POLLING:-false}
     volumes:
       - .:/workspace
 
   worker:
     environment:
       ENVIRONMENT: development
-      WATCHFILES_FORCE_POLLING: ${PANTRY_WORKER_WATCHFILES_FORCE_POLLING:-false}
+      WATCHFILES_FORCE_POLLING: ${PANTRO_WORKER_WATCHFILES_FORCE_POLLING:-false}
     volumes:
       - .:/workspace

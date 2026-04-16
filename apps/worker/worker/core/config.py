@@ -53,13 +53,13 @@ class WorkerSettings:
 @lru_cache
 def get_settings() -> WorkerSettings:
     return WorkerSettings(
-        service_name=os.getenv("WORKER_SERVICE_NAME", "pantry-worker"),
+        service_name=os.getenv("WORKER_SERVICE_NAME", "pantro-worker"),
         environment=os.getenv("ENVIRONMENT", "development"),
         log_level=os.getenv("LOG_LEVEL", "INFO"),
         app_version=_resolve_app_version(),
         database_url=os.getenv(
             "DATABASE_URL",
-            "postgresql+psycopg://pantry:change-me@postgres:5432/pantry",
+            "postgresql+psycopg://pantro:change-me@postgres:5432/pantro",
         ),
         redis_url=os.getenv("REDIS_URL", "redis://redis:6379/0"),
         import_storage_root=os.getenv("IMPORT_STORAGE_ROOT", "/workspace/.local/imports"),
