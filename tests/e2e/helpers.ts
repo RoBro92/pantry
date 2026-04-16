@@ -42,7 +42,16 @@ export async function login(
   credentials: { email: string; password: string }
 ): Promise<void> {
   await page.goto("/login");
-  await expect(page.getByTestId("login-form")).toBeVisible();
+  const loginForm = page.getByTestId("login-form");
+  if (!(await loginForm.isVisible().catch(() => false))) {
+    const logoutButton = page.getByRole("button", { name: "Logout" });
+    if (await logoutButton.isVisible().catch(() => false)) {
+      await logoutButton.click();
+      await expect(page).toHaveURL(/\/login$/);
+      await page.goto("/login");
+    }
+  }
+  await expect(loginForm).toBeVisible();
   await page.waitForLoadState("networkidle");
   await page.getByLabel("Username or email").fill(credentials.email);
   await page.getByLabel("Password").fill(credentials.password);

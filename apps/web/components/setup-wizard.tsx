@@ -893,27 +893,35 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
   }
 
   function updateAdmin(fields: Partial<SetupWizardUserSummary>) {
-    setWizard((current) => ({
-      ...current,
-      admin_user: {
-        ...current.admin_user,
-        ...fields
-      }
-    }));
+    setWizard((current) => {
+      const nextWizard = {
+        ...current,
+        admin_user: {
+          ...current.admin_user,
+          ...fields
+        }
+      };
+      wizardRef.current = nextWizard;
+      return nextWizard;
+    });
   }
 
   function updateInitialUser(stageId: string, fields: Partial<SetupWizardUserSummary>) {
-    setWizard((current) => ({
-      ...current,
-      initial_users: current.initial_users.map((user) =>
-        user.stage_id === stageId
-          ? {
-              ...user,
-              ...fields
-            }
-          : user
-      )
-    }));
+    setWizard((current) => {
+      const nextWizard = {
+        ...current,
+        initial_users: current.initial_users.map((user) =>
+          user.stage_id === stageId
+            ? {
+                ...user,
+                ...fields
+              }
+            : user
+        )
+      };
+      wizardRef.current = nextWizard;
+      return nextWizard;
+    });
   }
 
   function addInitialUser() {
