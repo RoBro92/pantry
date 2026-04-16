@@ -722,10 +722,15 @@ export type ProductIntelligenceRunItem = {
   product_external_id: string;
   product_name: string;
   status: string;
+  path: string | null;
   message: string;
   confidence: number | null;
   stale_before_run: boolean;
   batch_index: number | null;
+  trim_level: number | null;
+  approx_input_tokens: number | null;
+  approx_output_tokens: number | null;
+  approx_total_tokens: number | null;
   intelligence: ProductIntelligenceSummary | null;
 };
 
@@ -734,6 +739,37 @@ export type ProductIntelligenceRunEvent = {
   level: string;
   message: string;
   batch_index: number | null;
+};
+
+export type ProductIntelligenceRunBatchDiagnostics = {
+  batch_index: number;
+  path: string;
+  product_count: number;
+  approx_input_tokens: number;
+  approx_output_tokens: number;
+  approx_total_tokens: number;
+  retry_count: number;
+  rate_limit_count: number;
+};
+
+export type ProductIntelligenceRunDiagnostics = {
+  path_counts: {
+    derived_only: number;
+    ai_gap_fill: number;
+    full_ai: number;
+  };
+  ai_batch_count: number;
+  completed_ai_batch_count: number;
+  retry_count: number;
+  rate_limit_count: number;
+  token_summary: {
+    source: string;
+    approx_input_tokens: number;
+    approx_output_tokens: number;
+    approx_total_tokens: number;
+  };
+  trim_level_counts: Record<string, number>;
+  batches: ProductIntelligenceRunBatchDiagnostics[];
 };
 
 export type ProductIntelligenceRunSummary = {
@@ -756,6 +792,7 @@ export type ProductIntelligenceRunSummary = {
   completed_batch_count: number;
   last_error: string | null;
   requested_by_display: string | null;
+  diagnostics: ProductIntelligenceRunDiagnostics;
   items: ProductIntelligenceRunItem[];
   events: ProductIntelligenceRunEvent[];
   created_at: string;

@@ -52,6 +52,26 @@ function formatRunLabel(status: string) {
   return status;
 }
 
+function formatPathLabel(path: string | null | undefined) {
+  if (path === "derived_only") {
+    return "Derived only";
+  }
+  if (path === "ai_gap_fill") {
+    return "AI gap fill";
+  }
+  if (path === "full_ai") {
+    return "Full AI";
+  }
+  return path ?? "Unknown path";
+}
+
+function formatApproxTokens(value: number) {
+  if (value >= 1000) {
+    return `~${(value / 1000).toFixed(1)}k`;
+  }
+  return `~${value}`;
+}
+
 export function ProductIntelligenceRunDialog({
   householdExternalId,
   catalogProducts,
@@ -364,8 +384,42 @@ export function ProductIntelligenceRunDialog({
                 {progressPercent}% complete · {runDetails.total_candidates} targeted product
                 {runDetails.total_candidates === 1 ? "" : "s"}
               </p>
+              <p className="helper-text">
+                Paths: derived {runDetails.diagnostics.path_counts.derived_only} · gap fill{" "}
+                {runDetails.diagnostics.path_counts.ai_gap_fill} · full AI{" "}
+                {runDetails.diagnostics.path_counts.full_ai} · AI batches{" "}
+                {runDetails.diagnostics.completed_ai_batch_count}/{runDetails.diagnostics.ai_batch_count} ·
+                tokens {formatApproxTokens(runDetails.diagnostics.token_summary.approx_total_tokens)}
+              </p>
+              {runDetails.diagnostics.retry_count > 0 || runDetails.diagnostics.rate_limit_count > 0 ? (
+                <p className="helper-text">
+                  Retries {runDetails.diagnostics.retry_count}
+                  {runDetails.diagnostics.rate_limit_count > 0
+                    ? ` · rate limits ${runDetails.diagnostics.rate_limit_count}`
+                    : ""}
+                </p>
+              ) : null}
               {runDetails.last_error ? <p className="error-text">{runDetails.last_error}</p> : null}
             </div>
+
+            {runDetails.diagnostics.batches.length > 0 ? (
+              <div className="stack intelligence-run-list">
+                {runDetails.diagnostics.batches.map((batch) => (
+                  <div key={`batch-${batch.batch_index}`} className="intelligence-run-item">
+                    <strong>
+                      Batch {batch.batch_index} · {formatPathLabel(batch.path)}
+                    </strong>
+                    <span>
+                      {batch.product_count} products · {formatApproxTokens(batch.approx_total_tokens)} tokens
+                    </span>
+                    <span>
+                      retries {batch.retry_count}
+                      {batch.rate_limit_count > 0 ? ` · rate limits ${batch.rate_limit_count}` : ""}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
 
             {runDetails.events.length > 0 ? (
               <div className="stack intelligence-run-list">
@@ -399,9 +453,11 @@ export function ProductIntelligenceRunDialog({
                       <strong>{item.product_name}</strong>
                       <span>
                         {item.status}
+                        {item.path ? ` · ${formatPathLabel(item.path)}` : ""}
                         {item.batch_index ? ` · batch ${item.batch_index}` : ""}
                         {item.intelligence?.food_category ? ` · ${item.intelligence.food_category}` : ""}
                         {item.stale_before_run ? " · stale before run" : ""}
+                        {item.approx_total_tokens ? ` · ${formatApproxTokens(item.approx_total_tokens)} tokens` : ""}
                       </span>
                       <span>{item.message}</span>
                     </div>
