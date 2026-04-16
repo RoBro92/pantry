@@ -33,6 +33,7 @@ class ProductIntelligenceRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     completed_batch_count: Mapped[int] = mapped_column(Integer(), nullable=False, default=0)
     items_payload: Mapped[list[dict[str, object]]] = mapped_column(JSON(), nullable=False, default=list)
     events_payload: Mapped[list[dict[str, object]]] = mapped_column(JSON(), nullable=False, default=list)
+    diagnostics_payload: Mapped[dict[str, object]] = mapped_column(JSON(), nullable=False, default=dict)
     last_error: Mapped[str | None] = mapped_column(String(512), nullable=True)
     processing_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_progress_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

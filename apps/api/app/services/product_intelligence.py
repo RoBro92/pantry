@@ -39,6 +39,26 @@ PRODUCT_INTELLIGENCE_STALE_CLASSIFIER = "classification_version_changed"
 PRODUCT_INTELLIGENCE_STALE_SOURCE = "source_product_data_changed"
 PRODUCT_INTELLIGENCE_BASE_PROMPT_TOKEN_OVERHEAD = 650
 PRODUCT_INTELLIGENCE_MAX_TRIM_LEVEL = 2
+PRODUCT_INTELLIGENCE_PATH_DERIVED_ONLY = "derived_only"
+PRODUCT_INTELLIGENCE_PATH_AI_GAP_FILL = "ai_gap_fill"
+PRODUCT_INTELLIGENCE_PATH_FULL_AI = "full_ai"
+PRODUCT_INTELLIGENCE_RUN_PATHS = {
+    PRODUCT_INTELLIGENCE_PATH_DERIVED_ONLY,
+    PRODUCT_INTELLIGENCE_PATH_AI_GAP_FILL,
+    PRODUCT_INTELLIGENCE_PATH_FULL_AI,
+}
+PRODUCT_INTELLIGENCE_GAP_FILL_OUTPUT_TOKEN_RATIO = 0.7
+
+
+@dataclass(frozen=True)
+class ProductIntelligenceExecutionPlan:
+    path: str
+    trim_level: int
+    ai_payload: dict[str, object] | None
+    hash_payload: dict[str, object]
+    approx_input_tokens: int
+    approx_output_tokens: int
+    derived_output: "ProductClassificationOutput | None" = None
 
 
 class ProductClassificationMetadataPayload(BaseModel):
@@ -338,11 +358,11 @@ def build_product_intelligence_source_data_hash(
     provider_type: str | None = None,
     model: str | None = None,
 ) -> str:
-    payload = build_product_intelligence_source_payload(
+    payload = build_product_intelligence_execution_plan(
         product,
         provider_type=provider_type,
         model=model,
-    )
+    ).hash_payload
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 
@@ -365,6 +385,96 @@ def build_product_intelligence_source_payload(
     )
 
 
+def build_product_intelligence_execution_plan(
+    product: Product,
+    *,
+    provider_type: str | None = None,
+    model: str | None = None,
+    profile_output_tokens: int | None = None,
+) -> ProductIntelligenceExecutionPlan:
+    profile = resolve_product_intelligence_profile(provider_type or "", model)
+    trim_level = get_product_intelligence_runtime_trim_level(
+        product,
+        provider_type=provider_type,
+        model=model,
+    )
+    approx_output_tokens = profile_output_tokens or profile.per_product_output_tokens
+    runtime_payload = _build_product_intelligence_runtime_payload(
+        product,
+        trim_level=trim_level,
+        include_external_id=True,
+    )
+    runtime_payload_no_external_id = _build_product_intelligence_runtime_payload(
+        product,
+        trim_level=trim_level,
+        include_external_id=False,
+    )
+    derived_facts = _build_derived_fact_payload(product, runtime_payload=runtime_payload)
+    derived_only_output = (
+        _build_derived_only_output(product, derived_facts=derived_facts)
+        if get_primary_enrichment(product) is not None
+        else None
+    )
+    if derived_only_output is not None:
+        derived_payload = derived_only_output.model_dump(mode="json", exclude_none=True)
+        return ProductIntelligenceExecutionPlan(
+            path=PRODUCT_INTELLIGENCE_PATH_DERIVED_ONLY,
+            trim_level=trim_level,
+            ai_payload=None,
+            hash_payload={
+                "path": PRODUCT_INTELLIGENCE_PATH_DERIVED_ONLY,
+                "source": runtime_payload_no_external_id,
+                "derived_output": derived_payload,
+            },
+            approx_input_tokens=0,
+            approx_output_tokens=0,
+            derived_output=derived_only_output,
+        )
+
+    if _should_use_ai_gap_fill(product, runtime_payload=runtime_payload):
+        gap_fill_trim_level = min(trim_level + 1, PRODUCT_INTELLIGENCE_MAX_TRIM_LEVEL)
+        ai_payload = _build_product_intelligence_gap_fill_payload(
+            product,
+            trim_level=gap_fill_trim_level,
+            include_external_id=True,
+            derived_facts=derived_facts,
+        )
+        ai_hash_payload = _build_product_intelligence_gap_fill_payload(
+            product,
+            trim_level=gap_fill_trim_level,
+            include_external_id=False,
+            derived_facts=derived_facts,
+        )
+        gap_fill_output_tokens = max(
+            math.ceil(approx_output_tokens * PRODUCT_INTELLIGENCE_GAP_FILL_OUTPUT_TOKEN_RATIO),
+            90,
+        )
+        return ProductIntelligenceExecutionPlan(
+            path=PRODUCT_INTELLIGENCE_PATH_AI_GAP_FILL,
+            trim_level=gap_fill_trim_level,
+            ai_payload=ai_payload,
+            hash_payload={
+                "path": PRODUCT_INTELLIGENCE_PATH_AI_GAP_FILL,
+                "source": ai_hash_payload,
+            },
+            approx_input_tokens=estimate_product_intelligence_tokens(ai_payload),
+            approx_output_tokens=gap_fill_output_tokens,
+            derived_output=_build_gap_fill_seed_output(derived_facts=derived_facts),
+        )
+
+    return ProductIntelligenceExecutionPlan(
+        path=PRODUCT_INTELLIGENCE_PATH_FULL_AI,
+        trim_level=trim_level,
+        ai_payload=runtime_payload,
+        hash_payload={
+            "path": PRODUCT_INTELLIGENCE_PATH_FULL_AI,
+            "source": runtime_payload_no_external_id,
+        },
+        approx_input_tokens=estimate_product_intelligence_tokens(runtime_payload),
+        approx_output_tokens=approx_output_tokens,
+    )
+
+
 def build_product_intelligence_batch_source_payload(
     product: Product,
     *,
@@ -374,6 +484,47 @@ def build_product_intelligence_batch_source_payload(
         product,
         trim_level=trim_level,
         include_external_id=True,
+    )
+
+
+def merge_product_intelligence_output(
+    ai_output: ProductClassificationOutput,
+    *,
+    seed_output: ProductClassificationOutput | None,
+) -> ProductClassificationOutput:
+    if seed_output is None:
+        return ai_output
+    merged_metadata = ProductClassificationMetadataPayload(
+        product_format=seed_output.structured_metadata.product_format or ai_output.structured_metadata.product_format,
+        storage_profile=seed_output.structured_metadata.storage_profile or ai_output.structured_metadata.storage_profile,
+        cuisine_tags=(
+            list(seed_output.structured_metadata.cuisine_tags)
+            if seed_output.structured_metadata.cuisine_tags
+            else list(ai_output.structured_metadata.cuisine_tags)
+        ),
+        flavour_tags=(
+            list(seed_output.structured_metadata.flavour_tags)
+            if seed_output.structured_metadata.flavour_tags
+            else list(ai_output.structured_metadata.flavour_tags)
+        ),
+        preparation_tags=(
+            list(seed_output.structured_metadata.preparation_tags)
+            if seed_output.structured_metadata.preparation_tags
+            else list(ai_output.structured_metadata.preparation_tags)
+        ),
+    )
+    return ProductClassificationOutput(
+        confidence=seed_output.confidence if seed_output.confidence is not None else ai_output.confidence,
+        rationale_short=seed_output.rationale_short or ai_output.rationale_short,
+        primary_ingredient_type=seed_output.primary_ingredient_type or ai_output.primary_ingredient_type,
+        ingredient_families=list(seed_output.ingredient_families or ai_output.ingredient_families),
+        food_category=seed_output.food_category or ai_output.food_category,
+        dietary_tags=list(seed_output.dietary_tags or ai_output.dietary_tags),
+        allergen_tags=list(seed_output.allergen_tags or ai_output.allergen_tags),
+        recipe_role_tags=list(seed_output.recipe_role_tags or ai_output.recipe_role_tags),
+        substitution_groups=list(seed_output.substitution_groups or ai_output.substitution_groups),
+        pantry_use_tags=list(seed_output.pantry_use_tags or ai_output.pantry_use_tags),
+        structured_metadata=merged_metadata,
     )
 
 
@@ -537,6 +688,305 @@ def _select_category_hint(categories: list[str], *, limit: int) -> str | None:
         if hint:
             return hint
     return None
+
+
+def _build_derived_fact_payload(
+    product: Product,
+    *,
+    runtime_payload: dict[str, object],
+) -> dict[str, object]:
+    enrichment = get_primary_enrichment(product)
+    enrichment_payload = runtime_payload.get("enrichment")
+    signal_values = [
+        product.name,
+        *[alias.name for alias in product.aliases],
+    ]
+    if isinstance(enrichment_payload, dict):
+        signal_values.extend(
+            [
+                cast(str | None, enrichment_payload.get("source_product_name")),
+                cast(str | None, enrichment_payload.get("category_hint")),
+                cast(str | None, enrichment_payload.get("ingredients_text")),
+            ]
+        )
+        signal_values.extend(cast(list[str], enrichment_payload.get("ingredient_tags") or []))
+    signal_values.extend(list(product.manual_ingredient_tags or []))
+    signal_blob = " ".join(value for value in signal_values if value).casefold()
+    dietary_tags = _humanize_runtime_tags(list(enrichment.dietary_tags or [])) if enrichment is not None else []
+    allergen_tags = _humanize_runtime_tags(list(enrichment.allergen_tags or [])) if enrichment is not None else []
+    storage_profile = _derive_storage_profile(product=product, signal_blob=signal_blob)
+    product_format = _derive_product_format(product=product, signal_blob=signal_blob, storage_profile=storage_profile)
+    primary_ingredient = _derive_primary_ingredient_type(
+        ingredient_tags=list(enrichment.ingredient_tags or []) if enrichment is not None else [],
+        manual_tags=list(product.manual_ingredient_tags or []),
+        signal_blob=signal_blob,
+    )
+    return {
+        "dietary_tags": dietary_tags,
+        "allergen_tags": allergen_tags,
+        "storage_profile": storage_profile,
+        "product_format": product_format,
+        "primary_ingredient_type": primary_ingredient,
+        "signal_blob": signal_blob,
+    }
+
+
+def _build_derived_only_output(
+    product: Product,
+    *,
+    derived_facts: dict[str, object],
+) -> ProductClassificationOutput | None:
+    rule = _match_derived_only_rule(cast(str, derived_facts["signal_blob"]))
+    if rule is None:
+        return None
+    storage_profile = cast(str | None, derived_facts.get("storage_profile"))
+    pantry_use_tags = list(rule["pantry_use_tags"])
+    if storage_profile == "Shelf stable" and "Shelf stable" not in pantry_use_tags:
+        pantry_use_tags.append("Shelf stable")
+    primary_ingredient_type = cast(str | None, derived_facts.get("primary_ingredient_type"))
+    ingredient_families = [primary_ingredient_type] if primary_ingredient_type else []
+    preparation_tags = list(cast(list[str], rule["preparation_tags"]))
+    return ProductClassificationOutput(
+        confidence=cast(float, rule["confidence"]),
+        rationale_short=cast(str, rule["rationale_short"]),
+        primary_ingredient_type=primary_ingredient_type,
+        ingredient_families=ingredient_families,
+        food_category=cast(str, rule["food_category"]),
+        dietary_tags=list(cast(list[str], derived_facts.get("dietary_tags") or [])),
+        allergen_tags=list(cast(list[str], derived_facts.get("allergen_tags") or [])),
+        recipe_role_tags=list(cast(list[str], rule["recipe_role_tags"])),
+        substitution_groups=[cast(str, rule["substitution_group"])],
+        pantry_use_tags=pantry_use_tags,
+        structured_metadata=ProductClassificationMetadataPayload(
+            product_format=cast(str | None, derived_facts.get("product_format")),
+            storage_profile=storage_profile,
+            cuisine_tags=[],
+            flavour_tags=[],
+            preparation_tags=preparation_tags,
+        ),
+    )
+
+
+def _build_gap_fill_seed_output(*, derived_facts: dict[str, object]) -> ProductClassificationOutput:
+    return ProductClassificationOutput(
+        dietary_tags=list(cast(list[str], derived_facts.get("dietary_tags") or [])),
+        allergen_tags=list(cast(list[str], derived_facts.get("allergen_tags") or [])),
+        structured_metadata=ProductClassificationMetadataPayload(
+            product_format=cast(str | None, derived_facts.get("product_format")),
+            storage_profile=cast(str | None, derived_facts.get("storage_profile")),
+            cuisine_tags=[],
+            flavour_tags=[],
+            preparation_tags=[],
+        ),
+    )
+
+
+def _should_use_ai_gap_fill(
+    product: Product,
+    *,
+    runtime_payload: dict[str, object],
+) -> bool:
+    enrichment_payload = runtime_payload.get("enrichment")
+    if not isinstance(enrichment_payload, dict):
+        return False
+    ingredient_tags = cast(list[str], enrichment_payload.get("ingredient_tags") or [])
+    return bool(
+        ingredient_tags
+        or enrichment_payload.get("ingredients_text")
+        or enrichment_payload.get("category_hint")
+        or enrichment_payload.get("source_product_name")
+    )
+
+
+def _build_product_intelligence_gap_fill_payload(
+    product: Product,
+    *,
+    trim_level: int,
+    include_external_id: bool,
+    derived_facts: dict[str, object],
+) -> dict[str, object]:
+    runtime_payload = _build_product_intelligence_runtime_payload(
+        product,
+        trim_level=trim_level,
+        include_external_id=include_external_id,
+    )
+    product_payload = cast(dict[str, object], runtime_payload["product"])
+    gap_product_payload: dict[str, object] = {
+        "name": product_payload["name"],
+        "default_unit": product_payload["default_unit"],
+    }
+    manual_tags = cast(list[str], product_payload.get("manual_ingredient_tags") or [])
+    if manual_tags:
+        gap_product_payload["manual_ingredient_tags"] = manual_tags[:4]
+
+    payload: dict[str, object] = {
+        "product": gap_product_payload,
+        "known_facts": {},
+    }
+    if include_external_id:
+        payload["product_external_id"] = runtime_payload["product_external_id"]
+
+    enrichment_payload = runtime_payload.get("enrichment")
+    if isinstance(enrichment_payload, dict):
+        signals: dict[str, object] = {}
+        if enrichment_payload.get("source_product_name"):
+            signals["source_product_name"] = enrichment_payload["source_product_name"]
+        if enrichment_payload.get("ingredient_tags"):
+            signals["ingredient_tags"] = enrichment_payload["ingredient_tags"]
+        if enrichment_payload.get("ingredients_text"):
+            signals["ingredients_text"] = enrichment_payload["ingredients_text"]
+        if enrichment_payload.get("category_hint"):
+            signals["category_hint"] = enrichment_payload["category_hint"]
+        payload["enrichment"] = signals or None
+    else:
+        payload["enrichment"] = None
+
+    known_facts = cast(dict[str, object], payload["known_facts"])
+    dietary_tags = list(cast(list[str], derived_facts.get("dietary_tags") or []))
+    allergen_tags = list(cast(list[str], derived_facts.get("allergen_tags") or []))
+    if dietary_tags:
+        known_facts["dietary_tags"] = dietary_tags
+    if allergen_tags:
+        known_facts["allergen_tags"] = allergen_tags
+    structured_metadata: dict[str, object] = {}
+    if derived_facts.get("product_format") is not None:
+        structured_metadata["product_format"] = derived_facts["product_format"]
+    if derived_facts.get("storage_profile") is not None:
+        structured_metadata["storage_profile"] = derived_facts["storage_profile"]
+    if structured_metadata:
+        known_facts["structured_metadata"] = structured_metadata
+    if not known_facts:
+        payload.pop("known_facts", None)
+    return payload
+
+
+def _match_derived_only_rule(signal_blob: str) -> dict[str, object] | None:
+    rules = (
+        {
+            "keywords": ("sauce", "ketchup", "mustard", "mayonnaise", "mayo", "condiment", "dressing"),
+            "food_category": "Condiment",
+            "recipe_role_tags": ["Sauce", "Seasoning"],
+            "substitution_group": "Condiment",
+            "pantry_use_tags": ["Pantry staple", "Sauce builder"],
+            "preparation_tags": ["Ready to use"],
+            "rationale_short": "Derived from Pantry and enrichment facts without an AI call.",
+            "confidence": 0.84,
+        },
+        {
+            "keywords": ("pasta", "spaghetti", "penne", "fusilli", "macaroni", "tagliatelle"),
+            "food_category": "Dry pasta",
+            "recipe_role_tags": ["Carbohydrate", "Base"],
+            "substitution_group": "Pasta",
+            "pantry_use_tags": ["Pantry staple", "Quick meal"],
+            "preparation_tags": ["Boil"],
+            "rationale_short": "Derived from Pantry and enrichment facts without an AI call.",
+            "confidence": 0.82,
+        },
+        {
+            "keywords": ("rice", "basmati", "jasmine", "long grain"),
+            "food_category": "Rice",
+            "recipe_role_tags": ["Carbohydrate", "Base"],
+            "substitution_group": "Rice",
+            "pantry_use_tags": ["Pantry staple", "Quick meal"],
+            "preparation_tags": ["Boil"],
+            "rationale_short": "Derived from Pantry and enrichment facts without an AI call.",
+            "confidence": 0.82,
+        },
+    )
+    for rule in rules:
+        if any(keyword in signal_blob for keyword in cast(tuple[str, ...], rule["keywords"])):
+            return rule
+    return None
+
+
+def _derive_storage_profile(*, product: Product, signal_blob: str) -> str | None:
+    if any(keyword in signal_blob for keyword in ("frozen", "freezer")):
+        return "Frozen"
+    if any(keyword in signal_blob for keyword in ("fresh", "fridge", "chilled", "refrigerated")):
+        return "Refrigerated"
+    if product.default_unit in {"bottle", "jar", "can", "tin", "pack", "bag", "carton"}:
+        return "Shelf stable"
+    return None
+
+
+def _derive_product_format(
+    *,
+    product: Product,
+    signal_blob: str,
+    storage_profile: str | None,
+) -> str | None:
+    if "sauce" in signal_blob and product.default_unit == "bottle":
+        return "Bottled sauce"
+    if product.default_unit in {"can", "tin"}:
+        return "Tinned"
+    if product.default_unit in {"pack", "bag"} and storage_profile == "Shelf stable":
+        return "Dried"
+    if product.default_unit == "jar":
+        return "Jarred"
+    if storage_profile == "Frozen":
+        return "Frozen"
+    return None
+
+
+def _derive_primary_ingredient_type(
+    *,
+    ingredient_tags: list[str],
+    manual_tags: list[str],
+    signal_blob: str,
+) -> str | None:
+    for candidate in [*ingredient_tags, *manual_tags]:
+        humanized = _humanize_runtime_tag(candidate, singular=True)
+        if humanized:
+            return humanized
+    keyword_map = {
+        "tomato": "Tomato",
+        "pasta": "Wheat",
+        "rice": "Rice",
+        "chickpea": "Chickpea",
+        "bean": "Bean",
+        "lentil": "Lentil",
+        "bacon": "Pork",
+        "cucumber": "Cucumber",
+    }
+    for keyword, label in keyword_map.items():
+        if keyword in signal_blob:
+            return label
+    return None
+
+
+def _humanize_runtime_tags(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        humanized = _humanize_runtime_tag(value)
+        if not humanized:
+            continue
+        key = humanized.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(humanized)
+    return result
+
+
+def _humanize_runtime_tag(value: str | None, *, singular: bool = False) -> str | None:
+    normalized = _normalize_runtime_name(value).replace("-", " ")
+    if not normalized:
+        return None
+    if singular:
+        singular_overrides = {
+            "tomatoes": "tomato",
+            "potatoes": "potato",
+            "chickpeas": "chickpea",
+            "lentils": "lentil",
+            "beans": "bean",
+            "onions": "onion",
+            "cucumbers": "cucumber",
+        }
+        normalized = singular_overrides.get(normalized, normalized)
+        if normalized.endswith("s") and len(normalized) > 4 and not normalized.endswith("ss"):
+            normalized = normalized[:-1]
+    return " ".join(part.capitalize() for part in normalized.split())
 
 
 def estimate_product_intelligence_tokens(payload: object) -> int:

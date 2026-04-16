@@ -649,6 +649,7 @@ _SCHEMA_COMPATIBILITY: dict[tuple[str | None, str | None], RestoreCompatibility]
 # Revisions listed here keep the same backup table layout and restore compatibility
 # behaviour as the mapped baseline revision.
 _SCHEMA_COMPATIBILITY_ALIASES: dict[str, str] = {
+    "20260416_000020": "20260412_000019",
     "20260409_000017": "20260409_000016",
 }
 
