@@ -406,7 +406,11 @@ def test_ai_context_prefers_classified_product_intelligence_with_fallback_for_un
             classification_scope=PRODUCT_INTELLIGENCE_SCOPE,
             classification_version=PRODUCT_INTELLIGENCE_CLASSIFICATION_VERSION,
             schema_version=PRODUCT_INTELLIGENCE_SCHEMA_VERSION,
-            source_data_hash=build_product_intelligence_source_data_hash(sauce_product),
+            source_data_hash=build_product_intelligence_source_data_hash(
+                sauce_product,
+                provider_type="ollama",
+                model="llama3.2",
+            ),
             classified_at=sauce_product.updated_at,
             confidence=0.91,
             rationale_short="Useful condiment classification for recipe matching.",
