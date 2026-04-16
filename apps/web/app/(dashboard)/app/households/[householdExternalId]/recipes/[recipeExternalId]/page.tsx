@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { CoverageBadge } from "../../../../../../../components/coverage-badge";
+import { RecipeShoppingGapActions } from "../../../../../../../components/recipe-shopping-gap-actions";
 import { StatusCard } from "../../../../../../../components/status-card";
 import { getRecipeDetail, requireSession } from "../../../../../../../lib/server-auth";
 
@@ -128,19 +129,26 @@ export default async function RecipeDetailPage({ params }: RecipeDetailPageProps
           {recipe.shopping_gap_items.length === 0 ? (
             <p>No shopping gaps remain for this recipe.</p>
           ) : (
-            <ul className="detail-list">
-              {recipe.shopping_gap_items.map((item) => (
-                <li key={`${item.label}-${item.unit}`}>
-                  <strong>
-                    {item.label} · {item.quantity} {item.unit}
-                  </strong>
-                  <span>
-                    Derived from {item.ingredient_count} ingredient
-                    {item.ingredient_count === 1 ? "" : "s"} that still need coverage.
-                  </span>
-                </li>
-              ))}
-            </ul>
+            <div className="stack">
+              <RecipeShoppingGapActions
+                householdExternalId={householdExternalId}
+                recipeTitle={recipe.title}
+                items={recipe.shopping_gap_items}
+              />
+              <ul className="detail-list">
+                {recipe.shopping_gap_items.map((item) => (
+                  <li key={`${item.label}-${item.unit}`}>
+                    <strong>
+                      {item.label} · {item.quantity} {item.unit}
+                    </strong>
+                    <span>
+                      Derived from {item.ingredient_count} ingredient
+                      {item.ingredient_count === 1 ? "" : "s"} that still need coverage.
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
         </article>
 

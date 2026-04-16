@@ -36,6 +36,7 @@ function LotActionButton({
       onClick={onClick}
     >
       {children}
+      <span className="icon-button-label">{label}</span>
     </button>
   );
 }
@@ -67,7 +68,7 @@ export function PantryLotActions({
               <path d="M4 10h12M11 6l5 4-5 4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" />
             </svg>
           </LotActionButton>
-          <LotActionButton label="Add to shopping list" onClick={() => setShoppingOpen(true)}>
+          <LotActionButton label="Buy again" onClick={() => setShoppingOpen(true)}>
             <svg viewBox="0 0 20 20" aria-hidden="true">
               <path d="M4.5 5.5h11l-1 6.5H6zM7 15.5h.01M13 15.5h.01M3.5 4h1.5l1 1.5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
             </svg>
@@ -147,6 +148,7 @@ export function PantryLotActions({
           defaultUnit={lot.unit}
           defaultNote={lot.note}
           defaultLocationExternalId={lot.location_external_id}
+          locations={locations}
           onClose={() => setShoppingOpen(false)}
         />
       ) : null}
