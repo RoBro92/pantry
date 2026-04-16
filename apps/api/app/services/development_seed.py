@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal
 
 from sqlalchemy.orm import Session
 
+from app.domain.ai import AI_PROVIDER_DEFAULT_BASE_URLS, AI_PROVIDER_OPENAI, canonical_provider_type
 from app.domain.roles import HOUSEHOLD_ADMIN_ROLE, HOUSEHOLD_USER_ROLE
+from app.services.ai_config import upsert_instance_provider_config
 from app.models.household import Household
 from app.models.product import Product
 from app.models.user import User
@@ -27,11 +30,34 @@ from app.services.product_enrichment import (
     apply_confirmed_product_enrichment,
     get_default_open_food_facts_client,
 )
+from app.services.instance_settings import upsert_password_reset_email_template, upsert_smtp_settings
 from app.services.setup import mark_setup_completed
 
 DEV_MODE_FRESH = "fresh"
 DEV_MODE_DEMO = "demo"
 DEV_MODE_CHOICES = (DEV_MODE_FRESH, DEV_MODE_DEMO)
+LOCAL_AI_PROVIDER_ENV = "PANTRY_LOCAL_AI_PROVIDER_TYPE"
+LOCAL_AI_BASE_URL_ENV = "PANTRY_LOCAL_AI_BASE_URL"
+LOCAL_AI_MODEL_ENV = "PANTRY_LOCAL_AI_DEFAULT_MODEL"
+LOCAL_AI_API_KEY_ENV = "PANTRY_LOCAL_AI_API_KEY"
+LOCAL_AI_ENABLED_ENV = "PANTRY_LOCAL_AI_ENABLED"
+LOCAL_SMTP_HOST_ENV = "PANTRY_LOCAL_SMTP_HOST"
+LOCAL_SMTP_PORT_ENV = "PANTRY_LOCAL_SMTP_PORT"
+LOCAL_SMTP_USERNAME_ENV = "PANTRY_LOCAL_SMTP_USERNAME"
+LOCAL_SMTP_PASSWORD_ENV = "PANTRY_LOCAL_SMTP_PASSWORD"
+LOCAL_SMTP_FROM_EMAIL_ENV = "PANTRY_LOCAL_SMTP_FROM_EMAIL"
+LOCAL_SMTP_FROM_NAME_ENV = "PANTRY_LOCAL_SMTP_FROM_NAME"
+LOCAL_SMTP_SECURITY_ENV = "PANTRY_LOCAL_SMTP_SECURITY"
+LOCAL_SMTP_ENABLED_ENV = "PANTRY_LOCAL_SMTP_ENABLED"
+LOCAL_SMTP_TEST_RECIPIENT_ENV = "PANTRY_LOCAL_SMTP_TEST_RECIPIENT_EMAIL"
+LOCAL_SMTP_PASSWORD_RESET_ENABLED_ENV = "PANTRY_LOCAL_SMTP_PASSWORD_RESET_ENABLED"
+
+LOCAL_AI_DEFAULT_MODELS = {
+    AI_PROVIDER_OPENAI: "gpt-5.4-mini",
+    "claude": "claude-sonnet-4-6",
+    "gemini": "gemini-2.5-flash",
+    "ollama": "qwen3:8b",
+}
 
 
 @dataclass(frozen=True)
@@ -89,6 +115,29 @@ class DevelopmentSeedManifest:
             },
             sort_keys=True,
         )
+
+
+@dataclass(frozen=True)
+class LocalDemoAIConfig:
+    provider_type: str
+    base_url: str
+    default_model: str
+    api_key: str | None
+    is_enabled: bool
+
+
+@dataclass(frozen=True)
+class LocalDemoSMTPConfig:
+    host: str
+    port: int | None
+    username: str | None
+    password: str | None
+    from_email: str | None
+    from_name: str | None
+    security: str | None
+    is_enabled: bool
+    test_recipient_email: str | None
+    password_reset_enabled: bool
 
 
 DEMO_USERS: tuple[DemoUserSeed, ...] = (
@@ -470,6 +519,117 @@ DEMO_PRODUCTS: tuple[DemoProductSeed, ...] = (
 )
 
 
+def _read_optional_env(name: str) -> str | None:
+    value = os.getenv(name)
+    if value is None:
+        return None
+    normalized = value.strip()
+    return normalized or None
+
+
+def _read_bool_env(name: str, *, default: bool) -> bool:
+    value = _read_optional_env(name)
+    if value is None:
+        return default
+    return value.casefold() in {"1", "true", "yes", "on"}
+
+
+def _read_int_env(name: str) -> int | None:
+    value = _read_optional_env(name)
+    if value is None:
+        return None
+    return int(value)
+
+
+def _load_local_demo_ai_config() -> LocalDemoAIConfig | None:
+    provider_value = canonical_provider_type(_read_optional_env(LOCAL_AI_PROVIDER_ENV) or AI_PROVIDER_OPENAI)
+    base_url = _read_optional_env(LOCAL_AI_BASE_URL_ENV)
+    default_model = _read_optional_env(LOCAL_AI_MODEL_ENV)
+    api_key = _read_optional_env(LOCAL_AI_API_KEY_ENV)
+
+    if not any([base_url, default_model, api_key, _read_optional_env(LOCAL_AI_PROVIDER_ENV)]):
+        return None
+
+    if provider_value is None:
+        raise ValueError("PANTRY_LOCAL_AI_PROVIDER_TYPE is not supported for local demo bootstrap.")
+
+    return LocalDemoAIConfig(
+        provider_type=provider_value,
+        base_url=base_url or AI_PROVIDER_DEFAULT_BASE_URLS[provider_value],
+        default_model=default_model or LOCAL_AI_DEFAULT_MODELS[provider_value],
+        api_key=api_key,
+        is_enabled=_read_bool_env(LOCAL_AI_ENABLED_ENV, default=True),
+    )
+
+
+def _load_local_demo_smtp_config() -> LocalDemoSMTPConfig | None:
+    host = _read_optional_env(LOCAL_SMTP_HOST_ENV)
+    username = _read_optional_env(LOCAL_SMTP_USERNAME_ENV)
+    password = _read_optional_env(LOCAL_SMTP_PASSWORD_ENV)
+    from_email = _read_optional_env(LOCAL_SMTP_FROM_EMAIL_ENV)
+    from_name = _read_optional_env(LOCAL_SMTP_FROM_NAME_ENV)
+    security = _read_optional_env(LOCAL_SMTP_SECURITY_ENV)
+    test_recipient_email = _read_optional_env(LOCAL_SMTP_TEST_RECIPIENT_ENV)
+    port = _read_int_env(LOCAL_SMTP_PORT_ENV)
+
+    if not any([host, username, password, from_email, from_name, security, test_recipient_email, port]):
+        return None
+
+    if not host:
+        raise ValueError("PANTRY_LOCAL_SMTP_HOST is required when local demo SMTP bootstrap is configured.")
+
+    return LocalDemoSMTPConfig(
+        host=host,
+        port=port,
+        username=username,
+        password=password,
+        from_email=from_email,
+        from_name=from_name,
+        security=security,
+        is_enabled=_read_bool_env(LOCAL_SMTP_ENABLED_ENV, default=True),
+        test_recipient_email=test_recipient_email,
+        password_reset_enabled=_read_bool_env(LOCAL_SMTP_PASSWORD_RESET_ENABLED_ENV, default=False),
+    )
+
+
+def _apply_local_demo_environment_config(db: Session, *, actor: User) -> None:
+    ai_config = _load_local_demo_ai_config()
+    if ai_config is not None:
+        upsert_instance_provider_config(
+            db,
+            actor=actor,
+            provider_type=ai_config.provider_type,
+            base_url=ai_config.base_url,
+            default_model=ai_config.default_model,
+            api_key=ai_config.api_key,
+            is_enabled=ai_config.is_enabled,
+        )
+
+    smtp_config = _load_local_demo_smtp_config()
+    if smtp_config is not None:
+        upsert_smtp_settings(
+            db,
+            actor=actor,
+            host=smtp_config.host,
+            port=smtp_config.port,
+            username=smtp_config.username,
+            password=smtp_config.password,
+            from_email=smtp_config.from_email,
+            from_name=smtp_config.from_name,
+            security=smtp_config.security,
+            is_enabled=smtp_config.is_enabled,
+            test_recipient_email=smtp_config.test_recipient_email,
+        )
+        if smtp_config.password_reset_enabled:
+            upsert_password_reset_email_template(
+                db,
+                actor=actor,
+                is_enabled=True,
+                subject=None,
+                body_template=None,
+            )
+
+
 def bootstrap_development_mode(
     db: Session,
     *,
@@ -594,6 +754,7 @@ def seed_demo_development_state(db: Session, *, off_client=None) -> DevelopmentS
         db.refresh(product)
         product_external_ids[product_seed.name] = product.external_id
 
+    _apply_local_demo_environment_config(db, actor=actor)
     mark_setup_completed(db)
 
     return DevelopmentSeedManifest(

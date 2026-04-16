@@ -5,7 +5,9 @@ from datetime import date, timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
+from app.models.ai_provider_config import AIProviderConfig
 from app.models.household import Household
+from app.models.instance_setting import InstanceSetting
 from app.models.location import Location
 from app.models.location_group import LocationGroup
 from app.models.membership import Membership
@@ -20,6 +22,7 @@ from app.services.development_seed import (
     DEV_MODE_FRESH,
     bootstrap_development_mode,
 )
+from app.services.secrets import decrypt_secret
 from app.services.open_food_facts import OpenFoodFactsUnavailableError
 from app.services.setup import is_setup_complete
 
@@ -217,6 +220,54 @@ def test_demo_development_mode_seeds_expected_fixture_state(db_session):
 
     enrichments = db_session.scalars(select(ProductEnrichment)).all()
     assert enrichments == []
+
+
+def test_demo_development_mode_bootstraps_local_ai_and_smtp_config_from_environment(
+    db_session,
+    monkeypatch,
+):
+    monkeypatch.setenv("PANTRY_LOCAL_AI_PROVIDER_TYPE", "openai")
+    monkeypatch.setenv("PANTRY_LOCAL_AI_BASE_URL", "https://api.openai.com/v1")
+    monkeypatch.setenv("PANTRY_LOCAL_AI_DEFAULT_MODEL", "gpt-5.4-mini")
+    monkeypatch.setenv("PANTRY_LOCAL_AI_API_KEY", "local-openai-secret")
+    monkeypatch.setenv("PANTRY_LOCAL_SMTP_HOST", "smtp.example.com")
+    monkeypatch.setenv("PANTRY_LOCAL_SMTP_PORT", "587")
+    monkeypatch.setenv("PANTRY_LOCAL_SMTP_USERNAME", "mailer")
+    monkeypatch.setenv("PANTRY_LOCAL_SMTP_PASSWORD", "local-smtp-secret")
+    monkeypatch.setenv("PANTRY_LOCAL_SMTP_FROM_EMAIL", "pantry@example.com")
+    monkeypatch.setenv("PANTRY_LOCAL_SMTP_FROM_NAME", "Pantry Local")
+    monkeypatch.setenv("PANTRY_LOCAL_SMTP_SECURITY", "starttls")
+    monkeypatch.setenv("PANTRY_LOCAL_SMTP_ENABLED", "true")
+    monkeypatch.setenv("PANTRY_LOCAL_SMTP_TEST_RECIPIENT_EMAIL", "test@example.com")
+    monkeypatch.setenv("PANTRY_LOCAL_SMTP_PASSWORD_RESET_ENABLED", "true")
+
+    manifest = bootstrap_development_mode(db_session, mode=DEV_MODE_DEMO, off_client=NoOpenFoodFactsClient())
+
+    assert manifest.mode == DEV_MODE_DEMO
+
+    ai_config = db_session.scalar(select(AIProviderConfig))
+    assert ai_config is not None
+    assert ai_config.provider_type == "openai"
+    assert ai_config.base_url == "https://api.openai.com/v1"
+    assert ai_config.default_model == "gpt-5.4-mini"
+    assert ai_config.encrypted_api_key is not None
+    assert ai_config.encrypted_api_key != "local-openai-secret"
+    assert decrypt_secret(ai_config.encrypted_api_key) == "local-openai-secret"
+
+    instance_settings = db_session.scalar(select(InstanceSetting))
+    assert instance_settings is not None
+    assert instance_settings.smtp_host == "smtp.example.com"
+    assert instance_settings.smtp_port == 587
+    assert instance_settings.smtp_username == "mailer"
+    assert instance_settings.encrypted_smtp_password is not None
+    assert instance_settings.encrypted_smtp_password != "local-smtp-secret"
+    assert decrypt_secret(instance_settings.encrypted_smtp_password) == "local-smtp-secret"
+    assert instance_settings.smtp_from_email == "pantry@example.com"
+    assert instance_settings.smtp_from_name == "Pantry Local"
+    assert instance_settings.smtp_test_recipient_email == "test@example.com"
+    assert instance_settings.smtp_security == "starttls"
+    assert instance_settings.smtp_enabled is True
+    assert instance_settings.password_reset_enabled is True
 
 
 def test_demo_development_mode_ignores_open_food_facts_failures(db_session):
