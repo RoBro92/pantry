@@ -872,6 +872,37 @@ test("admin ai settings persist across navigation and keep stored-key state visi
   await expect(page.getByLabel("API key")).toHaveValue("");
 });
 
+test("admin ai api key blur auto-saves and health-checks without opening the model chooser", async ({
+  page
+}) => {
+  await loginThroughApi(page, {
+    email: manifest.admin_email,
+    password: manifest.password
+  });
+  await dismissAdminWhatsNewIfVisible(page);
+
+  await page.goto("/admin/ai");
+
+  const defaultModelField = page.locator('[aria-label="Default model"]');
+  const apiKeyField = page.getByLabel("API key");
+  const chooseModelButton = page.locator(".ai-provider-model-action button");
+
+  await expect(defaultModelField).toContainText("gpt-5.4-mini");
+  await expect(page.getByRole("button", { name: "Back" })).toHaveCount(0);
+
+  await apiKeyField.fill("test-openai-key");
+  await page.keyboard.press("Tab");
+
+  await expect(page.getByText("Health check failed.")).toBeVisible();
+  await expect(apiKeyField).toHaveValue("");
+  await expect(defaultModelField).toContainText("gpt-5.4-mini");
+  await expect(page.getByRole("button", { name: "Back" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Run health check" })).toBeEnabled();
+
+  await chooseModelButton.click();
+  await expect(page.getByRole("button", { name: "Back" })).toBeVisible();
+});
+
 test("platform admin can manage household memberships from the consolidated panel", async ({
   page
 }) => {

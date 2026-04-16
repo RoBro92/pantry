@@ -81,6 +81,9 @@ def test_platform_admin_ai_provider_config_saves_supported_providers(
     assert payload["config"]["base_url"] == base_url
     assert payload["config"]["default_model"] == default_model
     assert payload["config"]["has_api_key"] is bool(api_key)
+    assert "api_key" not in payload["config"]
+    if api_key:
+        assert api_key not in json.dumps(payload)
 
     stored = db_session.scalar(select(AIProviderConfig))
     assert stored is not None
@@ -88,6 +91,8 @@ def test_platform_admin_ai_provider_config_saves_supported_providers(
     assert stored.base_url == base_url
     assert stored.default_model == default_model
     assert bool(stored.encrypted_api_key) is bool(api_key)
+    if api_key:
+        assert stored.encrypted_api_key != api_key
 
 
 @pytest.mark.parametrize(
@@ -197,6 +202,33 @@ def test_platform_admin_ai_provider_config_normalizes_legacy_openai_compatible_r
     assert health_response.status_code == 200
     assert seen["provider_type"] == "openai"
     assert health_response.json()["config"]["provider_type"] == "openai"
+
+
+def test_platform_admin_ai_provider_config_get_does_not_expose_api_key(client, db_session):
+    admin = create_platform_admin(
+        db_session,
+        email="ai-get-admin@example.com",
+        password=PASSWORD,
+        display_name="AI Get Admin",
+    )
+    upsert_instance_provider_config(
+        db_session,
+        actor=admin,
+        provider_type="openai",
+        base_url="https://api.openai.com/v1",
+        default_model="gpt-5.4-mini",
+        api_key="openai-secret-value",
+        is_enabled=True,
+    )
+    login(client, email="ai-get-admin@example.com")
+
+    response = client.get("/api/platform-admin/ai/provider-config")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["config"]["has_api_key"] is True
+    assert "api_key" not in payload["config"]
+    assert "openai-secret-value" not in json.dumps(payload)
 
 
 def test_platform_admin_diagnostics_report_uses_measured_data(client, db_session, monkeypatch):
