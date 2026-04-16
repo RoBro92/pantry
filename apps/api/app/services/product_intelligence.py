@@ -78,6 +78,68 @@ class ProductClassificationBatchOutput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+def build_product_classification_batch_schema() -> dict[str, object]:
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["items"],
+        "properties": {
+            "items": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": [
+                        "product_external_id",
+                        "confidence",
+                        "rationale_short",
+                        "primary_ingredient_type",
+                        "ingredient_families",
+                        "food_category",
+                        "dietary_tags",
+                        "allergen_tags",
+                        "recipe_role_tags",
+                        "substitution_groups",
+                        "pantry_use_tags",
+                        "structured_metadata",
+                    ],
+                    "properties": {
+                        "product_external_id": {"type": "string"},
+                        "confidence": {"type": ["number", "null"]},
+                        "rationale_short": {"type": ["string", "null"]},
+                        "primary_ingredient_type": {"type": ["string", "null"]},
+                        "ingredient_families": {"type": "array", "items": {"type": "string"}},
+                        "food_category": {"type": ["string", "null"]},
+                        "dietary_tags": {"type": "array", "items": {"type": "string"}},
+                        "allergen_tags": {"type": "array", "items": {"type": "string"}},
+                        "recipe_role_tags": {"type": "array", "items": {"type": "string"}},
+                        "substitution_groups": {"type": "array", "items": {"type": "string"}},
+                        "pantry_use_tags": {"type": "array", "items": {"type": "string"}},
+                        "structured_metadata": {
+                            "type": "object",
+                            "additionalProperties": False,
+                            "required": [
+                                "product_format",
+                                "storage_profile",
+                                "cuisine_tags",
+                                "flavour_tags",
+                                "preparation_tags",
+                            ],
+                            "properties": {
+                                "product_format": {"type": ["string", "null"]},
+                                "storage_profile": {"type": ["string", "null"]},
+                                "cuisine_tags": {"type": "array", "items": {"type": "string"}},
+                                "flavour_tags": {"type": "array", "items": {"type": "string"}},
+                                "preparation_tags": {"type": "array", "items": {"type": "string"}},
+                            },
+                        },
+                    },
+                },
+            }
+        },
+    }
+
+
 @dataclass(frozen=True)
 class ProductIntelligenceStaleness:
     is_stale: bool

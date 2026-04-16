@@ -50,6 +50,7 @@ from app.services.usage_counters import check_usage_quota
 logger = structlog.get_logger(__name__)
 
 QUANTITY_STEP = Decimal("0.001")
+MEAL_SUGGESTION_REQUEST_TIMEOUT_SECONDS = 90.0
 
 
 def _utc_now() -> datetime:
@@ -360,6 +361,7 @@ def generate_ai_meal_suggestions(
                 system_prompt=prompt_plan.system_prompt,
                 user_payload=prompt_plan.user_payload,
                 output_schema=prompt_plan.output_schema,
+                timeout_seconds=MEAL_SUGGESTION_REQUEST_TIMEOUT_SECONDS,
             )
         )
         parsed = AIProviderMealSuggestionOutput.model_validate(completion.parsed_output)

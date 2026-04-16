@@ -99,6 +99,13 @@ def recommended_openai_models_text() -> str:
     return ", ".join(OPENAI_RECOMMENDED_MODELS)
 
 
+def openai_completion_token_param(model: str | None) -> str:
+    normalized = canonicalize_openai_model_id(model)
+    if normalized.startswith(("gpt-5", "o3", "o4")):
+        return "max_completion_tokens"
+    return "max_tokens"
+
+
 def build_openai_supported_model_failure_message(model: str | None) -> str:
     model_name = describe_openai_model(model)
     return (

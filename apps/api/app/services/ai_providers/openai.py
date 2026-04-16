@@ -22,6 +22,7 @@ from app.services.ai_providers.openai_compat import (
     map_openai_http_error,
     map_openai_transport_error,
     normalize_openai_json_schema,
+    openai_completion_token_param,
     openai_model_profile,
     recommended_openai_models_text,
 )
@@ -97,7 +98,7 @@ class OpenAIProviderAdapter:
             },
         }
         if request.max_output_tokens is not None:
-            payload["max_tokens"] = request.max_output_tokens
+            payload[openai_completion_token_param(request.model)] = request.max_output_tokens
         return payload
 
     def _parse_completion_response(self, body: dict[str, Any], *, model: str) -> StructuredCompletionResult:

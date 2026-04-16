@@ -2,9 +2,76 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
+from fractions import Fraction
+import re
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+
+_MIXED_FRACTION_RE = re.compile(r"^(?P<whole>\d+)\s+(?P<fraction>\d+/\d+)$")
+_QUANTITY_WITH_SUFFIX_RE = re.compile(r"^(?P<number>\d+(?:\.\d+)?|\d+/\d+|\d+\s+\d+/\d+)\s*(?P<suffix>.+)?$")
+_NON_NUMERIC_QUANTITY_NOTES = {
+    "to taste",
+    "as needed",
+    "for serving",
+    "to serve",
+    "optional",
+}
+
+
+def _parse_provider_quantity_number(value: str) -> Decimal | None:
+    text = value.strip()
+    if not text:
+        return None
+    try:
+        return Decimal(text)
+    except Exception:
+        pass
+
+    mixed_match = _MIXED_FRACTION_RE.match(text)
+    if mixed_match is not None:
+        return Decimal(mixed_match.group("whole")) + Decimal(str(float(Fraction(mixed_match.group("fraction")))))
+
+    if "/" in text:
+        try:
+            return Decimal(str(float(Fraction(text))))
+        except Exception:
+            return None
+    return None
+
+
+def _normalize_provider_quantity_fields(data: dict[str, Any]) -> dict[str, Any]:
+    raw_quantity = data.get("quantity")
+    raw_unit = str(data.get("unit") or "").strip()
+    raw_note = str(data.get("note") or "").strip()
+
+    if data.get("is_extra_ingredient") is None:
+        data["is_extra_ingredient"] = False
+
+    if isinstance(raw_quantity, str):
+        normalized_quantity = _parse_provider_quantity_number(raw_quantity)
+        if normalized_quantity is not None:
+            data["quantity"] = normalized_quantity
+            return data
+
+        quantity_text = raw_quantity.strip()
+        suffix_match = _QUANTITY_WITH_SUFFIX_RE.match(quantity_text)
+        if suffix_match is not None:
+            numeric = _parse_provider_quantity_number(suffix_match.group("number"))
+            suffix = (suffix_match.group("suffix") or "").strip()
+            if numeric is not None:
+                data["quantity"] = numeric
+                if suffix and not raw_unit:
+                    data["unit"] = suffix
+                return data
+
+        if quantity_text.casefold() in _NON_NUMERIC_QUANTITY_NOTES:
+            data["quantity"] = Decimal("0.000")
+            data["unit"] = raw_unit or "portion"
+            data["note"] = raw_note or quantity_text
+
+    return data
 
 
 class AIProviderConfigUpsertRequest(BaseModel):
@@ -260,6 +327,13 @@ class AIProviderMealSuggestionIngredient(BaseModel):
     is_extra_ingredient: bool = False
 
     model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_quantity_fields(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            return _normalize_provider_quantity_fields(dict(data))
+        return data
 
 
 class AIProviderMealSuggestionSource(BaseModel):

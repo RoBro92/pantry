@@ -4,7 +4,7 @@ import json
 
 from app.services.ai_providers.base import AIProviderRuntimeConfig, StructuredCompletionRequest
 from app.services.ai_providers.openai import OpenAIProviderAdapter
-from app.services.product_intelligence import ProductClassificationBatchOutput
+from app.services.product_intelligence import build_product_classification_batch_schema
 
 
 class StubResponse:
@@ -64,7 +64,7 @@ def test_openai_adapter_sanitizes_strict_json_schema_before_request(monkeypatch)
             model="gpt-4.1-mini",
             system_prompt="Return valid JSON only.",
             user_payload={"products": []},
-            output_schema=ProductClassificationBatchOutput.model_json_schema(),
+            output_schema=build_product_classification_batch_schema(),
             max_output_tokens=800,
         )
     )
@@ -72,6 +72,7 @@ def test_openai_adapter_sanitizes_strict_json_schema_before_request(monkeypatch)
     assert result.parsed_output == {"items": []}
     schema = captured_payload["response_format"]["json_schema"]["schema"]  # type: ignore[index]
     assert schema["required"] == ["items"]  # type: ignore[index]
-    item_schema = schema["$defs"]["ProductBatchClassificationOutput"]  # type: ignore[index]
+    item_schema = schema["properties"]["items"]["items"]  # type: ignore[index]
     assert set(item_schema["required"]) == set(item_schema["properties"].keys())  # type: ignore[index]
     assert "default" not in json.dumps(schema)
+    assert "$defs" not in schema

@@ -66,6 +66,7 @@ def build_ai_meal_prompt_plan(
                     "Return 2 to 3 suggestions.",
                     "Keep titles specific and readable.",
                     "Every suggestion needs ingredients and step-by-step instructions.",
+                    "quantity must be numeric only; keep units in unit and move phrases like 'to taste' into note.",
                     "Mark truly extra ingredients with is_extra_ingredient=true.",
                     "Use source.kind=household_recipe_reference only when a recipe candidate from context clearly fits.",
                 ],

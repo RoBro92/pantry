@@ -145,6 +145,7 @@ def test_openai_adapter_posts_compact_payload_and_normalized_schema_for_structur
             system_prompt="Return valid JSON only.",
             user_payload={"request": {"pantry_only": True}, "context": {"items": ["pasta"]}},
             output_schema=AIProviderMealSuggestionOutput.model_json_schema(),
+            max_output_tokens=1200,
         )
     )
 
@@ -155,7 +156,50 @@ def test_openai_adapter_posts_compact_payload_and_normalized_schema_for_structur
     payload = captured["json"]
     assert payload["messages"][1]["content"] == '{"request":{"pantry_only":true},"context":{"items":["pasta"]}}'
     assert payload["response_format"]["json_schema"]["name"] == "pantry_meal_suggestion"
+    assert payload["max_completion_tokens"] == 1200
+    assert "max_tokens" not in payload
     _assert_strict_openai_schema(payload["response_format"]["json_schema"]["schema"])
+
+
+def test_openai_adapter_uses_max_tokens_for_gpt_4_1_requests(monkeypatch):
+    captured: dict[str, object] = {}
+
+    def handler(method, url, json_body):
+        captured["json"] = json_body
+        return _json_response(
+            method,
+            url,
+            {
+                "id": "chatcmpl_test",
+                "choices": [
+                    {
+                        "message": {
+                            "content": '{"items":[]}',
+                        }
+                    }
+                ],
+            },
+        )
+
+    monkeypatch.setattr(
+        "app.services.ai_providers.openai.httpx.Client",
+        lambda *args, **kwargs: FakeHTTPXClient(handler, *args, **kwargs),
+    )
+
+    adapter = OpenAIProviderAdapter(_runtime_config(model="gpt-4.1-mini"))
+    adapter.generate_structured_output(
+        StructuredCompletionRequest(
+            model="gpt-4.1-mini",
+            system_prompt="Return valid JSON only.",
+            user_payload={"products": []},
+            output_schema=AIProviderMealSuggestionOutput.model_json_schema(),
+            max_output_tokens=800,
+        )
+    )
+
+    payload = captured["json"]
+    assert payload["max_tokens"] == 800
+    assert "max_completion_tokens" not in payload
 
 
 def test_openai_health_check_marks_provider_unhealthy_when_models_list_but_structured_probe_fails(monkeypatch):

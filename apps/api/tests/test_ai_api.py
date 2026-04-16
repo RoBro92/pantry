@@ -677,6 +677,7 @@ def test_ai_meal_suggestions_support_openai_provider_configs(
     class StubOpenAIMealAdapter(StubAIProviderAdapter):
         def generate_structured_output(self, request) -> StructuredCompletionResult:
             assert request.model == default_model
+            assert request.timeout_seconds == 90.0
             return StructuredCompletionResult(
                 output_text='{"suggestions":[{"title":"Simple toast","short_summary":"Fast pantry meal.","why_it_matches":"Uses what is already available.","dietary_fit_summary":"Fits the selected preferences.","source":{"kind":"ai_generated","label":"AI-generated"},"ingredients":[],"steps":["Toast the bread."]}]}',
                 parsed_output={
@@ -729,6 +730,98 @@ def test_ai_meal_suggestions_support_openai_provider_configs(
     assert payload["feature"]["default_model"] == default_model
     assert payload["suggestions"][0]["title"] == "Simple toast"
     assert "openai" in captured_provider_types
+
+
+def test_ai_meal_suggestions_normalize_human_style_openai_quantities(client, db_session, monkeypatch):
+    member, household = create_member_household(
+        db_session,
+        email="openai-meal-quantity@example.com",
+        household_name="OpenAI Meal Quantity Household",
+    )
+    admin = create_platform_admin(
+        db_session,
+        email="openai-meal-quantity-admin@example.com",
+        password=PASSWORD,
+        display_name="OpenAI Meal Quantity Admin",
+    )
+    upsert_instance_provider_config(
+        db_session,
+        actor=admin,
+        provider_type=AI_PROVIDER_OPENAI,
+        base_url="https://api.openai.com/v1",
+        default_model="gpt-5.4-mini",
+        api_key="openai-test-secret",
+        is_enabled=True,
+    )
+
+    class StubOpenAIQuantityAdapter(StubAIProviderAdapter):
+        def generate_structured_output(self, request) -> StructuredCompletionResult:
+            return StructuredCompletionResult(
+                output_text='{"suggestions":[{"title":"Toast with seasoning","short_summary":"Simple pantry meal.","why_it_matches":"Uses staples.","dietary_fit_summary":"Fits the household.","source":{"kind":"ai_generated","label":"AI-generated"},"ingredients":[{"name":"Olive oil","quantity":"1 tbsp","unit":"tbsp"},{"name":"Salt","quantity":"to taste","unit":"pinch"}],"steps":["Toast and season."]}]}',
+                parsed_output={
+                    "suggestions": [
+                        {
+                            "title": "Toast with seasoning",
+                            "short_summary": "Simple pantry meal.",
+                            "why_it_matches": "Uses staples.",
+                            "dietary_fit_summary": "Fits the household.",
+                            "source": {
+                                "kind": "ai_generated",
+                                "label": "AI-generated",
+                            },
+                            "ingredients": [
+                                {
+                                    "name": "Olive oil",
+                                    "quantity": "1 tbsp",
+                                    "unit": "tbsp",
+                                    "is_extra_ingredient": None,
+                                },
+                                {
+                                    "name": "Salt",
+                                    "quantity": "to taste",
+                                    "unit": "pinch",
+                                    "is_extra_ingredient": None,
+                                },
+                            ],
+                            "steps": ["Toast and season."],
+                        }
+                    ]
+                },
+                provider_request_id="openai_quantity_req_123",
+            )
+
+    monkeypatch.setattr("app.services.ai_config.build_ai_provider_adapter", lambda config: StubOpenAIQuantityAdapter())
+    monkeypatch.setattr(
+        "app.services.ai_meal_suggestions.build_ai_provider_adapter",
+        lambda config: StubOpenAIQuantityAdapter(),
+    )
+
+    login(client, email="openai-meal-quantity@example.com")
+
+    response = client.post(
+        f"/api/households/{household.external_id}/ai/meal-suggestions",
+        json={
+            "people_count": 1,
+            "selected_user_external_ids": [member.external_id],
+            "meal_type": "dinner",
+            "extra_portion_count": 0,
+            "max_total_minutes": 20,
+            "prioritize_near_expiry": False,
+            "allow_extra_ingredients": True,
+            "pantry_only": False,
+            "temporary_include_preferences": [],
+            "temporary_exclude_preferences": [],
+            "removed_preference_pills": [],
+        },
+    )
+
+    assert response.status_code == 200
+    ingredients = response.json()["suggestions"][0]["ingredients"]
+    assert Decimal(ingredients[0]["quantity"]) == Decimal("1.000")
+    assert ingredients[0]["unit"] == "tbsp"
+    assert Decimal(ingredients[1]["quantity"]) == Decimal("0.000")
+    assert ingredients[1]["unit"] == "pinch"
+    assert ingredients[1]["note"] == "to taste"
 
 
 def test_ai_meal_planner_keeps_supported_openai_models_available_when_cached_health_is_stale(
