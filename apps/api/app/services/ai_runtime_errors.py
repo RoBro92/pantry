@@ -18,13 +18,13 @@ def summarize_ai_failure(exc: Exception, *, fallback_message: str) -> tuple[str,
         return exc.user_message, exc.diagnostic_message, exc.category
     if isinstance(exc, ValidationError):
         return (
-            "The AI provider returned a structured response Pantry could not validate.",
+            "The AI provider returned a structured response Pantro could not validate.",
             exc.json(),
             "invalid_response",
         )
     if isinstance(exc, JSONDecodeError):
         return (
-            "The AI provider returned a structured response Pantry could not parse.",
+            "The AI provider returned a structured response Pantro could not parse.",
             str(exc),
             "invalid_response",
         )

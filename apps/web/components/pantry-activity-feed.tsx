@@ -108,7 +108,7 @@ export function PantryActivityFeed({ events }: PantryActivityFeedProps) {
 
       {isHistoryOpen ? (
         <ModalShell
-          title="Pantry activity history"
+          title="Pantro activity history"
           description="Review the recent pantry log in a denser scrollable view."
           onClose={() => setIsHistoryOpen(false)}
           panelClassName="modal-panel modal-panel-wide"

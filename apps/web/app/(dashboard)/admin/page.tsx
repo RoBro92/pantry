@@ -113,7 +113,7 @@ export default async function AdminOverviewPage() {
             </li>
           </ul>
           <p>
-            Pantry only checks published release metadata. Operators still choose when to pull
+            Pantro only checks published release metadata. Operators still choose when to pull
             images, run migrations, and restart the stack.
           </p>
           {releaseStatus.release_notes_url ? (

@@ -63,7 +63,7 @@ export function ProductIntelligenceDetails({
         <div className="stack compact-stack">
           <strong>AI product intelligence</strong>
           <p className="helper-text">
-            Structured classification for {productName}. Pantry keeps the product identity user-owned.
+            Structured classification for {productName}. Pantro keeps the product identity user-owned.
           </p>
         </div>
         <div className="tag-row">
@@ -136,7 +136,7 @@ export function ProductIntelligenceDetails({
         <TagSection label="Allergen tags" values={intelligence.allergen_tags} />
         <TagSection label="Recipe roles" values={intelligence.recipe_role_tags} />
         <TagSection label="Substitution groups" values={intelligence.substitution_groups} />
-        <TagSection label="Pantry uses" values={intelligence.pantry_use_tags} />
+        <TagSection label="Pantro uses" values={intelligence.pantry_use_tags} />
         <TagSection label="Cuisine tags" values={intelligence.structured_metadata.cuisine_tags} />
         <TagSection label="Flavour tags" values={intelligence.structured_metadata.flavour_tags} />
         <TagSection

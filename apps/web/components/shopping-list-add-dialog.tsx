@@ -102,7 +102,7 @@ export function ShoppingListAddDialog({
           </label>
           {locations.length > 0 ? (
             <label className="field">
-              <span>Pantry location</span>
+              <span>Pantro location</span>
               <select
                 value={pantryLocationExternalId}
                 onChange={(event) => setPantryLocationExternalId(event.target.value)}

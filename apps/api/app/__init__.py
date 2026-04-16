@@ -1,2 +1,2 @@
-# Pantry API package.
+# Pantro API package.
 

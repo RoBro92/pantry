@@ -95,7 +95,7 @@ def _compute_ingredient_coverage(
                     covered_quantity=Decimal("0.000"),
                     missing_quantity=ingredient.quantity,
                     comparison_unit=pantry_unit,
-                    reason="Pantry stock uses a different unit than this ingredient.",
+                    reason="Pantro stock uses a different unit than this ingredient.",
                 )
             )
             continue

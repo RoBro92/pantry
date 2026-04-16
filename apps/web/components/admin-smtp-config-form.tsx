@@ -240,12 +240,12 @@ export function AdminSMTPConfigForm({ initialConfig }: AdminSMTPConfigFormProps)
       <section className="panel">
         <p className="eyebrow">Instance SMTP</p>
         <h1>SMTP</h1>
-        <p>Configure Pantry’s instance level outbound email.</p>
+        <p>Configure Pantro’s instance level outbound email.</p>
         <p className="section-copy">
           Effective source: <strong>{getConfigSourceLabel(config.effective_source)}</strong>
         </p>
         <p className="helper-text">
-          Pantry keeps the latest recorded SMTP connectivity result here. It does not background-poll
+          Pantro keeps the latest recorded SMTP connectivity result here. It does not background-poll
           SMTP health on a timer.
         </p>
         {config.effective_source === "environment" ? (
@@ -260,7 +260,7 @@ export function AdminSMTPConfigForm({ initialConfig }: AdminSMTPConfigFormProps)
           <div className="stack compact-stack">
             <h2>Connection and sender</h2>
             <p className="helper-text">
-              Pantry uses one sender alias for password reset emails, SMTP test emails, and future
+              Pantro uses one sender alias for password reset emails, SMTP test emails, and future
               template-driven emails.
             </p>
           </div>
@@ -303,12 +303,12 @@ export function AdminSMTPConfigForm({ initialConfig }: AdminSMTPConfigFormProps)
               <input
                 value={fromEmail}
                 onChange={(event) => setFromEmail(event.target.value)}
-                placeholder="pantry@example.com"
+                placeholder="pantro@example.com"
               />
             </label>
             <label className="field">
               <span>Sender name</span>
-              <input value={fromName} onChange={(event) => setFromName(event.target.value)} placeholder="Pantry" />
+              <input value={fromName} onChange={(event) => setFromName(event.target.value)} placeholder="Pantro" />
             </label>
             <label className="field">
               <span>Test recipient email</span>
@@ -325,7 +325,7 @@ export function AdminSMTPConfigForm({ initialConfig }: AdminSMTPConfigFormProps)
               checked={isEnabled}
               onChange={(event) => setIsEnabled(event.target.checked)}
             />
-            <span>Enable SMTP for Pantry.</span>
+            <span>Enable SMTP for Pantro.</span>
           </label>
           <div className="page-actions">
             <button type="button" className="primary-button" disabled={isSaving} onClick={handleSave}>
@@ -451,7 +451,7 @@ export function AdminSMTPConfigForm({ initialConfig }: AdminSMTPConfigFormProps)
       {templateModal && passwordResetTemplate ? (
         <ModalShell
           title={templateModal.label}
-          description="Update the template copy or restore the Pantry default."
+          description="Update the template copy or restore the Pantro default."
           onClose={() => {
             if (!templatePending) {
               setTemplateModal(null);

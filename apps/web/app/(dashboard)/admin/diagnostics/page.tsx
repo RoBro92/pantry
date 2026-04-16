@@ -22,7 +22,7 @@ export default async function AdminDiagnosticsPage() {
         <p className="eyebrow">Instance Diagnostics</p>
         <h1>Runtime State</h1>
         <p>
-          This page provides a snapshot of the current runtime state of your Pantry instance, including connectivity, configuration, and operational status of key components. Use this information for troubleshooting, monitoring, and ensuring your instance is healthy and up to date.
+          This page provides a snapshot of the current runtime state of your Pantro instance, including connectivity, configuration, and operational status of key components. Use this information for troubleshooting, monitoring, and ensuring your instance is healthy and up to date.
         </p>
       </section>
 

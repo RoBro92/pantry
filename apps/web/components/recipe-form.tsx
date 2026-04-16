@@ -234,7 +234,7 @@ export function RecipeForm({
                   />
                 </label>
                 <label className="field">
-                  <span>Pantry product</span>
+                  <span>Pantro product</span>
                   <select
                     value={ingredient.product_external_id}
                     onChange={(event) =>

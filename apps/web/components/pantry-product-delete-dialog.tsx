@@ -37,7 +37,7 @@ export function PantryProductDeleteDialog({
       onClose();
     } catch (requestError) {
       setError(
-        requestError instanceof Error ? requestError.message : "Could not delete this Pantry product.",
+        requestError instanceof Error ? requestError.message : "Could not delete this Pantro product.",
       );
     } finally {
       setPending(false);
@@ -47,16 +47,16 @@ export function PantryProductDeleteDialog({
   return (
     <ModalShell
       title={`Delete ${product.product_name}`}
-      description="This permanently removes the Pantry product record itself, not just one stock lot."
+      description="This permanently removes the Pantro product record itself, not just one stock lot."
       onClose={onClose}
     >
       <div className="stack">
         <div className="warning-callout">
-          <strong>Delete the whole product from Pantry</strong>
+          <strong>Delete the whole product from Pantro</strong>
           <p>
             This will remove <strong>{product.product_name}</strong>, its {product.lot_count} active
             stock lot{product.lot_count === 1 ? "" : "s"}, linked enrichment, aliases, barcodes,
-            and related Pantry product metadata.
+            and related Pantro product metadata.
           </p>
           <p>Remaining stock will not be returned to the shopping list in this flow.</p>
         </div>

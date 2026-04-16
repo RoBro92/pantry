@@ -42,7 +42,7 @@ export function AdminSettingsForm({ initialPublicBaseUrl }: AdminSettingsFormPro
         <p className="eyebrow">Browser Links</p>
         <h1>Public Base URL</h1>
         <p>
-          Pantry uses this base URL when it generates QR links and other browser-facing deep links.
+          Pantro uses this base URL when it generates QR links and other browser-facing deep links.
           The effective value currently resolves from{" "}
           <strong>{getConfigSourceLabel(summary.effective_source)}</strong>.
         </p>
@@ -57,7 +57,7 @@ export function AdminSettingsForm({ initialPublicBaseUrl }: AdminSettingsFormPro
           <input
             value={value}
             onChange={(event) => setValue(event.target.value)}
-            placeholder="https://pantry.example.com"
+            placeholder="https://pantro.example.com"
           />
         </label>
         <div className="page-actions">

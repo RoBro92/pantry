@@ -487,7 +487,7 @@ export function AdminHouseholdManagementPanel({
           <p className="eyebrow">Households</p>
           <h2>Create or restore household</h2>
           <p className="section-copy">
-            Start a brand new household or restore a Pantry household backup into a brand new
+            Start a brand new household or restore a Pantro household backup into a brand new
             household. Restore never merges into an existing household.
           </p>
           <div className="content-grid">
@@ -515,12 +515,12 @@ export function AdminHouseholdManagementPanel({
               <div className="stack compact-stack">
                 <h3>Restore from backup</h3>
                 <p className="helper-text">
-                  Upload a Pantry household backup JSON file. Pantry validates it safely, stages it
+                  Upload a Pantro household backup JSON file. Pantro validates it safely, stages it
                   in quarantine, and restores it into a new household only.
                 </p>
               </div>
               <label className="field">
-                <span>Pantry household backup</span>
+                <span>Pantro household backup</span>
                 <input type="file" name="file" accept=".json,application/json" required />
               </label>
               <button type="submit" className="ghost-button" disabled={restoreUploadPending}>

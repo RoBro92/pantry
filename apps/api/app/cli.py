@@ -87,7 +87,7 @@ def seed_development_mode(args: argparse.Namespace) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Pantry API operational commands")
+    parser = argparse.ArgumentParser(description="Pantro API operational commands")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     bootstrap_parser = subparsers.add_parser(

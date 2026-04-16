@@ -49,7 +49,7 @@ export function AdminReleaseNotesDialog({
         data-testid="admin-whats-new-dialog"
       >
         <p className="eyebrow">What Changed</p>
-        <h2 id="whats-new-title">Pantry {currentRelease.version}</h2>
+        <h2 id="whats-new-title">Pantro {currentRelease.version}</h2>
         {currentRelease.changelog_summary ? (
           <div className="info-callout">
             <strong>Release summary</strong>

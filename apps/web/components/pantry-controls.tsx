@@ -107,7 +107,7 @@ export function PantryControls({
       <section className="panel pantry-actions-panel">
         <div className="pantry-actions-header">
           <div className="stack compact-stack">
-            <p className="eyebrow">Pantry</p>
+            <p className="eyebrow">Pantro</p>
             <h1 className="pantry-page-title">{householdName}</h1>
             <p className="section-copy">
               Search by product name, alias, or barcode. 
@@ -238,7 +238,7 @@ export function PantryControls({
           </div>
         </form>
 
-        <div className="pantry-metric-chips" aria-label="Pantry quick filters">
+        <div className="pantry-metric-chips" aria-label="Pantro quick filters">
           <button
             type="button"
             className="metric-chip"

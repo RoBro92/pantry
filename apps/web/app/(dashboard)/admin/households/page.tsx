@@ -12,7 +12,7 @@ export default async function AdminHouseholdsPage() {
       <AdminHouseholdManagementPanel households={households} users={users} />
       <DataTable
         title="Households"
-        columns={["Name", "External ID", "Memberships", "Current Members", "Role", "Pantry"]}
+        columns={["Name", "External ID", "Memberships", "Current Members", "Role", "Pantro"]}
         tableClassName="households-table"
       >
         {households.map((household) => {
@@ -62,7 +62,7 @@ export default async function AdminHouseholdsPage() {
                   </div>
                 )}
               </td>
-              <td data-label="Pantry" className="household-link-cell">
+              <td data-label="Pantro" className="household-link-cell">
                 <Link href={`/app/households/${household.external_id}`} className="inline-link">
                   Open pantry
                 </Link>

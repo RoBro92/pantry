@@ -14,7 +14,7 @@ export default async function SessionPage() {
           Logged in as {session.user.display_name ?? session.user.email}
         </p>
         <p>
-          This is your Pantry dashboard, where you can access your households, view your memberships, and manage your account. Use the links below to navigate to different sections of the app and start organizing your pantry!
+          This is your Pantro dashboard, where you can access your households, view your memberships, and manage your account. Use the links below to navigate to different sections of the app and start organizing your pantry!
         </p>
       </section>
 
@@ -37,7 +37,7 @@ export default async function SessionPage() {
       </section>
 
       <section className="panel">
-        <p className="eyebrow">Pantry Households</p>
+        <p className="eyebrow">Pantro Households</p>
         {session.memberships.length === 0 ? (
           session.user.platform_role === "platform_admin" ? (
             <div className="stack">
@@ -76,7 +76,7 @@ export default async function SessionPage() {
                     href={`/app/households/${membership.household_external_id}`}
                     className="primary-link"
                   >
-                    Open Pantry
+                    Open Pantro
                   </Link>
                   <Link
                     href={`/app/households/${membership.household_external_id}/recipes`}
@@ -102,7 +102,7 @@ export default async function SessionPage() {
         <p className="eyebrow">Admin</p>
         <p>
           The admin dashboard provides installation-level tools for managing households, users,
-          and memberships across Pantry.
+          and memberships across Pantro.
         </p>
           <Link href="/admin" className="primary-link">
             Open admin dashboard

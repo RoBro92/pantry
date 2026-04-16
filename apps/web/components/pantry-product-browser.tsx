@@ -277,7 +277,7 @@ export function PantryProductBrowser({
             <ProductEnrichmentDetails
               enrichment={product.enrichment}
               title="Linked enrichment"
-              subtitle="Open Food Facts stays attached as enrichment context. Pantry keeps product identity, aliases, and stock ownership."
+              subtitle="Open Food Facts stays attached as enrichment context. Pantro keeps product identity, aliases, and stock ownership."
             />
           ) : null}
         </div>

@@ -213,7 +213,7 @@ export function HouseholdAIMealPlanner({
         setResult(null);
         setSelectedSuggestionId(null);
         setError(
-          "Pantry could not build a usable meal shortlist from the AI response. Try again or adjust the meal request.",
+          "Pantro could not build a usable meal shortlist from the AI response. Try again or adjust the meal request.",
         );
         return;
       }
@@ -235,7 +235,7 @@ export function HouseholdAIMealPlanner({
         <h1>{initialPlanner.household_name}</h1>
         <p className="section-copy">
           Build a shortlist around the people eating, pantry stock on hand, near-expiry items, and
-          dietary preferences already stored in Pantry.
+          dietary preferences already stored in Pantro.
         </p>
         <div className="tag-row">
           <span className="tag">{initialPlanner.feature.provider_type ?? "no provider"}</span>
@@ -282,7 +282,7 @@ export function HouseholdAIMealPlanner({
           <h2 className="section-heading">One guided request</h2>
           <p className="section-copy">
             Start with a shortlist, then open one recipe and optionally deduct what you actually
-            used from Pantry.
+            used from Pantro.
           </p>
         </div>
         {error ? <p className="error-text">{error}</p> : null}
@@ -504,7 +504,7 @@ export function HouseholdAIMealPlanner({
                 }
               }}
             />
-            <span>Pantry-only mode</span>
+            <span>Pantro-only mode</span>
           </label>
           <label className="checkbox-row">
             <input
@@ -543,7 +543,7 @@ export function HouseholdAIMealPlanner({
               <p>Household members included in the dietary context.</p>
             </article>
             <article className="status-card">
-              <p className="eyebrow">Pantry Mode</p>
+              <p className="eyebrow">Pantro Mode</p>
               <h2>{result.context_snapshot.pantry_only ? "Only" : "Plus extras"}</h2>
               <p>
                 {result.context_snapshot.effective_preference_count} effective dietary preference
@@ -653,7 +653,7 @@ export function HouseholdAIMealPlanner({
               <strong>Recipe completion saved</strong>
               <p>
                 {completionSummary.completed
-                  ? "Pantry stock was deducted for the matched ingredients you confirmed."
+                  ? "Pantro stock was deducted for the matched ingredients you confirmed."
                   : "The recipe was marked complete, but nothing could be deducted automatically."}
               </p>
               {completionSummary.warnings.length > 0 ? (
@@ -693,7 +693,7 @@ export function HouseholdAIMealPlanner({
                     </div>
                     <p className="helper-text">
                       {ingredient.pantry_product_name
-                        ? `Pantry match: ${ingredient.pantry_product_name}`
+                        ? `Pantro match: ${ingredient.pantry_product_name}`
                         : "No pantry match"}
                     </p>
                     <p className="helper-text">

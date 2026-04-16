@@ -40,7 +40,7 @@ function describeScannerError(error: unknown) {
       return "The camera is already in use by another application or browser tab.";
     }
     if (error.name === "OverconstrainedError") {
-      return "This camera could not satisfy Pantry's barcode scanning request.";
+      return "This camera could not satisfy Pantro's barcode scanning request.";
     }
   }
   if (error instanceof Error && error.message.trim()) {
@@ -136,7 +136,7 @@ export function BarcodeScannerDialog({
       if (supportedFormats.length === 0) {
         setCanRetryCamera(false);
         setError(
-          "This browser can open the camera, but it does not expose barcode formats Pantry can read.",
+          "This browser can open the camera, but it does not expose barcode formats Pantro can read.",
         );
         return;
       }
@@ -229,7 +229,7 @@ export function BarcodeScannerDialog({
   return (
     <ModalShell
       title="Scan barcode"
-      description="Pantry can use the browser camera when supported. If the camera is unavailable, type or scan into the manual field instead."
+      description="Pantro can use the browser camera when supported. If the camera is unavailable, type or scan into the manual field instead."
       onClose={onClose}
     >
       <div className="stack" data-testid="barcode-scanner-dialog">

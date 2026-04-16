@@ -367,7 +367,7 @@ def generate_ai_meal_suggestions(
         parsed = AIProviderMealSuggestionOutput.model_validate(completion.parsed_output)
         if not parsed.suggestions:
             raise AIProviderError(
-                "Pantry could not build a usable meal shortlist from the AI response. Try again or adjust the meal request.",
+                "Pantro could not build a usable meal shortlist from the AI response. Try again or adjust the meal request.",
                 diagnostic_message="Structured meal suggestion response contained zero suggestions.",
                 category="invalid_response",
             )
@@ -543,7 +543,7 @@ def complete_ai_meal_suggestion(
             note = "No matching pantry stock could be deducted."
         elif consumed_quantity == requested_quantity:
             status = "consumed"
-            note = "Pantry stock deducted."
+            note = "Pantro stock deducted."
         else:
             status = "partially_consumed"
             note = "Only the remaining pantry stock could be deducted."

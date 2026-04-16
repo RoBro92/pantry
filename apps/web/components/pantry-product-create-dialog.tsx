@@ -82,9 +82,9 @@ export function PantryProductDialog({
   initialValues,
   onCompleted,
   onClose,
-  title = mode === "create" ? "Create Pantry product" : "Edit Pantry product",
+  title = mode === "create" ? "Create Pantro product" : "Edit Pantro product",
   description = mode === "create"
-    ? "Create a Pantry product record with the full product fields before stock is reconciled."
+    ? "Create a Pantro product record with the full product fields before stock is reconciled."
     : "Update the saved product record without mixing in stock-lot fields.",
   submitLabel = mode === "create" ? "Create product" : "Save product",
   contextSummary,
@@ -178,7 +178,7 @@ export function PantryProductDialog({
 
     try {
       if (mode === "edit" && !initialValues.externalId) {
-        throw new Error("This Pantry product is missing its identifier.");
+        throw new Error("This Pantro product is missing its identifier.");
       }
       const payload = {
         name: form.name,
@@ -210,7 +210,7 @@ export function PantryProductDialog({
       onClose();
     } catch (requestError) {
       setError(
-        requestError instanceof Error ? requestError.message : "Could not save this Pantry product.",
+        requestError instanceof Error ? requestError.message : "Could not save this Pantro product.",
       );
     } finally {
       setPending(false);
@@ -242,7 +242,7 @@ export function PantryProductDialog({
                   <p className="helper-text">Purchased: {contextSummary.quantitySummary}</p>
                 ) : null}
                 {contextSummary.pantryLocationSummary ? (
-                  <p className="helper-text">Pantry location: {contextSummary.pantryLocationSummary}</p>
+                  <p className="helper-text">Pantro location: {contextSummary.pantryLocationSummary}</p>
                 ) : null}
                 {contextSummary.note ? <p className="helper-text">Shopping note: {contextSummary.note}</p> : null}
               </div>

@@ -55,7 +55,7 @@ export default async function ImportDetailPage({ params }: ImportDetailPageProps
             Refresh
           </Link>
           <Link href={`/app/households/${householdExternalId}`} className="secondary-link">
-            Pantry
+            Pantro
           </Link>
         </div>
       </section>

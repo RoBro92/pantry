@@ -21,7 +21,7 @@ export default async function ResetPasswordPage({ searchParams }: ResetPasswordP
     <main className="page-shell">
       <section className="auth-stage-shell">
         <div className="auth-stage-intro">
-          <p className="eyebrow">Pantry</p>
+          <p className="eyebrow">Pantro</p>
           <h1>Choose a new password</h1>
           <p className="lede">
             Password reset links expire automatically and can only be used once.

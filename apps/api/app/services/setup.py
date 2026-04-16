@@ -466,9 +466,9 @@ def _missing_requirements(payload: dict[str, object]) -> list[str]:
     completion = _compute_step_completion(payload)
     if not completion["welcome"]:
         if payload.get("installation_mode") == SETUP_MODE_RESTORE_BACKUP:
-            missing.append("Choose restore and upload a validated full instance Pantry backup.")
+            missing.append("Choose restore and upload a validated full instance Pantro backup.")
         else:
-            missing.append("Choose how this Pantry install should start before continuing.")
+            missing.append("Choose how this Pantro install should start before continuing.")
     if payload.get("installation_mode") == SETUP_MODE_RESTORE_BACKUP:
         return missing
     if not completion["users"]:
@@ -529,7 +529,7 @@ def get_setup_status(db: Session) -> SetupStatusResponse:
         platform_admin_count=platform_admin_count,
         can_bootstrap_platform_admin=not is_initialized,
         recommended_next_step=(
-            "Sign in and continue in Pantry."
+            "Sign in and continue in Pantro."
             if is_initialized
             else "Resume setup."
             if has_staged_progress

@@ -95,12 +95,12 @@ function createQuickAddItem(
 
 function describeDuplicateMatch(matchedProduct: PantryProductMatchSummary) {
   if (matchedProduct.match_reason === "barcode_exact") {
-    return "This barcode already belongs to that Pantry product, so quick add will route the lot there unless you clear the barcode.";
+    return "This barcode already belongs to that Pantro product, so quick add will route the lot there unless you clear the barcode.";
   }
   if (matchedProduct.match_reason === "name_similarity") {
-    return "Pantry found a likely existing product. Use it by default, or keep this scan separate if that is intentional.";
+    return "Pantro found a likely existing product. Use it by default, or keep this scan separate if that is intentional.";
   }
-  return "Pantry found an existing product that already matches this item.";
+  return "Pantro found an existing product that already matches this item.";
 }
 
 function buildLookupStatus(preview: PantryEnrichmentPreviewResponse, barcode: string) {
@@ -238,7 +238,7 @@ export function PantryQuickAddDialog({
         nextError =
           requestError instanceof Error
             ? requestError.message
-            : "Could not check for existing Pantry products.";
+            : "Could not check for existing Pantro products.";
       }
     }
 
@@ -458,7 +458,7 @@ export function PantryQuickAddDialog({
       addedCount === 0
         ? "No queued items were added. Review the highlighted rows and try again."
         : remainingCount === 0
-          ? `Added ${addedCount} item${addedCount === 1 ? "" : "s"} to Pantry.`
+          ? `Added ${addedCount} item${addedCount === 1 ? "" : "s"} to Pantro.`
           : `Added ${addedCount} item${addedCount === 1 ? "" : "s"}. ${remainingCount} still need review.`,
     );
     setBulkPending(false);
@@ -469,7 +469,7 @@ export function PantryQuickAddDialog({
     <>
       <ModalShell
         title="Quick add pantry items"
-        description="Queue multiple barcodes first, let Pantry look up Open Food Facts data in the background, then review the compact lot details before saving."
+        description="Queue multiple barcodes first, let Pantro look up Open Food Facts data in the background, then review the compact lot details before saving."
         onClose={onClose}
         closeOnBackdropClick={false}
         panelClassName="modal-panel modal-panel-wide"
@@ -566,7 +566,7 @@ export function PantryQuickAddDialog({
             {statusMessage ? <p className="status-note">{statusMessage}</p> : null}
             {!canAdminister ? (
               <p className="helper-text">
-                Household admins can create new Pantry products during quick add. Non-admin users
+                Household admins can create new Pantro products during quick add. Non-admin users
                 can still add to existing products when a match is found.
               </p>
             ) : null}

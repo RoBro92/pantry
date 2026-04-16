@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Pantry",
+  title: "Pantro",
   description: "Self-hosted-first pantry management foundation"
 };
 

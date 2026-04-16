@@ -31,7 +31,7 @@ export function ShoppingTripFinishDialog({
       <div className="stack">
         <div className="warning-callout">
           <strong>{unresolvedItemCount} unresolved item{unresolvedItemCount === 1 ? "" : "s"} remain</strong>
-          <p>Purchased items will still write back to Pantry as normal when you finish this trip.</p>
+          <p>Purchased items will still write back to Pantro as normal when you finish this trip.</p>
         </div>
 
         <label className="checkbox-row">

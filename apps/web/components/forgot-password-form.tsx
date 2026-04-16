@@ -38,7 +38,7 @@ export function ForgotPasswordForm() {
       <p className="eyebrow">Password Reset</p>
       <h1>Reset your password</h1>
       <p className="section-copy">
-        Enter the email address tied to your Pantry account. Accounts that only use a username
+        Enter the email address tied to your Pantro account. Accounts that only use a username
         still need an admin-led reset.
       </p>
       <label className="field">

@@ -640,7 +640,7 @@ def _try_apply_confirmed_enrichment(
 def _build_metadata_message(base_message: str, metadata_message: str | None) -> str:
     if not metadata_message:
         return base_message
-    return f"{base_message} Pantry also {metadata_message}."
+    return f"{base_message} Pantro also {metadata_message}."
 
 
 def _build_enrichment_message(base_message: str, enrichment_message: str | None) -> str:
