@@ -9,8 +9,10 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 
 from app.domain.ai import AI_PROVIDER_DEFAULT_BASE_URLS, AI_PROVIDER_OPENAI, canonical_provider_type
+from app.domain.ai import AI_HEALTH_HEALTHY
 from app.domain.roles import HOUSEHOLD_ADMIN_ROLE, HOUSEHOLD_USER_ROLE
 from app.services.ai_config import upsert_instance_provider_config
+from app.services.ai_config import get_instance_provider_config, refresh_provider_health
 from app.models.household import Household
 from app.models.product import Product
 from app.models.user import User
@@ -30,7 +32,13 @@ from app.services.product_enrichment import (
     apply_confirmed_product_enrichment,
     get_default_open_food_facts_client,
 )
-from app.services.instance_settings import upsert_password_reset_email_template, upsert_smtp_settings
+from app.services.instance_settings import (
+    get_instance_settings,
+    record_smtp_test_result,
+    upsert_password_reset_email_template,
+    upsert_smtp_settings,
+)
+from app.services.smtp import run_smtp_connectivity_test
 from app.services.setup import mark_setup_completed
 
 DEV_MODE_FRESH = "fresh"
@@ -604,6 +612,12 @@ def _apply_local_demo_environment_config(db: Session, *, actor: User) -> None:
             api_key=ai_config.api_key,
             is_enabled=ai_config.is_enabled,
         )
+        stored_ai_config = get_instance_provider_config(db)
+        if stored_ai_config is None:
+            raise ValueError("Local demo AI bootstrap could not load the saved AI provider config.")
+        health = refresh_provider_health(db, config=stored_ai_config)
+        if not health.is_healthy or health.status != AI_HEALTH_HEALTHY:
+            raise ValueError(health.message or "Local demo AI provider health check failed.")
 
     smtp_config = _load_local_demo_smtp_config()
     if smtp_config is not None:
@@ -628,6 +642,15 @@ def _apply_local_demo_environment_config(db: Session, *, actor: User) -> None:
                 subject=None,
                 body_template=None,
             )
+        result = run_smtp_connectivity_test(db)
+        record_smtp_test_result(
+            db,
+            actor=actor,
+            status=result.status,
+            error=None if result.ok else result.message,
+        )
+        if not result.ok:
+            raise ValueError(result.message or "Local demo SMTP connectivity test failed.")
 
 
 def bootstrap_development_mode(
