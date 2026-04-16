@@ -123,10 +123,10 @@ export function PantryControls({
               disabled={locations.length === 0}
               onClick={() => setIsQuickAddOpen(true)}
               title={
-                locations.length === 0 ? "Create a storage location before using quick add." : undefined
+                locations.length === 0 ? "Create a storage location before using bulk scan." : undefined
               }
             >
-              Quick add
+              Bulk scan
             </button>
             {canAdminister ? (
               <button type="button" className="ghost-button" onClick={() => setIsRoomOpen(true)}>
