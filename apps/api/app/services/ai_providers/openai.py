@@ -19,10 +19,11 @@ from app.services.ai_providers.openai_compat import (
     OPENAI_RECOMMENDED_MODELS,
     extract_openai_message_text,
     extract_openai_refusal,
+    is_openai_output_token_parameter_error,
     map_openai_http_error,
     map_openai_transport_error,
     normalize_openai_json_schema,
-    openai_completion_token_param,
+    openai_output_token_parameter_name,
     openai_model_profile,
     recommended_openai_models_text,
 )
@@ -77,7 +78,12 @@ class OpenAIProviderAdapter:
             )
         return payload
 
-    def _build_payload(self, request: StructuredCompletionRequest) -> dict[str, Any]:
+    def _build_payload(
+        self,
+        request: StructuredCompletionRequest,
+        *,
+        output_token_parameter_name: str | None = None,
+    ) -> dict[str, Any]:
         payload = {
             "model": request.model,
             "messages": [
@@ -98,7 +104,8 @@ class OpenAIProviderAdapter:
             },
         }
         if request.max_output_tokens is not None:
-            payload[openai_completion_token_param(request.model)] = request.max_output_tokens
+            token_parameter = output_token_parameter_name or openai_output_token_parameter_name(request.model)
+            payload[token_parameter] = request.max_output_tokens
         return payload
 
     def _parse_completion_response(self, body: dict[str, Any], *, model: str) -> StructuredCompletionResult:
@@ -153,7 +160,31 @@ class OpenAIProviderAdapter:
         self,
         request: StructuredCompletionRequest,
     ) -> StructuredCompletionResult:
-        payload = self._build_payload(request)
+        token_parameter = openai_output_token_parameter_name(request.model)
+        try:
+            return self._run_structured_completion_once(
+                request,
+                output_token_parameter_name=token_parameter,
+            )
+        except AIProviderError as exc:
+            if request.max_output_tokens is None or not is_openai_output_token_parameter_error(exc.diagnostic_message):
+                raise
+            alternate_parameter = "max_completion_tokens" if token_parameter == "max_tokens" else "max_tokens"
+            return self._run_structured_completion_once(
+                request,
+                output_token_parameter_name=alternate_parameter,
+            )
+
+    def _run_structured_completion_once(
+        self,
+        request: StructuredCompletionRequest,
+        *,
+        output_token_parameter_name: str | None,
+    ) -> StructuredCompletionResult:
+        payload = self._build_payload(
+            request,
+            output_token_parameter_name=output_token_parameter_name,
+        )
         body = self._request_json(
             "POST",
             "/chat/completions",

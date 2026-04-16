@@ -133,6 +133,7 @@ function ShoppingIconButton({
       disabled={disabled}
     >
       {children}
+      <span className="icon-button-label">{label}</span>
     </button>
   );
 }
@@ -828,7 +829,7 @@ export function ShoppingListPanel({
                         </div>
 
                         <label className="field compact shopping-reconcile-inline-field">
-                          <span className="sr-only">Purchased qty</span>
+                          <span className="shopping-inline-label">Purchased qty</span>
                           <input
                             type="number"
                             min="0.001"
@@ -840,7 +841,7 @@ export function ShoppingListPanel({
                           />
                         </label>
                         <label className="field compact shopping-reconcile-inline-field">
-                          <span className="sr-only">Unit</span>
+                          <span className="shopping-inline-label">Unit</span>
                           <input
                             value={draft.unit}
                             onChange={(event) =>
@@ -849,7 +850,7 @@ export function ShoppingListPanel({
                           />
                         </label>
                         <label className="field compact shopping-reconcile-inline-field shopping-reconcile-location-field">
-                          <span className="sr-only">Pantry location</span>
+                          <span className="shopping-inline-label">Pantry location</span>
                           <select
                             value={draft.pantryLocationExternalId}
                             onChange={(event) =>

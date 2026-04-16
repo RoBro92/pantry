@@ -6,7 +6,7 @@ import math
 from dataclasses import dataclass
 from typing import cast
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
@@ -47,6 +47,11 @@ class ProductClassificationMetadataPayload(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    @field_validator("cuisine_tags", "flavour_tags", "preparation_tags", mode="before")
+    @classmethod
+    def _coerce_nullable_tag_lists(cls, value):
+        return [] if value is None else value
+
 
 class ProductClassificationOutput(BaseModel):
     confidence: float | None = Field(default=None, ge=0, le=1)
@@ -65,6 +70,24 @@ class ProductClassificationOutput(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    @field_validator(
+        "ingredient_families",
+        "dietary_tags",
+        "allergen_tags",
+        "recipe_role_tags",
+        "substitution_groups",
+        "pantry_use_tags",
+        mode="before",
+    )
+    @classmethod
+    def _coerce_nullable_lists(cls, value):
+        return [] if value is None else value
+
+    @field_validator("structured_metadata", mode="before")
+    @classmethod
+    def _coerce_nullable_metadata(cls, value):
+        return {} if value is None else value
+
 
 class ProductBatchClassificationOutput(ProductClassificationOutput):
     product_external_id: str
@@ -76,6 +99,11 @@ class ProductClassificationBatchOutput(BaseModel):
     items: list[ProductBatchClassificationOutput] = Field(default_factory=list)
 
     model_config = ConfigDict(extra="forbid")
+
+    @field_validator("items", mode="before")
+    @classmethod
+    def _coerce_nullable_items(cls, value):
+        return [] if value is None else value
 
 
 def build_product_classification_batch_schema() -> dict[str, object]:

@@ -120,6 +120,9 @@ def normalize_ai_error(
             technical_message=technical_message,
         )
 
+    if isinstance(error, AIProviderError):
+        return _normalize_provider_error(error)
+
     if isinstance(error, httpx.HTTPStatusError):
         status_code = error.response.status_code if error.response is not None else None
         response_text = _extract_response_text(error.response)
@@ -152,6 +155,12 @@ def normalize_ai_error(
             return PantryAIError(
                 _unsupported_model_message(normalized_provider, model),
                 category=AI_ERROR_UNSUPPORTED_MODEL,
+                technical_message=technical_message,
+            )
+        if status_code == 400 and _looks_like_output_token_parameter_error(combined):
+            return PantryAIError(
+                "The AI provider rejected Pantry's structured request parameters. Retry, or re-run the health check after changing models.",
+                category=AI_ERROR_REQUEST_FAILED,
                 technical_message=technical_message,
             )
         if status_code == 400 and any(
@@ -226,6 +235,13 @@ def normalize_ai_error(
             technical_message=technical_message,
         )
 
+    if _looks_like_output_token_parameter_error(lower_message):
+        return PantryAIError(
+            "The AI provider rejected Pantry's structured request parameters. Retry, or re-run the health check after changing models.",
+            category=AI_ERROR_REQUEST_FAILED,
+            technical_message=technical_message,
+        )
+
     if normalized_provider == AI_PROVIDER_OPENAI and is_supported_openai_model(model) and any(
         token in lower_message
         for token in (
@@ -273,6 +289,53 @@ def _extract_response_text(response: httpx.Response | None) -> str:
         return ""
     text = response.text.strip()
     return text[:500]
+
+
+def _normalize_provider_error(error: AIProviderError) -> PantryAIError:
+    if error.category == "invalid_configuration":
+        return PantryAIError(
+            str(error),
+            category=AI_ERROR_CONFIGURATION,
+            technical_message=error.diagnostic_message,
+        )
+    if error.category == "unsupported_model":
+        return PantryAIError(
+            str(error),
+            category=AI_ERROR_UNSUPPORTED_MODEL,
+            technical_message=error.diagnostic_message,
+        )
+    if error.category == "rate_limited":
+        return PantryAIError(
+            str(error),
+            category=AI_ERROR_RATE_LIMIT,
+            technical_message=error.diagnostic_message,
+            retryable=True,
+        )
+    if error.category in {"network_error", "upstream_unavailable"}:
+        return PantryAIError(
+            str(error),
+            category=AI_ERROR_TEMPORARY_UPSTREAM,
+            technical_message=error.diagnostic_message,
+            retryable=True,
+        )
+    if error.category == "invalid_response":
+        return PantryAIError(
+            str(error),
+            category=AI_ERROR_INVALID_RESPONSE,
+            technical_message=error.diagnostic_message,
+        )
+    return PantryAIError(
+        str(error),
+        category=AI_ERROR_REQUEST_FAILED,
+        technical_message=error.diagnostic_message,
+    )
+
+
+def _looks_like_output_token_parameter_error(message: str) -> bool:
+    return (
+        ("unsupported parameter" in message or "unsupported_parameter" in message)
+        and ("max_tokens" in message or "max_completion_tokens" in message)
+    )
 
 
 def _unsupported_model_message(provider_type: str | None, model: str | None) -> str:

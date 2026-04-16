@@ -5,6 +5,7 @@ type PantryBarcodeFieldProps = {
   inputName: string;
   onChange: (value: string) => void;
   onBlur?: () => void;
+  onSubmitValue?: (value: string) => void;
   onLookup: () => void;
   onScan: () => void;
   lookupPending: boolean;
@@ -19,6 +20,7 @@ export function PantryBarcodeField({
   inputName,
   onChange,
   onBlur,
+  onSubmitValue,
   onLookup,
   onScan,
   lookupPending,
@@ -37,7 +39,17 @@ export function PantryBarcodeField({
             value={value}
             onChange={(event) => onChange(event.target.value)}
             onBlur={onBlur}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter" || !onSubmitValue) {
+                return;
+              }
+              event.preventDefault();
+              onSubmitValue(event.currentTarget.value);
+            }}
             placeholder={placeholder}
+            autoComplete="off"
+            autoCorrect="off"
+            spellCheck={false}
           />
           <button
             type="button"

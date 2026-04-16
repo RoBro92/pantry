@@ -256,7 +256,11 @@ export function PantryProductBrowser({
               disabled={product.is_in_shopping_list}
               onClick={() => setShoppingDialogProduct(product)}
             >
-              {product.is_in_shopping_list ? "Already on shopping list" : "Add to shopping list"}
+              {product.is_in_shopping_list
+                ? "Already on shopping list"
+                : product.stock_status === "out_of_stock"
+                  ? "Buy again"
+                  : "Add to shopping list"}
             </button>
             {canAdminister ? (
               <button
@@ -469,6 +473,7 @@ export function PantryProductBrowser({
           defaultQuantity="1"
           defaultUnit={shoppingDialogProduct.unit}
           defaultLocationExternalId={shoppingDialogProduct.locations[0]?.location_external_id ?? null}
+          locations={locations}
           onClose={() => setShoppingDialogProduct(null)}
         />
       ) : null}

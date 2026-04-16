@@ -244,6 +244,10 @@ export function AdminSMTPConfigForm({ initialConfig }: AdminSMTPConfigFormProps)
         <p className="section-copy">
           Effective source: <strong>{getConfigSourceLabel(config.effective_source)}</strong>
         </p>
+        <p className="helper-text">
+          Pantry keeps the latest recorded SMTP connectivity result here. It does not background-poll
+          SMTP health on a timer.
+        </p>
         {config.effective_source === "environment" ? (
           <p className="status-note">
             Environment variables currently override the saved database configuration.

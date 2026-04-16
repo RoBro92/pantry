@@ -301,11 +301,16 @@ export function PantryProductDialog({
                     void findProductDetails("blur");
                   }
                 }}
+                onSubmitValue={() => {
+                  if (primaryBarcode(form.barcodesInput)) {
+                    void findProductDetails("manual");
+                  }
+                }}
                 onLookup={() => void findProductDetails("manual")}
                 onScan={() => setIsScannerOpen(true)}
                 lookupPending={lookupPending}
                 lookupDisabled={!form.name.trim() && !primaryBarcode(form.barcodesInput)}
-                helperText="Use the first barcode for Open Food Facts lookup. Extra barcodes can be added as comma-separated values."
+                helperText="Use the first barcode for Open Food Facts lookup. Camera scanning works only when the browser supports it over HTTPS or localhost. Extra barcodes can be added as comma-separated values."
               />
 
               <label className="field">

@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import type { PantryLocationSummary } from "../lib/api-types";
 import { postToApi } from "../lib/client-api";
 import { formatQuantityWithUnit } from "../lib/quantity-format";
 import { ModalShell } from "./modal-shell";
@@ -15,6 +16,7 @@ type ShoppingListAddDialogProps = {
   defaultUnit: string;
   defaultNote?: string | null;
   defaultLocationExternalId?: string | null;
+  locations?: PantryLocationSummary[];
   onClose: () => void;
 };
 
@@ -27,12 +29,16 @@ export function ShoppingListAddDialog({
   defaultUnit,
   defaultNote = null,
   defaultLocationExternalId = null,
+  locations = [],
   onClose,
 }: ShoppingListAddDialogProps) {
   const router = useRouter();
   const [quantity, setQuantity] = useState(defaultQuantity);
   const [unit, setUnit] = useState(defaultUnit);
   const [note, setNote] = useState(defaultNote ?? "");
+  const [pantryLocationExternalId, setPantryLocationExternalId] = useState(
+    defaultLocationExternalId ?? "",
+  );
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -47,7 +53,7 @@ export function ShoppingListAddDialog({
         quantity,
         unit,
         note: note.trim() || null,
-        pantry_location_external_id: defaultLocationExternalId,
+        pantry_location_external_id: pantryLocationExternalId || null,
         source_type: sourceType,
       });
       router.refresh();
@@ -65,8 +71,16 @@ export function ShoppingListAddDialog({
 
   return (
     <ModalShell
-      title={`Add ${productName} to shopping list`}
-      description={`Choose the amount to add. Defaulting to ${formatQuantityWithUnit(defaultQuantity, defaultUnit, "1")} keeps the request explicit.`}
+      title={
+        sourceType === "pantry_depleted"
+          ? `Buy ${productName} again`
+          : `Add ${productName} to shopping list`
+      }
+      description={
+        sourceType === "pantry_depleted"
+          ? `Start from ${formatQuantityWithUnit(defaultQuantity, defaultUnit, "1")} and adjust the replenishment amount if needed.`
+          : `Choose the amount to add. Defaulting to ${formatQuantityWithUnit(defaultQuantity, defaultUnit, "1")} keeps the request explicit.`
+      }
       onClose={onClose}
     >
       <form className="stack" onSubmit={handleSubmit}>
@@ -86,6 +100,22 @@ export function ShoppingListAddDialog({
             <span>Unit</span>
             <input value={unit} onChange={(event) => setUnit(event.target.value)} required />
           </label>
+          {locations.length > 0 ? (
+            <label className="field">
+              <span>Pantry location</span>
+              <select
+                value={pantryLocationExternalId}
+                onChange={(event) => setPantryLocationExternalId(event.target.value)}
+              >
+                <option value="">Choose later</option>
+                {locations.map((location) => (
+                  <option key={location.external_id} value={location.external_id}>
+                    {location.location_group_name} / {location.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
         </div>
         <label className="field">
           <span>Note</span>

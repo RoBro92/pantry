@@ -275,7 +275,11 @@ export function AdminAIConfigForm({
   const effectiveHealthMessage =
     health?.message ??
     config?.health_error ??
-    (effectiveHealthStatus === "unknown" ? "No health check has been recorded yet." : "No issues reported.");
+    (
+      effectiveHealthStatus === "unknown"
+        ? "No health check has been recorded yet. Pantry rechecks provider health when AI requests run."
+        : "No issues reported."
+    );
 
   return (
     <div className="stack" data-testid="admin-ai-config-page">
@@ -285,6 +289,10 @@ export function AdminAIConfigForm({
         <p>
           The self hosted installation uses provider details configured here. Changes save
           automatically, secrets are not shown after save, and secrets are never written to logs.
+        </p>
+        <p className="helper-text">
+          Pantry records provider health when you save or explicitly recheck it here, and AI requests
+          also perform a fresh health check before they run.
         </p>
         <p className={`helper-text${providerSupport.isCurrentlySupported ? "" : " is-error"}`}>
           {providerSupport.statusLabel}. {providerSupport.description}
@@ -394,7 +402,7 @@ export function AdminAIConfigForm({
         <article className="status-card">
           <p className="eyebrow">Models</p>
           <h2>{String(health?.models.length ?? config?.available_model_count ?? 0)}</h2>
-          <p>Run health check to refresh the searchable model list for this provider.</p>
+          <p>Save or re-run the health check to refresh the searchable model list for this provider.</p>
         </article>
       </section>
 

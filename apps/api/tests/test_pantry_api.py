@@ -23,7 +23,7 @@ from app.services.pantry_catalog import create_location as create_location_recor
 from app.services.pantry_catalog import create_location_group as create_location_group_record
 from app.services.pantry_catalog import create_product as create_product_record
 from app.services.pantry_stock import add_stock_lot as add_stock_lot_record
-from app.services.product_intelligence import ProductIntelligenceStaleness
+from app.services.product_intelligence import ProductClassificationBatchOutput, ProductIntelligenceStaleness
 from app.services.product_intelligence_profiles import get_default_supported_model, resolve_product_intelligence_profile
 from app.services.product_intelligence_runs import process_next_product_intelligence_run
 from app.services.product_intelligence_runs import PreparedClassificationCandidate, _build_batches
@@ -806,6 +806,124 @@ def test_product_intelligence_run_supports_recommended_openai_models(
     assert payload["status"] == "completed"
     assert payload["classified_count"] == 1
     assert payload["default_model"] == default_model
+
+
+def test_product_intelligence_run_does_not_call_supported_openai_model_unsupported_for_token_param_errors(
+    client, db_session, monkeypatch
+):
+    _, household = create_household_with_role(
+        db_session,
+        email="classification-openai-token-error@example.com",
+        household_name="Classification OpenAI Token Error Household",
+        role_code=HOUSEHOLD_ADMIN_ROLE,
+    )
+    platform_admin = create_platform_admin(
+        db_session,
+        email="classification-openai-token-admin@example.com",
+        password=PASSWORD,
+        display_name="OpenAI Token Error Admin",
+    )
+    upsert_instance_provider_config(
+        db_session,
+        actor=platform_admin,
+        provider_type=AI_PROVIDER_OPENAI,
+        base_url="https://api.openai.com/v1",
+        default_model="gpt-5.4-mini",
+        api_key="openai-secret",
+        is_enabled=True,
+    )
+    monkeypatch.setattr(
+        "app.services.product_intelligence_runs.refresh_provider_health",
+        lambda db, config: AIProviderHealth(
+            is_healthy=True,
+            status="healthy",
+            message=None,
+            models=["gpt-4.1-mini", "gpt-5.4-mini", "gpt-5.4"],
+            capabilities={"supports_structured_output": True},
+        ),
+    )
+
+    class FailingOpenAITokenAdapter(StubProductIntelligenceAdapter):
+        def generate_structured_output(self, request) -> StructuredCompletionResult:
+            request_obj = httpx.Request("POST", "https://api.openai.com/v1/chat/completions")
+            response = httpx.Response(
+                400,
+                request=request_obj,
+                text=(
+                    '{"error":{"message":"Unsupported parameter: \\"max_tokens\\" is not supported with this model. '
+                    'Use \\"max_completion_tokens\\" instead."}}'
+                ),
+            )
+            raise httpx.HTTPStatusError("400 Client Error", request=request_obj, response=response)
+
+    monkeypatch.setattr(
+        "app.services.product_intelligence_runs.build_ai_provider_adapter",
+        lambda runtime: FailingOpenAITokenAdapter(),
+    )
+
+    login(client, email="classification-openai-token-error@example.com")
+    create_product(
+        client,
+        household.external_id,
+        name="Pasta",
+        default_unit="pack",
+        aliases=[],
+        barcodes=[],
+    )
+
+    queued = client.post(
+        f"/api/households/{household.external_id}/product-intelligence/classify",
+        json={"mode": "all"},
+    )
+    assert queued.status_code == 200
+
+    assert process_next_product_intelligence_run() is True
+
+    run_detail = client.get(
+        f"/api/households/{household.external_id}/product-intelligence/runs/{queued.json()['external_id']}"
+    )
+    assert run_detail.status_code == 200
+    payload = run_detail.json()
+    assert payload["status"] == "failed"
+    assert "structured request parameters" in payload["last_error"]
+    assert "gpt-5.4-mini' is not a good fit" not in payload["last_error"]
+    assert "Use one of Pantry's supported OpenAI models" not in payload["last_error"]
+    assert "400 Bad Request" not in payload["last_error"]
+
+
+def test_product_classification_batch_output_coerces_nullable_openai_fields():
+    parsed = ProductClassificationBatchOutput.model_validate(
+        {
+            "items": [
+                {
+                    "product_external_id": "prd_test",
+                    "confidence": 0.91,
+                    "rationale_short": "Short rationale",
+                    "primary_ingredient_type": "pork",
+                    "ingredient_families": ["meat"],
+                    "food_category": "cured meat",
+                    "dietary_tags": None,
+                    "allergen_tags": None,
+                    "recipe_role_tags": ["protein"],
+                    "substitution_groups": ["cured pork"],
+                    "pantry_use_tags": ["breakfast"],
+                    "structured_metadata": {
+                        "product_format": "sliced meat",
+                        "storage_profile": "refrigerated",
+                        "cuisine_tags": None,
+                        "flavour_tags": ["smoky"],
+                        "preparation_tags": None,
+                    },
+                }
+            ]
+        }
+    )
+
+    item = parsed.items[0]
+    assert item.dietary_tags == []
+    assert item.allergen_tags == []
+    assert item.structured_metadata.cuisine_tags == []
+    assert item.structured_metadata.preparation_tags == []
 
 
 def test_product_intelligence_profiles_choose_gemini_default_and_token_aware_batches(db_session):

@@ -49,13 +49,14 @@ export function StockLotDeleteDialog({
 
   return (
     <ModalShell
-      title="Remove stock lot"
-      description={`Remove ${formatQuantityWithUnit(quantity, unit)} of ${productName}. You can also add it to the shopping list first.`}
+      title="Use up stock lot"
+      description={`Remove ${formatQuantityWithUnit(quantity, unit)} of ${productName}, or add the same amount to the shopping list first.`}
       onClose={onClose}
     >
       <div className="stack">
         <p className="helper-text">
-          Delete removes the remaining stock lot. Buy more adds the product to the active shopping list before depleting this lot.
+          Mark used up removes the remaining stock lot. Buy again adds the same amount to the
+          active shopping list before depleting this lot.
         </p>
         {error ? <p className="error-text">{error}</p> : null}
         <div className="page-actions">
@@ -65,7 +66,7 @@ export function StockLotDeleteDialog({
             disabled={pendingAction !== null}
             onClick={() => void handleDelete("delete")}
           >
-            {pendingAction === "delete" ? "Deleting..." : "Delete"}
+            {pendingAction === "delete" ? "Updating..." : "Mark used up"}
           </button>
           <button
             type="button"
@@ -73,7 +74,7 @@ export function StockLotDeleteDialog({
             disabled={pendingAction !== null}
             onClick={() => void handleDelete("buy_more")}
           >
-            {pendingAction === "buy_more" ? "Adding..." : "Buy more"}
+            {pendingAction === "buy_more" ? "Adding..." : "Mark used up + buy again"}
           </button>
         </div>
       </div>

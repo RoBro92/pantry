@@ -95,15 +95,29 @@ def openai_model_profile(model: str) -> str:
     return "unprofiled"
 
 
-def recommended_openai_models_text() -> str:
-    return ", ".join(OPENAI_RECOMMENDED_MODELS)
-
-
-def openai_completion_token_param(model: str | None) -> str:
+def openai_output_token_parameter_name(model: str) -> str:
     normalized = canonicalize_openai_model_id(model)
     if normalized.startswith(("gpt-5", "o3", "o4")):
         return "max_completion_tokens"
     return "max_tokens"
+
+
+def recommended_openai_models_text() -> str:
+    return ", ".join(OPENAI_RECOMMENDED_MODELS)
+
+
+def is_openai_output_token_parameter_error(message: str | None) -> bool:
+    if not message:
+        return False
+    lowered = message.casefold()
+    return (
+        ("unsupported parameter" in lowered or "unsupported_parameter" in lowered)
+        and ("max_tokens" in lowered or "max_completion_tokens" in lowered)
+    )
+
+
+def openai_completion_token_param(model: str | None) -> str:
+    return openai_output_token_parameter_name(model or "")
 
 
 def build_openai_supported_model_failure_message(model: str | None) -> str:
@@ -174,6 +188,12 @@ def map_openai_http_error(exc: httpx.HTTPStatusError, *, model: str) -> AIProvid
             "OpenAI is temporarily unavailable. Try again in a moment.",
             diagnostic_message=provider_message,
             category="upstream_unavailable",
+        )
+    if status_code == 400 and is_openai_output_token_parameter_error(provider_message):
+        return AIProviderError(
+            "OpenAI rejected Pantry's structured AI request parameters. Re-run the health check or try again.",
+            diagnostic_message=provider_message,
+            category="invalid_request",
         )
     if status_code == 400 and any(
         token in lowered
@@ -318,12 +338,16 @@ def _make_nullable(schema: Any) -> Any:
 
     schema_type = schema.get("type")
     if isinstance(schema_type, str):
+        if schema_type in {"array", "object"}:
+            return {"anyOf": [schema, {"type": "null"}]}
         nullable = dict(schema)
         nullable["type"] = [schema_type, "null"]
         return nullable
     if isinstance(schema_type, list):
         if "null" in schema_type:
             return schema
+        if any(option in {"array", "object"} for option in schema_type):
+            return {"anyOf": [schema, {"type": "null"}]}
         nullable = dict(schema)
         nullable["type"] = [*schema_type, "null"]
         return nullable
@@ -349,6 +373,8 @@ def _collapse_nullable_anyof(options: list[Any]) -> dict[str, Any] | None:
         return None
     option_type = option.get("type")
     if not isinstance(option_type, str):
+        return None
+    if option_type in {"array", "object"}:
         return None
 
     collapsed = dict(option)
