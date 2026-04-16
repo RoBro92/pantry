@@ -235,7 +235,7 @@ test("first-run setup handles staged users, skips optional steps, and completes 
   await expect(page.locator(".household-card").getByText("Brown Household")).toBeVisible();
 });
 
-test("setup can restore from a staged Pantry backup bundle", async ({ page }) => {
+test("setup can restore from a staged Pantro backup bundle", async ({ page }) => {
   await loginThroughApi(page, {
     email: manifest.admin_email,
     password: manifest.password
@@ -257,7 +257,7 @@ test("setup can restore from a staged Pantry backup bundle", async ({ page }) =>
   await expect(page.getByText("Restore mode selected.")).toBeVisible();
 
   await page.locator('input[type="file"][name="file"]').setInputFiles({
-    name: "pantry-instance-backup.json",
+    name: "pantro-instance-backup.json",
     mimeType: "application/json",
     buffer: Buffer.from(backupText, "utf-8")
   });
@@ -266,7 +266,7 @@ test("setup can restore from a staged Pantry backup bundle", async ({ page }) =>
   await expect(page.getByText("Restore backup staged safely.")).toBeVisible();
   await expect(page.getByText("Staged restore bundle")).toBeVisible();
   await expect(
-    page.getByText("Restore currently supports full instance Pantry backup bundles only.")
+    page.getByText("Restore currently supports full instance Pantro backup bundles only.")
   ).toBeVisible();
 
   await wizard.getByRole("button", { name: "Next" }).click();
@@ -310,14 +310,14 @@ test("setup shows a clear restore error when a backup cannot be restored on this
 
   await page.getByRole("button", { name: "Choose restore" }).click();
   await page.locator('input[type="file"][name="file"]').setInputFiles({
-    name: "pantry-instance-backup.json",
+    name: "pantro-instance-backup.json",
     mimeType: "application/json",
     buffer: Buffer.from(JSON.stringify(backup), "utf-8")
   });
   await page.getByRole("button", { name: "Upload and validate" }).click();
 
   await expect(
-    page.getByText("Backup uploaded, but Pantry cannot restore it on this installation.")
+    page.getByText("Backup uploaded, but Pantro cannot restore it on this installation.")
   ).toBeVisible();
   await expect(page.getByTestId("setup-restore-blocked")).toContainText(
     "Cross-version restore is not supported yet."
@@ -554,7 +554,7 @@ test("pantry flow covers room management, combined add flow, duplicate handling,
   await addEntryForm.getByLabel("Lot note").fill("First pack");
   await expect(addEntryForm.getByRole("button", { name: "Look up" })).toBeVisible();
   await expect(addEntryForm.getByRole("button", { name: "Scan" })).toBeVisible();
-  await addEntryForm.getByRole("button", { name: "Add to pantry" }).click();
+  await addEntryForm.getByRole("button", { name: "Add to inventory" }).click();
 
   const beefMinceCard = page
     .locator('[data-testid^="product-card-"]')
@@ -577,10 +577,10 @@ test("pantry flow covers room management, combined add flow, duplicate handling,
   await duplicateForm.getByLabel("Quantity").fill("1");
   await duplicateForm.getByLabel("Unit").selectOption("kg");
   await duplicateForm.getByLabel("Lot note").fill("Second pack");
-  await duplicateForm.getByRole("button", { name: "Add to pantry" }).click();
+  await duplicateForm.getByRole("button", { name: "Add to inventory" }).click();
 
   await expect(page.getByText("Beef mince already looks like the right product")).toBeVisible();
-  await duplicateForm.getByRole("button", { name: "Add to pantry" }).click();
+  await duplicateForm.getByRole("button", { name: "Add to inventory" }).click();
 
   await expect(beefMinceCard).toContainText("3 kg across 2 lots");
   await beefMinceCard.getByRole("button", { name: "Show" }).click();
@@ -672,7 +672,7 @@ test("scanner dialog explains the secure-context requirement when camera scannin
   await expect(scannerDialog.getByLabel("Type or scan barcode")).toBeVisible();
 });
 
-test("bulk scan queues repeated scans and saves the reviewed batch into Pantry", async ({
+test("bulk scan queues repeated scans and saves the reviewed batch into inventory", async ({
   page
 }) => {
   await loginThroughApi(page, {
@@ -712,7 +712,7 @@ test("bulk scan queues repeated scans and saves the reviewed batch into Pantry",
   await expect(quickAddDialog).toContainText("All queued items are reviewed. Save all when you are ready.");
 
   await quickAddDialog.getByRole("button", { name: "Save all 2 items" }).click();
-  await expect(quickAddDialog).toContainText("Added 2 items to Pantry.");
+  await expect(quickAddDialog).toContainText("Added 2 items to inventory.");
   await page.getByRole("button", { name: "Close" }).click();
 
   const pastaRow = page
@@ -727,7 +727,7 @@ test("bulk scan queues repeated scans and saves the reviewed batch into Pantry",
   await expect(oatsRow).toContainText("Kitchen / Shelf A");
 });
 
-test("shopping reconciliation uses dense rows, full Pantry product creation, and product editing", async ({
+test("shopping reconciliation uses dense rows, full product-record creation, and product editing", async ({
   page
 }) => {
   await loginThroughApi(page, {
@@ -765,7 +765,7 @@ test("shopping reconciliation uses dense rows, full Pantry product creation, and
 
   await oliveOilRow.getByLabel("Expand details").click();
   await expect(oliveOilRow).toContainText("Requested");
-  await oliveOilRow.getByRole("button", { name: "Create Pantry product" }).click();
+  await oliveOilRow.getByRole("button", { name: "Create product record" }).click();
 
   const productForm = page.getByTestId("pantry-product-form");
   const barcodeInput = productForm.locator('input[name="barcodes"]');
@@ -782,7 +782,7 @@ test("shopping reconciliation uses dense rows, full Pantry product creation, and
   const refreshedOliveOilRow = page
     .locator('[data-testid^="shopping-reconcile-row-"]')
     .filter({ hasText: "Olive oil" });
-  await expect(refreshedOliveOilRow).toContainText("Pantry product");
+  await expect(refreshedOliveOilRow).toContainText("Product record");
   await page.goto(`/app/households/${manifest.household_external_id}/shopping-list/history`);
   await expect(page.getByRole("heading", { name: "Shopping history" })).toBeVisible();
   await page.goto(`/app/households/${manifest.household_external_id}/shopping-list`);
@@ -969,7 +969,7 @@ test("ai flow covers unconfigured and configured-but-unavailable states", async 
 
   await page.goto(`/app/households/${manifest.household_external_id}/ai`);
   await expect(
-    page.getByText("Pantry could not authenticate with the AI provider.")
+    page.getByText("Pantro could not authenticate with the AI provider.")
   ).toBeVisible();
 });
 

@@ -195,7 +195,7 @@ def _stub_product_intelligence_output(product_name: str) -> dict[str, object]:
             "allergen_tags": ["Gluten"],
             "recipe_role_tags": ["Sauce", "Seasoning"],
             "substitution_groups": ["Brown sauce"],
-            "pantry_use_tags": ["Pantry staple", "Sauce builder", "Shelf stable"],
+            "pantry_use_tags": ["Staple", "Sauce builder", "Shelf stable"],
             "structured_metadata": {
                 "product_format": "Bottled sauce",
                 "storage_profile": "Shelf stable",
@@ -214,7 +214,7 @@ def _stub_product_intelligence_output(product_name: str) -> dict[str, object]:
         "allergen_tags": ["Gluten"],
         "recipe_role_tags": ["Carbohydrate", "Base"],
         "substitution_groups": ["Pasta"],
-        "pantry_use_tags": ["Pantry staple", "Quick meal", "Shelf stable"],
+        "pantry_use_tags": ["Staple", "Quick meal", "Shelf stable"],
         "structured_metadata": {
             "product_format": "Dried",
             "storage_profile": "Shelf stable",
@@ -1596,7 +1596,7 @@ def test_product_intelligence_run_does_not_call_supported_openai_model_unsupport
     assert payload["status"] == "failed"
     assert "structured request parameters" in payload["last_error"]
     assert "gpt-5.4-mini' is not a good fit" not in payload["last_error"]
-    assert "Use one of Pantry's supported OpenAI models" not in payload["last_error"]
+    assert "Use one of Pantro's supported OpenAI models" not in payload["last_error"]
     assert "400 Bad Request" not in payload["last_error"]
 
 
@@ -3110,7 +3110,7 @@ def test_reconciliation_blocks_purchased_new_items_without_attached_product(clie
         json={"status": "purchased", "quantity": "2.000", "unit": "can"},
     )
     assert saved.status_code == 400
-    assert "Create a Pantry product for Tomato soup" in saved.json()["detail"]
+    assert "Create a product record for Tomato soup" in saved.json()["detail"]
 
 
 def test_finish_trip_can_return_remaining_unresolved_items_to_active_list(client, db_session):
@@ -3421,7 +3421,7 @@ def test_household_user_cannot_change_pantry_structure(client, db_session):
     _, household = create_household_with_role(
         db_session,
         email="pantry-user@example.com",
-        household_name="Pantry User Household",
+        household_name="Pantro User Household",
         role_code=HOUSEHOLD_USER_ROLE,
     )
     login(client, email="pantry-user@example.com")
@@ -3443,7 +3443,7 @@ def test_household_admin_can_change_pantry_structure(client, db_session):
     _, household = create_household_with_role(
         db_session,
         email="pantry-admin@example.com",
-        household_name="Pantry Admin Household",
+        household_name="Pantro Admin Household",
         role_code=HOUSEHOLD_ADMIN_ROLE,
     )
     login(client, email="pantry-admin@example.com")

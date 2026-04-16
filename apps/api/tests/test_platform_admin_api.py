@@ -313,7 +313,7 @@ def test_platform_admin_diagnostics_report_uses_measured_data(client, db_session
         username="mailer",
         password="super-secret",
         from_email="pantry@example.com",
-        from_name="Pantry",
+        from_name="Pantro",
         security="starttls",
         is_enabled=True,
     )
@@ -327,7 +327,7 @@ def test_platform_admin_diagnostics_report_uses_measured_data(client, db_session
         "app.services.diagnostics.read_worker_heartbeat",
         lambda: {
             "status": "ok",
-            "service": "pantry-worker",
+            "service": "pantro-worker",
             "version": "0.1.0",
             "mode": "import-poller",
             "poll_interval_seconds": 30,
@@ -347,7 +347,7 @@ def test_platform_admin_diagnostics_report_uses_measured_data(client, db_session
         lambda _: ReleaseMetadata(
             tag_name="v0.1.1",
             version="0.1.1",
-            name="Pantry v0.1.1",
+            name="Pantro v0.1.1",
             html_url="https://github.com/example/pantry/releases/tag/v0.1.1",
             published_at=datetime.now(timezone.utc),
         ),
@@ -395,7 +395,7 @@ def test_platform_admin_smtp_save_and_test_redacts_password(client, db_session, 
             "username": "mailer",
             "password": "replace-me",
             "from_email": "pantry@example.com",
-            "from_name": "Pantry",
+            "from_name": "Pantro",
             "security": "ssl",
             "is_enabled": True,
         },
@@ -572,7 +572,7 @@ def test_platform_admin_can_update_users_and_send_reset_email(client, db_session
         username="mailer",
         password="top-secret",
         from_email="pantry@example.com",
-        from_name="Pantry",
+        from_name="Pantro",
         security="starttls",
         is_enabled=True,
     )
@@ -995,7 +995,7 @@ def test_platform_admin_household_restore_accepts_supported_older_schema_bundle(
     assert restore_response.status_code == 200
     restore_payload = restore_response.json()
     assert restore_payload["restored"] is True
-    assert any("older Pantry schema" in warning for warning in restore_payload["warnings"])
+    assert any("older Pantro schema" in warning for warning in restore_payload["warnings"])
 
 
 def test_platform_admin_restore_upload_rejects_non_json_files(client, db_session):
@@ -1148,7 +1148,7 @@ def test_platform_admin_can_send_smtp_test_email(client, db_session, monkeypatch
             "username": "mailer",
             "password": "replace-me",
             "from_email": "pantry@example.com",
-            "from_name": "Pantry",
+            "from_name": "Pantro",
             "test_recipient_email": "recipient@example.com",
             "security": "starttls",
             "is_enabled": True,

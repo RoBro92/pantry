@@ -113,7 +113,7 @@ def test_setup_wizard_prefills_local_ai_and_smtp_from_env(client, db_session, mo
     monkeypatch.setenv("PANTRY_LOCAL_SMTP_USERNAME", "mailer")
     monkeypatch.setenv("PANTRY_LOCAL_SMTP_PASSWORD", "smtp-password")
     monkeypatch.setenv("PANTRY_LOCAL_SMTP_FROM_EMAIL", "pantry@example.com")
-    monkeypatch.setenv("PANTRY_LOCAL_SMTP_FROM_NAME", "Pantry")
+    monkeypatch.setenv("PANTRY_LOCAL_SMTP_FROM_NAME", "Pantro")
     monkeypatch.setenv("PANTRY_LOCAL_SMTP_SECURITY", "starttls")
     monkeypatch.setenv("PANTRY_LOCAL_SMTP_ENABLED", "true")
     monkeypatch.setenv("PANTRY_LOCAL_SMTP_PASSWORD_RESET_ENABLED", "true")
@@ -135,7 +135,7 @@ def test_setup_wizard_prefills_local_ai_and_smtp_from_env(client, db_session, mo
         "username": "mailer",
         "has_password": True,
         "from_email": "pantry@example.com",
-        "from_name": "Pantry",
+        "from_name": "Pantro",
         "security": "starttls",
         "is_enabled": True,
         "password_reset_enabled": True,
@@ -159,7 +159,7 @@ def test_setup_finalize_runs_initial_integration_checks_for_local_env(client, db
     monkeypatch.setenv("PANTRY_LOCAL_SMTP_USERNAME", "mailer")
     monkeypatch.setenv("PANTRY_LOCAL_SMTP_PASSWORD", "smtp-password")
     monkeypatch.setenv("PANTRY_LOCAL_SMTP_FROM_EMAIL", "pantry@example.com")
-    monkeypatch.setenv("PANTRY_LOCAL_SMTP_FROM_NAME", "Pantry")
+    monkeypatch.setenv("PANTRY_LOCAL_SMTP_FROM_NAME", "Pantro")
     monkeypatch.setenv("PANTRY_LOCAL_SMTP_SECURITY", "starttls")
     monkeypatch.setenv("PANTRY_LOCAL_SMTP_ENABLED", "true")
     monkeypatch.setenv("PANTRY_LOCAL_SMTP_TEST_RECIPIENT_EMAIL", "test@example.com")
@@ -419,7 +419,7 @@ def test_setup_finalize_commits_all_staged_data_and_authenticates(client, db_ses
             "username": "mailer",
             "password": "smtp-password",
             "from_email": "pantry@example.com",
-            "from_name": "Pantry",
+            "from_name": "Pantro",
             "security": "starttls",
             "is_enabled": True,
         },
@@ -490,7 +490,7 @@ def test_setup_smtp_step_can_run_connectivity_test(client, monkeypatch):
             "username": "mailer",
             "password": "smtp-password",
             "from_email": "pantry@example.com",
-            "from_name": "Pantry",
+            "from_name": "Pantro",
             "security": "starttls",
         },
     )
@@ -574,7 +574,7 @@ def test_setup_finalize_rejects_incomplete_state_without_creating_users(client, 
 def test_login_is_blocked_until_setup_is_complete(client):
     response = client.post("/api/auth/login", json={"identifier": "owner", "password": "correct horse battery"})
     assert response.status_code == 403
-    assert response.json()["detail"] == "Pantry setup is not complete yet. Finish the setup wizard first."
+    assert response.json()["detail"] == "Pantro setup is not complete yet. Finish the setup wizard first."
 
 
 def test_setup_restore_path_stages_backup_and_only_completes_on_success(client, db_session):
@@ -686,6 +686,6 @@ def test_setup_restore_rejects_unknown_previous_schema_bundle(client, db_session
     staged_payload = upload_response.json()
     assert staged_payload["staged_restore"]["supported_for_restore"] is False
     assert (
-        "This backup was created from a different Pantry schema revision, and this version gap is not restore-compatible yet."
+        "This backup was created from a different Pantro schema revision, and this version gap is not restore-compatible yet."
         in staged_payload["staged_restore"]["warnings"]
     )
