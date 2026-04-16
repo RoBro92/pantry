@@ -312,8 +312,8 @@ def test_platform_admin_diagnostics_report_uses_measured_data(client, db_session
         port=587,
         username="mailer",
         password="super-secret",
-        from_email="pantry@example.com",
-        from_name="Pantry",
+        from_email="pantro@example.com",
+        from_name="Pantro",
         security="starttls",
         is_enabled=True,
     )
@@ -347,7 +347,7 @@ def test_platform_admin_diagnostics_report_uses_measured_data(client, db_session
         lambda _: ReleaseMetadata(
             tag_name="v0.1.1",
             version="0.1.1",
-            name="Pantry v0.1.1",
+            name="Pantro v0.1.1",
             html_url="https://github.com/example/pantry/releases/tag/v0.1.1",
             published_at=datetime.now(timezone.utc),
         ),
@@ -394,8 +394,8 @@ def test_platform_admin_smtp_save_and_test_redacts_password(client, db_session, 
             "port": 465,
             "username": "mailer",
             "password": "replace-me",
-            "from_email": "pantry@example.com",
-            "from_name": "Pantry",
+            "from_email": "pantro@example.com",
+            "from_name": "Pantro",
             "security": "ssl",
             "is_enabled": True,
         },
@@ -435,7 +435,7 @@ def test_platform_admin_smtp_validation_rejects_url_like_hosts(client, db_sessio
         json={
             "host": "smtp://smtp.example.com",
             "port": 587,
-            "from_email": "pantry@example.com",
+            "from_email": "pantro@example.com",
             "security": "starttls",
             "is_enabled": True,
         },
@@ -458,7 +458,7 @@ def test_platform_admin_smtp_validation_requires_reset_link_placeholder(client, 
         json={
             "host": "smtp.example.com",
             "port": 587,
-            "from_email": "pantry@example.com",
+            "from_email": "pantro@example.com",
             "security": "starttls",
             "is_enabled": True,
         },
@@ -571,8 +571,8 @@ def test_platform_admin_can_update_users_and_send_reset_email(client, db_session
         port=587,
         username="mailer",
         password="top-secret",
-        from_email="pantry@example.com",
-        from_name="Pantry",
+        from_email="pantro@example.com",
+        from_name="Pantro",
         security="starttls",
         is_enabled=True,
     )
@@ -995,7 +995,7 @@ def test_platform_admin_household_restore_accepts_supported_older_schema_bundle(
     assert restore_response.status_code == 200
     restore_payload = restore_response.json()
     assert restore_payload["restored"] is True
-    assert any("older Pantry schema" in warning for warning in restore_payload["warnings"])
+    assert any("older Pantro schema" in warning for warning in restore_payload["warnings"])
 
 
 def test_platform_admin_restore_upload_rejects_non_json_files(client, db_session):
@@ -1147,8 +1147,8 @@ def test_platform_admin_can_send_smtp_test_email(client, db_session, monkeypatch
             "port": 587,
             "username": "mailer",
             "password": "replace-me",
-            "from_email": "pantry@example.com",
-            "from_name": "Pantry",
+            "from_email": "pantro@example.com",
+            "from_name": "Pantro",
             "test_recipient_email": "recipient@example.com",
             "security": "starttls",
             "is_enabled": True,
@@ -1227,7 +1227,7 @@ def test_location_qr_links_use_configured_public_base_url_and_access_is_scoped(c
     login(client, email="links-admin@example.com")
     update_response = client.put(
         "/api/platform-admin/settings/public-base-url",
-        json={"public_base_url": "https://pantry.example.com"},
+        json={"public_base_url": "https://pantro.example.com"},
     )
     assert update_response.status_code == 200
 
@@ -1235,12 +1235,12 @@ def test_location_qr_links_use_configured_public_base_url_and_access_is_scoped(c
     updated_overview = client.get(f"/api/households/{household.external_id}/pantry/overview")
     assert updated_overview.status_code == 200
     updated_location = updated_overview.json()["locations"][0]
-    assert updated_location["browser_url"] == f"https://pantry.example.com/locations/{location.external_id}"
+    assert updated_location["browser_url"] == f"https://pantro.example.com/locations/{location.external_id}"
 
     access_response = client.get(f"/api/locations/{location.external_id}")
     assert access_response.status_code == 200
     access_payload = access_response.json()
-    assert access_payload["browser_url"] == f"https://pantry.example.com/locations/{location.external_id}"
+    assert access_payload["browser_url"] == f"https://pantro.example.com/locations/{location.external_id}"
     assert access_payload["pantry_path"] == f"/app/households/{household.external_id}?location_external_id={location.external_id}"
 
     login(client, email="outsider@example.com")

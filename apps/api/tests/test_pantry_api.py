@@ -1587,7 +1587,7 @@ def test_product_intelligence_run_does_not_call_supported_openai_model_unsupport
     assert payload["status"] == "failed"
     assert "structured request parameters" in payload["last_error"]
     assert "gpt-5.4-mini' is not a good fit" not in payload["last_error"]
-    assert "Use one of Pantry's supported OpenAI models" not in payload["last_error"]
+    assert "Use one of Pantro's supported OpenAI models" not in payload["last_error"]
     assert "400 Bad Request" not in payload["last_error"]
 
 
@@ -3025,7 +3025,7 @@ def test_reconciliation_blocks_purchased_new_items_without_attached_product(clie
         json={"status": "purchased", "quantity": "2.000", "unit": "can"},
     )
     assert saved.status_code == 400
-    assert "Create a Pantry product for Tomato soup" in saved.json()["detail"]
+    assert "Create a Pantro product for Tomato soup" in saved.json()["detail"]
 
 
 def test_finish_trip_can_return_remaining_unresolved_items_to_active_list(client, db_session):

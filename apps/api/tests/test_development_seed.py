@@ -262,8 +262,8 @@ def test_demo_development_mode_bootstraps_local_ai_and_smtp_config_from_environm
     monkeypatch.setenv("PANTRY_LOCAL_SMTP_PORT", "587")
     monkeypatch.setenv("PANTRY_LOCAL_SMTP_USERNAME", "mailer")
     monkeypatch.setenv("PANTRY_LOCAL_SMTP_PASSWORD", "local-smtp-secret")
-    monkeypatch.setenv("PANTRY_LOCAL_SMTP_FROM_EMAIL", "pantry@example.com")
-    monkeypatch.setenv("PANTRY_LOCAL_SMTP_FROM_NAME", "Pantry Local")
+    monkeypatch.setenv("PANTRY_LOCAL_SMTP_FROM_EMAIL", "pantro@example.com")
+    monkeypatch.setenv("PANTRY_LOCAL_SMTP_FROM_NAME", "Pantro Local")
     monkeypatch.setenv("PANTRY_LOCAL_SMTP_SECURITY", "starttls")
     monkeypatch.setenv("PANTRY_LOCAL_SMTP_ENABLED", "true")
     monkeypatch.setenv("PANTRY_LOCAL_SMTP_TEST_RECIPIENT_EMAIL", "test@example.com")
@@ -292,8 +292,8 @@ def test_demo_development_mode_bootstraps_local_ai_and_smtp_config_from_environm
     assert instance_settings.encrypted_smtp_password is not None
     assert instance_settings.encrypted_smtp_password != "local-smtp-secret"
     assert decrypt_secret(instance_settings.encrypted_smtp_password) == "local-smtp-secret"
-    assert instance_settings.smtp_from_email == "pantry@example.com"
-    assert instance_settings.smtp_from_name == "Pantry Local"
+    assert instance_settings.smtp_from_email == "pantro@example.com"
+    assert instance_settings.smtp_from_name == "Pantro Local"
     assert instance_settings.smtp_test_recipient_email == "test@example.com"
     assert instance_settings.smtp_security == "starttls"
     assert instance_settings.smtp_enabled is True
@@ -346,7 +346,7 @@ def test_demo_development_mode_warns_when_local_smtp_connectivity_test_fails(db_
     monkeypatch.setenv("PANTRY_LOCAL_SMTP_PORT", "587")
     monkeypatch.setenv("PANTRY_LOCAL_SMTP_USERNAME", "mailer")
     monkeypatch.setenv("PANTRY_LOCAL_SMTP_PASSWORD", "local-smtp-secret")
-    monkeypatch.setenv("PANTRY_LOCAL_SMTP_FROM_EMAIL", "pantry@example.com")
+    monkeypatch.setenv("PANTRY_LOCAL_SMTP_FROM_EMAIL", "pantro@example.com")
     monkeypatch.setenv("PANTRY_LOCAL_SMTP_SECURITY", "starttls")
 
     manifest = bootstrap_development_mode(db_session, mode=DEV_MODE_DEMO, off_client=NoOpenFoodFactsClient())
@@ -392,8 +392,8 @@ def test_demo_development_mode_bootstraps_instance_ai_from_local_env(db_session,
     monkeypatch.setenv("PANTRY_LOCAL_SMTP_PORT", "587")
     monkeypatch.setenv("PANTRY_LOCAL_SMTP_USERNAME", "mailer")
     monkeypatch.setenv("PANTRY_LOCAL_SMTP_PASSWORD", "smtp-password")
-    monkeypatch.setenv("PANTRY_LOCAL_SMTP_FROM_EMAIL", "pantry@example.com")
-    monkeypatch.setenv("PANTRY_LOCAL_SMTP_FROM_NAME", "Pantry")
+    monkeypatch.setenv("PANTRY_LOCAL_SMTP_FROM_EMAIL", "pantro@example.com")
+    monkeypatch.setenv("PANTRY_LOCAL_SMTP_FROM_NAME", "Pantro")
     monkeypatch.setenv("PANTRY_LOCAL_SMTP_SECURITY", "starttls")
     monkeypatch.setenv("PANTRY_LOCAL_SMTP_ENABLED", "true")
     monkeypatch.setenv("PANTRY_LOCAL_SMTP_TEST_RECIPIENT_EMAIL", "test@example.com")
@@ -437,7 +437,7 @@ def test_demo_development_mode_bootstraps_instance_ai_from_local_env(db_session,
     assert smtp_settings.smtp_host == "smtp.example.com"
     assert smtp_settings.smtp_port == 587
     assert smtp_settings.smtp_username == "mailer"
-    assert smtp_settings.smtp_from_email == "pantry@example.com"
+    assert smtp_settings.smtp_from_email == "pantro@example.com"
     assert smtp_settings.smtp_test_recipient_email == "test@example.com"
     assert smtp_settings.password_reset_enabled is True
     assert smtp_settings.smtp_last_test_status == "passed"

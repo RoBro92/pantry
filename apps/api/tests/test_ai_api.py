@@ -854,8 +854,8 @@ def test_ai_meal_planner_keeps_supported_openai_models_available_when_cached_hea
     )
     config.health_status = "unhealthy"
     config.health_error = (
-        "The OpenAI model 'gpt-5.4' is not a good fit for Pantry's structured AI workflow. "
-        "Use one of Pantry's supported OpenAI models: gpt-4.1-mini, gpt-5.4-mini, or gpt-5.4."
+        "The OpenAI model 'gpt-5.4' is not a good fit for Pantro's structured AI workflow. "
+        "Use one of Pantro's supported OpenAI models: gpt-4.1-mini, gpt-5.4-mini, or gpt-5.4."
     )
     db_session.add(config)
     db_session.commit()
@@ -1249,7 +1249,7 @@ def test_ai_meal_suggestions_hide_raw_openai_400_details(client, db_session, mon
         def generate_structured_output(self, request) -> StructuredCompletionResult:
             raise AIProviderError(
                 (
-                    "The selected OpenAI model (gpt-5.4-mini) is not compatible with Pantry's "
+                    "The selected OpenAI model (gpt-5.4-mini) is not compatible with Pantro's "
                     "structured AI requests on Chat Completions. Choose a recommended OpenAI "
                     "model such as gpt-4.1-mini, gpt-5.4-mini, gpt-5.4."
                 ),
