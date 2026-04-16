@@ -29,6 +29,7 @@ from app.services.ai_runtime import normalize_ai_error
 from app.services.audit import record_audit_event
 from app.services.pantry_normalization import normalize_text_tags, require_text
 from app.services.product_enrichment import get_primary_enrichment
+from app.services.product_intelligence_profiles import resolve_product_intelligence_profile
 
 PRODUCT_INTELLIGENCE_SCOPE = "pantry_product_classification"
 PRODUCT_INTELLIGENCE_CLASSIFICATION_VERSION = "v1"
@@ -36,6 +37,8 @@ PRODUCT_INTELLIGENCE_SCHEMA_VERSION = "2026-04-10"
 PRODUCT_INTELLIGENCE_STALE_SCHEMA = "schema_changed"
 PRODUCT_INTELLIGENCE_STALE_CLASSIFIER = "classification_version_changed"
 PRODUCT_INTELLIGENCE_STALE_SOURCE = "source_product_data_changed"
+PRODUCT_INTELLIGENCE_BASE_PROMPT_TOKEN_OVERHEAD = 650
+PRODUCT_INTELLIGENCE_MAX_TRIM_LEVEL = 2
 
 
 class ProductClassificationMetadataPayload(BaseModel):
@@ -283,7 +286,11 @@ def get_product_intelligence_staleness(
         reasons.append(PRODUCT_INTELLIGENCE_STALE_SCHEMA)
     if intelligence.classification_version != PRODUCT_INTELLIGENCE_CLASSIFICATION_VERSION:
         reasons.append(PRODUCT_INTELLIGENCE_STALE_CLASSIFIER)
-    if intelligence.source_data_hash != build_product_intelligence_source_data_hash(product):
+    if intelligence.source_data_hash != build_product_intelligence_source_data_hash(
+        product,
+        provider_type=intelligence.source_provider,
+        model=intelligence.source_model,
+    ):
         reasons.append(PRODUCT_INTELLIGENCE_STALE_SOURCE)
     return ProductIntelligenceStaleness(is_stale=bool(reasons), reasons=reasons)
 
@@ -325,59 +332,37 @@ def serialize_product_intelligence(
     )
 
 
-def build_product_intelligence_source_data_hash(product: Product) -> str:
-    payload = build_product_intelligence_source_payload(product)
+def build_product_intelligence_source_data_hash(
+    product: Product,
+    *,
+    provider_type: str | None = None,
+    model: str | None = None,
+) -> str:
+    payload = build_product_intelligence_source_payload(
+        product,
+        provider_type=provider_type,
+        model=model,
+    )
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 
 
-def build_product_intelligence_source_payload(product: Product) -> dict[str, object]:
-    enrichment = get_primary_enrichment(product)
-    nutrition_summary: list[dict[str, object]] = []
-    if enrichment and enrichment.nutrition_summary:
-        for item in enrichment.nutrition_summary[:6]:
-            if isinstance(item, dict):
-                nutrition_summary.append(
-                    {
-                        "label": item.get("label"),
-                        "value": item.get("value"),
-                        "unit": item.get("unit"),
-                    }
-                )
-
-    compact_nutriments: dict[str, object] = {}
-    if enrichment and enrichment.nutriments_payload:
-        for key in sorted(enrichment.nutriments_payload.keys())[:10]:
-            compact_nutriments[key] = enrichment.nutriments_payload[key]
-
-    return {
-        "product": {
-            "name": product.name,
-            "default_unit": product.default_unit,
-            "aliases": [alias.name for alias in product.aliases][:12],
-            "barcodes": [barcode.value for barcode in product.barcodes][:8],
-            "notes": product.notes,
-            "manual_ingredient_tags": list(product.manual_ingredient_tags or [])[:12],
-        },
-        "enrichment": (
-            {
-                "source_name": enrichment.source_name,
-                "source_product_name": enrichment.source_product_name,
-                "ingredient_tags": list(enrichment.ingredient_tags or [])[:14],
-                "ingredient_tokens": list(enrichment.ingredient_tokens or [])[:18],
-                "ingredients_text": (enrichment.ingredients_text or "")[:500] or None,
-                "allergen_tags": list(enrichment.allergen_tags or [])[:10],
-                "trace_tags": list(enrichment.trace_tags or [])[:10],
-                "dietary_tags": list(enrichment.dietary_tags or [])[:10],
-                "labels": list(enrichment.labels or [])[:10],
-                "categories": list(enrichment.categories or [])[:10],
-                "nutrition_summary": nutrition_summary,
-                "nutriments": compact_nutriments,
-            }
-            if enrichment is not None
-            else None
-        ),
-    }
+def build_product_intelligence_source_payload(
+    product: Product,
+    *,
+    provider_type: str | None = None,
+    model: str | None = None,
+) -> dict[str, object]:
+    trim_level = get_product_intelligence_runtime_trim_level(
+        product,
+        provider_type=provider_type,
+        model=model,
+    )
+    return _build_product_intelligence_runtime_payload(
+        product,
+        trim_level=trim_level,
+        include_external_id=False,
+    )
 
 
 def build_product_intelligence_batch_source_payload(
@@ -385,57 +370,173 @@ def build_product_intelligence_batch_source_payload(
     *,
     trim_level: int = 0,
 ) -> dict[str, object]:
+    return _build_product_intelligence_runtime_payload(
+        product,
+        trim_level=trim_level,
+        include_external_id=True,
+    )
+
+
+def get_product_intelligence_runtime_trim_level(
+    product: Product,
+    *,
+    provider_type: str | None = None,
+    model: str | None = None,
+) -> int:
+    profile = resolve_product_intelligence_profile(provider_type or "", model)
+    per_product_budget = max(
+        (profile.max_input_tokens - PRODUCT_INTELLIGENCE_BASE_PROMPT_TOKEN_OVERHEAD)
+        // max(profile.max_products_per_batch, 1),
+        500,
+    )
+    for trim_level in range(PRODUCT_INTELLIGENCE_MAX_TRIM_LEVEL + 1):
+        payload = _build_product_intelligence_runtime_payload(
+            product,
+            trim_level=trim_level,
+            include_external_id=True,
+        )
+        if estimate_product_intelligence_tokens(payload) <= per_product_budget:
+            return trim_level
+    return PRODUCT_INTELLIGENCE_MAX_TRIM_LEVEL
+
+
+def _build_product_intelligence_runtime_payload(
+    product: Product,
+    *,
+    trim_level: int,
+    include_external_id: bool,
+) -> dict[str, object]:
     enrichment = get_primary_enrichment(product)
-    alias_limit = 8 if trim_level == 0 else 5 if trim_level == 1 else 3
-    barcode_limit = 6 if trim_level == 0 else 4 if trim_level == 1 else 2
+    alias_limit = 4 if trim_level == 0 else 2 if trim_level == 1 else 1
+    notes_limit = 180 if trim_level == 0 else 120 if trim_level == 1 else 80
     manual_tag_limit = 10 if trim_level == 0 else 6 if trim_level == 1 else 4
-    ingredient_tag_limit = 12 if trim_level == 0 else 8 if trim_level == 1 else 5
-    ingredient_token_limit = 14 if trim_level == 0 else 8 if trim_level == 1 else 0
-    category_limit = 8 if trim_level == 0 else 5 if trim_level == 1 else 3
-    label_limit = 8 if trim_level == 0 else 5 if trim_level == 1 else 3
-    nutrition_limit = 4 if trim_level == 0 else 2 if trim_level == 1 else 0
-    ingredients_text_limit = 320 if trim_level == 0 else 180 if trim_level == 1 else 0
-    notes_limit = 220 if trim_level == 0 else 120 if trim_level == 1 else 0
+    ingredient_tag_limit = 14 if trim_level == 0 else 9 if trim_level == 1 else 5
+    dietary_tag_limit = 8 if trim_level == 0 else 6 if trim_level == 1 else 4
+    allergen_tag_limit = 8 if trim_level == 0 else 6 if trim_level == 1 else 4
+    ingredients_text_limit = 240 if trim_level == 0 else 140 if trim_level == 1 else 90
+    category_hint_limit = 60 if trim_level == 0 else 40 if trim_level == 1 else 28
 
-    nutrition_summary: list[dict[str, object]] = []
-    if enrichment and enrichment.nutrition_summary and nutrition_limit > 0:
-        for item in enrichment.nutrition_summary[:nutrition_limit]:
-            if isinstance(item, dict):
-                nutrition_summary.append(
-                    {
-                        "label": item.get("label"),
-                        "value": item.get("value"),
-                        "unit": item.get("unit"),
-                    }
-                )
+    manual_tags = list(product.manual_ingredient_tags or [])[:manual_tag_limit]
+    alias_names = _compact_runtime_text_list(
+        [alias.name for alias in product.aliases],
+        limit=alias_limit,
+        exclude_names=[product.name, enrichment.source_product_name if enrichment else None],
+    )
+    product_notes = _truncate_runtime_text(product.notes, notes_limit)
 
-    return {
-        "product_external_id": product.external_id,
-        "product": {
-            "name": product.name,
-            "default_unit": product.default_unit,
-            "aliases": [alias.name for alias in product.aliases][:alias_limit],
-            "barcodes": [barcode.value for barcode in product.barcodes][:barcode_limit],
-            "notes": (product.notes or "")[:notes_limit] or None,
-            "manual_ingredient_tags": list(product.manual_ingredient_tags or [])[:manual_tag_limit],
-        },
-        "enrichment": (
-            {
-                "source_product_name": enrichment.source_product_name,
-                "ingredient_tags": list(enrichment.ingredient_tags or [])[:ingredient_tag_limit],
-                "ingredient_tokens": list(enrichment.ingredient_tokens or [])[:ingredient_token_limit],
-                "ingredients_text": (enrichment.ingredients_text or "")[:ingredients_text_limit] or None,
-                "allergen_tags": list(enrichment.allergen_tags or [])[:8],
-                "trace_tags": list(enrichment.trace_tags or [])[:6],
-                "dietary_tags": list(enrichment.dietary_tags or [])[:8],
-                "labels": list(enrichment.labels or [])[:label_limit],
-                "categories": list(enrichment.categories or [])[:category_limit],
-                "nutrition_summary": nutrition_summary,
-            }
-            if enrichment is not None
-            else None
-        ),
+    product_payload: dict[str, object] = {
+        "name": product.name,
+        "default_unit": product.default_unit,
     }
+    if alias_names:
+        product_payload["aliases"] = alias_names
+    if product_notes:
+        product_payload["notes"] = product_notes
+    if manual_tags:
+        product_payload["manual_ingredient_tags"] = manual_tags
+
+    payload: dict[str, object] = {"product": product_payload}
+    if include_external_id:
+        payload["product_external_id"] = product.external_id
+
+    if enrichment is None:
+        payload["enrichment"] = None
+        return payload
+
+    ingredient_tags = _compact_runtime_text_list(
+        list(enrichment.ingredient_tags or []),
+        limit=ingredient_tag_limit,
+    )
+    dietary_tags = _compact_runtime_text_list(
+        list(enrichment.dietary_tags or []),
+        limit=dietary_tag_limit,
+    )
+    allergen_tags = _compact_runtime_text_list(
+        list(enrichment.allergen_tags or []),
+        limit=allergen_tag_limit,
+    )
+    ingredient_signal_count = len(ingredient_tags) + len(manual_tags)
+    enrichment_payload: dict[str, object] = {}
+
+    source_product_name = _truncate_runtime_text(enrichment.source_product_name, notes_limit)
+    if _is_meaningfully_different_name(source_product_name, product.name, alias_names):
+        enrichment_payload["source_product_name"] = source_product_name
+    if ingredient_tags:
+        enrichment_payload["ingredient_tags"] = ingredient_tags
+    if dietary_tags:
+        enrichment_payload["dietary_tags"] = dietary_tags
+    if allergen_tags:
+        enrichment_payload["allergen_tags"] = allergen_tags
+
+    category_hint = _select_category_hint(list(enrichment.categories or []), limit=category_hint_limit)
+    if category_hint:
+        enrichment_payload["category_hint"] = category_hint
+
+    ingredients_text = _truncate_runtime_text(enrichment.ingredients_text, ingredients_text_limit)
+    if ingredients_text and ingredient_signal_count < 2:
+        enrichment_payload["ingredients_text"] = ingredients_text
+
+    payload["enrichment"] = enrichment_payload or None
+    return payload
+
+
+def _truncate_runtime_text(value: str | None, limit: int) -> str | None:
+    if not value:
+        return None
+    trimmed = " ".join(value.split()).strip()
+    if not trimmed:
+        return None
+    if len(trimmed) <= limit:
+        return trimmed
+    return trimmed[: max(limit - 1, 1)].rstrip() + "…"
+
+
+def _normalize_runtime_name(value: str | None) -> str:
+    return " ".join((value or "").split()).strip().lower()
+
+
+def _compact_runtime_text_list(
+    values: list[str],
+    *,
+    limit: int,
+    exclude_names: list[str | None] | None = None,
+) -> list[str]:
+    if limit <= 0:
+        return []
+
+    excluded = {_normalize_runtime_name(value) for value in (exclude_names or []) if value}
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        trimmed = _truncate_runtime_text(value, 80)
+        normalized = _normalize_runtime_name(trimmed)
+        if not trimmed or not normalized or normalized in excluded or normalized in seen:
+            continue
+        seen.add(normalized)
+        result.append(trimmed)
+        if len(result) >= limit:
+            break
+    return result
+
+
+def _is_meaningfully_different_name(
+    candidate: str | None,
+    product_name: str,
+    alias_names: list[str],
+) -> bool:
+    normalized_candidate = _normalize_runtime_name(candidate)
+    if not normalized_candidate:
+        return False
+    comparison_names = {_normalize_runtime_name(product_name), *(_normalize_runtime_name(alias) for alias in alias_names)}
+    return normalized_candidate not in comparison_names
+
+
+def _select_category_hint(categories: list[str], *, limit: int) -> str | None:
+    for category in reversed(categories):
+        hint = _truncate_runtime_text(category, limit)
+        if hint:
+            return hint
+    return None
 
 
 def estimate_product_intelligence_tokens(payload: object) -> int:
@@ -522,7 +623,11 @@ def _classify_product(
     model: str,
     provider_type: str,
 ) -> ProductIntelligence:
-    payload = build_product_intelligence_source_payload(product)
+    payload = build_product_intelligence_source_payload(
+        product,
+        provider_type=provider_type,
+        model=model,
+    )
     completion = adapter.generate_structured_output(
         StructuredCompletionRequest(
             model=model,
@@ -607,7 +712,11 @@ def apply_product_intelligence_classification(
             classification_scope=PRODUCT_INTELLIGENCE_SCOPE,
             classification_version=PRODUCT_INTELLIGENCE_CLASSIFICATION_VERSION,
             schema_version=PRODUCT_INTELLIGENCE_SCHEMA_VERSION,
-            source_data_hash=build_product_intelligence_source_data_hash(product),
+            source_data_hash=build_product_intelligence_source_data_hash(
+                product,
+                provider_type=provider_type,
+                model=model,
+            ),
             classified_at=utc_now(),
         )
         db.add(intelligence)
@@ -617,7 +726,11 @@ def apply_product_intelligence_classification(
     intelligence.classification_scope = PRODUCT_INTELLIGENCE_SCOPE
     intelligence.classification_version = PRODUCT_INTELLIGENCE_CLASSIFICATION_VERSION
     intelligence.schema_version = PRODUCT_INTELLIGENCE_SCHEMA_VERSION
-    intelligence.source_data_hash = build_product_intelligence_source_data_hash(product)
+    intelligence.source_data_hash = build_product_intelligence_source_data_hash(
+        product,
+        provider_type=provider_type,
+        model=model,
+    )
     intelligence.classified_at = utc_now()
     intelligence.confidence = parsed.confidence
     intelligence.rationale_short = _normalize_optional_text(parsed.rationale_short, field_name="Rationale", max_length=320)

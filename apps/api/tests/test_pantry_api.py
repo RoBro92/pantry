@@ -23,7 +23,16 @@ from app.services.pantry_catalog import create_location as create_location_recor
 from app.services.pantry_catalog import create_location_group as create_location_group_record
 from app.services.pantry_catalog import create_product as create_product_record
 from app.services.pantry_stock import add_stock_lot as add_stock_lot_record
-from app.services.product_intelligence import ProductClassificationBatchOutput, ProductIntelligenceStaleness
+from app.services.product_intelligence import (
+    PRODUCT_INTELLIGENCE_CLASSIFICATION_VERSION,
+    PRODUCT_INTELLIGENCE_SCHEMA_VERSION,
+    PRODUCT_INTELLIGENCE_SCOPE,
+    ProductClassificationBatchOutput,
+    ProductIntelligenceStaleness,
+    build_product_intelligence_source_data_hash,
+    build_product_intelligence_source_payload,
+    get_product_intelligence_staleness,
+)
 from app.services.product_intelligence_profiles import get_default_supported_model, resolve_product_intelligence_profile
 from app.services.product_intelligence_runs import process_next_product_intelligence_run
 from app.services.product_intelligence_runs import PreparedClassificationCandidate, _build_batches
@@ -545,6 +554,217 @@ def test_product_intelligence_marks_stale_after_material_product_update(client, 
     intelligence = overview.json()["catalog_products"][0]["intelligence"]
     assert intelligence["is_stale"] is True
     assert "source_product_data_changed" in intelligence["stale_reasons"]
+
+
+def test_product_intelligence_source_payload_slims_off_enrichment_fields(db_session):
+    actor, household = create_household_with_role(
+        db_session,
+        email="classification-payload@example.com",
+        household_name="Classification Payload Household",
+        role_code=HOUSEHOLD_ADMIN_ROLE,
+    )
+    product = create_product_record(
+        db_session,
+        household=household,
+        actor=actor,
+        name="Brown sauce",
+        default_unit="bottle",
+        aliases=["HP sauce", "Breakfast sauce"],
+        barcodes=["5000111046244"],
+        notes="Use sparingly with breakfast sandwiches.",
+        manual_ingredient_tags=["Tomatoes"],
+    )
+    enrichment = ProductEnrichment(
+        household_id=household.id,
+        product=product,
+        source_name="open_food_facts",
+        source_product_id="5000111046244",
+        source_barcode="5000111046244",
+        source_product_name="HP Brown Sauce",
+        ingredients_text="Tomatoes, vinegar, barley malt",
+        ingredient_tags=["tomatoes", "vinegar", "barley-malt"],
+        ingredient_tokens=["tomatoes", "vinegar", "barley", "malt"],
+        allergen_tags=["Gluten"],
+        trace_tags=["Mustard"],
+        dietary_tags=["vegetarian"],
+        labels=["Vegetarian"],
+        categories=["Condiments", "Sauces", "Brown Sauces"],
+        nutriments_payload={"energy-kcal_100g": 100, "salt_100g": 1.2},
+        nutrition_summary=[
+            {"label": "Energy", "value": 100, "unit": "kcal"},
+            {"label": "Salt", "value": 1.2, "unit": "g"},
+        ],
+        nutrition_summary_text="Energy 100 kcal per 100 g · Salt 1.2 g per 100 g",
+    )
+    db_session.add(enrichment)
+    db_session.flush()
+
+    payload = build_product_intelligence_source_payload(
+        product,
+        provider_type="ollama",
+        model="llama3.2",
+    )
+
+    assert payload["product"]["name"] == "Brown sauce"
+    assert payload["product"]["default_unit"] == "bottle"
+    assert payload["product"]["aliases"] == ["HP sauce", "Breakfast sauce"]
+    assert payload["product"]["manual_ingredient_tags"] == ["Tomatoes"]
+    assert "barcodes" not in payload["product"]
+
+    enrichment_payload = payload["enrichment"]
+    assert enrichment_payload["source_product_name"] == "HP Brown Sauce"
+    assert enrichment_payload["ingredient_tags"] == ["tomatoes", "vinegar", "barley-malt"]
+    assert enrichment_payload["dietary_tags"] == ["vegetarian"]
+    assert enrichment_payload["allergen_tags"] == ["Gluten"]
+    assert enrichment_payload["category_hint"] == "Brown Sauces"
+    assert "ingredients_text" not in enrichment_payload
+    assert "ingredient_tokens" not in enrichment_payload
+    assert "trace_tags" not in enrichment_payload
+    assert "labels" not in enrichment_payload
+    assert "categories" not in enrichment_payload
+    assert "nutrition_summary" not in enrichment_payload
+    assert "nutriments" not in enrichment_payload
+
+
+def test_product_intelligence_source_payload_preserves_manual_products_without_enrichment(db_session):
+    actor, household = create_household_with_role(
+        db_session,
+        email="classification-manual@example.com",
+        household_name="Classification Manual Household",
+        role_code=HOUSEHOLD_ADMIN_ROLE,
+    )
+    product = create_product_record(
+        db_session,
+        household=household,
+        actor=actor,
+        name="Butter beans",
+        default_unit="can",
+        aliases=["Tinned butter beans"],
+        barcodes=[],
+        notes="Good in quick soups and stews.",
+        manual_ingredient_tags=["Beans", "Water"],
+    )
+
+    payload = build_product_intelligence_source_payload(
+        product,
+        provider_type="ollama",
+        model="llama3.2",
+    )
+
+    assert payload["product"]["name"] == "Butter beans"
+    assert payload["product"]["aliases"] == ["Tinned butter beans"]
+    assert payload["product"]["notes"] == "Good in quick soups and stews."
+    assert payload["product"]["manual_ingredient_tags"] == ["Beans", "Water"]
+    assert payload["enrichment"] is None
+
+
+def test_product_intelligence_source_payload_keeps_short_ingredients_text_when_tags_are_weak(db_session):
+    actor, household = create_household_with_role(
+        db_session,
+        email="classification-fallback@example.com",
+        household_name="Classification Fallback Household",
+        role_code=HOUSEHOLD_ADMIN_ROLE,
+    )
+    product = create_product_record(
+        db_session,
+        household=household,
+        actor=actor,
+        name="Chickpeas",
+        default_unit="can",
+        aliases=[],
+        barcodes=["1234567890123"],
+    )
+    enrichment = ProductEnrichment(
+        household_id=household.id,
+        product=product,
+        source_name="open_food_facts",
+        source_product_id="1234567890123",
+        source_barcode="1234567890123",
+        source_product_name="Chickpeas in water",
+        ingredients_text="Chickpeas, water, salt",
+        ingredient_tags=[],
+        allergen_tags=[],
+        dietary_tags=["vegan"],
+        categories=["Legumes", "Chickpeas"],
+    )
+    db_session.add(enrichment)
+    db_session.flush()
+
+    payload = build_product_intelligence_source_payload(
+        product,
+        provider_type="ollama",
+        model="llama3.2",
+    )
+
+    assert payload["enrichment"]["ingredients_text"] == "Chickpeas, water, salt"
+    assert payload["enrichment"]["category_hint"] == "Chickpeas"
+
+
+def test_product_intelligence_staleness_uses_runtime_payload_fields_only(db_session):
+    actor, household = create_household_with_role(
+        db_session,
+        email="classification-hash@example.com",
+        household_name="Classification Hash Household",
+        role_code=HOUSEHOLD_ADMIN_ROLE,
+    )
+    product = create_product_record(
+        db_session,
+        household=household,
+        actor=actor,
+        name="Brown sauce",
+        default_unit="bottle",
+        aliases=[],
+        barcodes=["5000111046244"],
+    )
+    enrichment = ProductEnrichment(
+        household_id=household.id,
+        product=product,
+        source_name="open_food_facts",
+        source_product_id="5000111046244",
+        source_barcode="5000111046244",
+        source_product_name="HP Brown Sauce",
+        ingredients_text="Tomatoes, vinegar, barley malt",
+        ingredient_tags=["tomatoes", "vinegar", "barley-malt"],
+        allergen_tags=["Gluten"],
+        dietary_tags=["vegetarian"],
+        categories=["Condiments", "Sauces", "Brown Sauces"],
+        labels=["Vegetarian"],
+        nutriments_payload={"energy-kcal_100g": 100},
+        nutrition_summary=[{"label": "Energy", "value": 100, "unit": "kcal"}],
+    )
+    db_session.add(enrichment)
+    db_session.flush()
+
+    intelligence = ProductIntelligence(
+        household_id=household.id,
+        product_id=product.id,
+        source_provider="ollama",
+        source_model="llama3.2",
+        classification_scope=PRODUCT_INTELLIGENCE_SCOPE,
+        classification_version=PRODUCT_INTELLIGENCE_CLASSIFICATION_VERSION,
+        schema_version=PRODUCT_INTELLIGENCE_SCHEMA_VERSION,
+        source_data_hash=build_product_intelligence_source_data_hash(
+            product,
+            provider_type="ollama",
+            model="llama3.2",
+        ),
+        classified_at=product.updated_at,
+    )
+    db_session.add(intelligence)
+    db_session.flush()
+
+    enrichment.labels = ["Organic"]
+    enrichment.nutrition_summary = [
+        {"label": "Energy", "value": 150, "unit": "kcal"},
+        {"label": "Salt", "value": 2.1, "unit": "g"},
+    ]
+    enrichment.nutriments_payload = {"energy-kcal_100g": 150, "salt_100g": 2.1}
+    assert get_product_intelligence_staleness(product, intelligence).is_stale is False
+
+    enrichment.ingredient_tags = ["tomatoes", "molasses"]
+    staleness = get_product_intelligence_staleness(product, intelligence)
+    assert staleness.is_stale is True
+    assert "source_product_data_changed" in staleness.reasons
 
 
 def test_product_intelligence_worker_batches_requests_and_recovers_from_429s(client, db_session, monkeypatch):

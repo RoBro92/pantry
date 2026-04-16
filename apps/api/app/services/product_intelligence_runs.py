@@ -30,6 +30,7 @@ from app.services.ai_providers import StructuredCompletionRequest, build_ai_prov
 from app.services.ai_runtime import PantryAIError, normalize_ai_error
 from app.services.audit import record_audit_event
 from app.services.product_intelligence import (
+    PRODUCT_INTELLIGENCE_BASE_PROMPT_TOKEN_OVERHEAD,
     PRODUCT_INTELLIGENCE_CLASSIFICATION_VERSION,
     PRODUCT_INTELLIGENCE_SCHEMA_VERSION,
     PRODUCT_INTELLIGENCE_SCOPE,
@@ -47,6 +48,7 @@ from app.services.product_intelligence import (
     estimate_product_intelligence_tokens,
     get_primary_product_intelligence,
     get_product_intelligence_staleness,
+    get_product_intelligence_runtime_trim_level,
     serialize_product_intelligence,
 )
 from app.services.product_intelligence_profiles import (
@@ -67,7 +69,6 @@ RUN_TERMINAL_STATUSES = {RUN_STATUS_COMPLETED, RUN_STATUS_FAILED, RUN_STATUS_PAR
 RUN_PROGRESS_ITEM_STATUSES = {"classified", "reclassified", "skipped", "failed"}
 RUN_RESUME_TIMEOUT = timedelta(minutes=5)
 RUN_EVENT_LIMIT = 24
-BASE_PROMPT_TOKEN_OVERHEAD = 650
 
 
 @dataclass(frozen=True)
@@ -325,7 +326,11 @@ def _process_claimed_run(db: Session, run: ProductIntelligenceRun) -> None:
             newly_skipped += 1
             continue
 
-        payload = _fit_batch_payload(product, profile=profile)
+        payload = _fit_batch_payload(
+            product,
+            profile=profile,
+            model=effective_model,
+        )
         candidates.append(
             PreparedClassificationCandidate(
                 product=product,
@@ -634,7 +639,7 @@ def _build_batches(
 ) -> list[list[PreparedClassificationCandidate]]:
     batches: list[list[PreparedClassificationCandidate]] = []
     current: list[PreparedClassificationCandidate] = []
-    current_input_tokens = BASE_PROMPT_TOKEN_OVERHEAD
+    current_input_tokens = PRODUCT_INTELLIGENCE_BASE_PROMPT_TOKEN_OVERHEAD
     current_output_tokens = 0
     for candidate in candidates:
         would_exceed_input = current and (
@@ -647,7 +652,7 @@ def _build_batches(
         if would_exceed_input or would_exceed_output or would_exceed_count:
             batches.append(current)
             current = []
-            current_input_tokens = BASE_PROMPT_TOKEN_OVERHEAD
+            current_input_tokens = PRODUCT_INTELLIGENCE_BASE_PROMPT_TOKEN_OVERHEAD
             current_output_tokens = 0
 
         current.append(candidate)
@@ -663,16 +668,14 @@ def _fit_batch_payload(
     product: Product,
     *,
     profile: ProductIntelligenceExecutionProfile,
+    model: str | None,
 ) -> dict[str, object]:
-    per_product_budget = max(
-        (profile.max_input_tokens - BASE_PROMPT_TOKEN_OVERHEAD) // max(profile.max_products_per_batch, 1),
-        500,
+    trim_level = get_product_intelligence_runtime_trim_level(
+        product,
+        provider_type=profile.provider_type,
+        model=model,
     )
-    for trim_level in range(3):
-        payload = build_product_intelligence_batch_source_payload(product, trim_level=trim_level)
-        if estimate_product_intelligence_tokens(payload) <= per_product_budget:
-            return payload
-    return build_product_intelligence_batch_source_payload(product, trim_level=2)
+    return build_product_intelligence_batch_source_payload(product, trim_level=trim_level)
 
 
 def _is_transient_provider_error(exc: Exception) -> bool:
