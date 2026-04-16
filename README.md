@@ -80,6 +80,8 @@ Local branch work uses the Docker-based source stack that stays separate from th
 - `./pantry status` shows the current local stack state
 - `./pantry logs` follows the local service logs
 - the helper uses `.env.local` first, falls back to `.env`, and creates `.env.local` from `.env.example` on first run
+- if `.env.local` includes `PANTRY_LOCAL_AI_*` or `PANTRY_LOCAL_SMTP_*`, fresh setup is prefilled and demo mode seeds the instance AI/SMTP config automatically
+- local AI and SMTP bootstrap runs an initial validation pass after demo seed or setup finalize so the admin UI reflects the current status without an extra manual check
 - web changes hot reload in the browser, API changes auto-reload, and worker source changes restart the worker process in the dev stack
 - demo credentials stay in the public repo for contributor use: `demoadmin` / `demopass` and `demouser` / `demopass`
 

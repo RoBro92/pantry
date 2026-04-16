@@ -4,6 +4,7 @@ import json
 
 from sqlalchemy import delete, select
 
+from app.domain.ai import AI_HEALTH_HEALTHY
 from app.models import Base, Role
 from app.models.ai_provider_config import AIProviderConfig
 from app.models.household import Household
@@ -13,6 +14,8 @@ from app.models.location_group import LocationGroup
 from app.models.membership import Membership
 from app.models.setup_state import SetupState
 from app.models.user import User
+from app.services.ai_providers import AIProviderHealth
+from app.services.secrets import decrypt_secret
 from app.services.smtp import SMTPTestResult
 
 
@@ -99,6 +102,107 @@ def test_setup_wizard_persists_staged_progress(client):
     assert step_states["public_url"] is False
     assert step_states["ai"] is False
     assert step_states["smtp"] is False
+
+
+def test_setup_wizard_prefills_local_ai_and_smtp_from_env(client, db_session, monkeypatch):
+    monkeypatch.setenv("PANTRY_LOCAL_AI_BASE_URL", "https://api.openai.com/v1")
+    monkeypatch.setenv("PANTRY_LOCAL_AI_DEFAULT_MODEL", "gpt-5.4-mini")
+    monkeypatch.setenv("PANTRY_LOCAL_AI_API_KEY", "openai-local-test-key")
+    monkeypatch.setenv("PANTRY_LOCAL_SMTP_HOST", "smtp.example.com")
+    monkeypatch.setenv("PANTRY_LOCAL_SMTP_PORT", "587")
+    monkeypatch.setenv("PANTRY_LOCAL_SMTP_USERNAME", "mailer")
+    monkeypatch.setenv("PANTRY_LOCAL_SMTP_PASSWORD", "smtp-password")
+    monkeypatch.setenv("PANTRY_LOCAL_SMTP_FROM_EMAIL", "pantry@example.com")
+    monkeypatch.setenv("PANTRY_LOCAL_SMTP_FROM_NAME", "Pantry")
+    monkeypatch.setenv("PANTRY_LOCAL_SMTP_SECURITY", "starttls")
+    monkeypatch.setenv("PANTRY_LOCAL_SMTP_ENABLED", "true")
+    monkeypatch.setenv("PANTRY_LOCAL_SMTP_PASSWORD_RESET_ENABLED", "true")
+
+    response = client.get("/api/setup/wizard")
+    assert response.status_code == 200
+
+    payload = response.json()
+    assert payload["ai_config"] == {
+        "provider_type": "openai",
+        "base_url": "https://api.openai.com/v1",
+        "default_model": "gpt-5.4-mini",
+        "is_enabled": True,
+        "has_api_key": True,
+    }
+    assert payload["smtp_config"] == {
+        "host": "smtp.example.com",
+        "port": 587,
+        "username": "mailer",
+        "has_password": True,
+        "from_email": "pantry@example.com",
+        "from_name": "Pantry",
+        "security": "starttls",
+        "is_enabled": True,
+        "password_reset_enabled": True,
+    }
+
+    save_response = client.put("/api/setup/wizard/welcome", json={"acknowledged": True})
+    assert save_response.status_code == 200
+
+    setup_state = db_session.scalar(select(SetupState))
+    assert setup_state is not None
+    assert decrypt_secret(setup_state.encrypted_ai_api_key) == "openai-local-test-key"
+    assert decrypt_secret(setup_state.encrypted_smtp_password) == "smtp-password"
+
+
+def test_setup_finalize_runs_initial_integration_checks_for_local_env(client, db_session, monkeypatch):
+    monkeypatch.setenv("PANTRY_LOCAL_AI_BASE_URL", "https://api.openai.com/v1")
+    monkeypatch.setenv("PANTRY_LOCAL_AI_DEFAULT_MODEL", "gpt-5.4-mini")
+    monkeypatch.setenv("PANTRY_LOCAL_AI_API_KEY", "openai-local-test-key")
+    monkeypatch.setenv("PANTRY_LOCAL_SMTP_HOST", "smtp.example.com")
+    monkeypatch.setenv("PANTRY_LOCAL_SMTP_PORT", "587")
+    monkeypatch.setenv("PANTRY_LOCAL_SMTP_USERNAME", "mailer")
+    monkeypatch.setenv("PANTRY_LOCAL_SMTP_PASSWORD", "smtp-password")
+    monkeypatch.setenv("PANTRY_LOCAL_SMTP_FROM_EMAIL", "pantry@example.com")
+    monkeypatch.setenv("PANTRY_LOCAL_SMTP_FROM_NAME", "Pantry")
+    monkeypatch.setenv("PANTRY_LOCAL_SMTP_SECURITY", "starttls")
+    monkeypatch.setenv("PANTRY_LOCAL_SMTP_ENABLED", "true")
+    monkeypatch.setenv("PANTRY_LOCAL_SMTP_TEST_RECIPIENT_EMAIL", "test@example.com")
+    monkeypatch.setenv("PANTRY_LOCAL_SMTP_PASSWORD_RESET_ENABLED", "true")
+
+    def stub_refresh_provider_health(db, config):
+        del db
+        config.health_status = AI_HEALTH_HEALTHY
+        config.health_error = None
+        config.available_model_count = 1
+        config.capabilities = {"supports_structured_output": True}
+        return AIProviderHealth(
+            is_healthy=True,
+            status=AI_HEALTH_HEALTHY,
+            message=None,
+            models=["gpt-5.4-mini"],
+            capabilities={"supports_structured_output": True},
+        )
+
+    monkeypatch.setattr(
+        "app.services.instance_integration_checks.refresh_provider_health",
+        stub_refresh_provider_health,
+    )
+    monkeypatch.setattr(
+        "app.services.instance_integration_checks.run_smtp_connectivity_test",
+        lambda db: SMTPTestResult(status="passed", ok=True, message="250 OK"),
+    )
+
+    _save_required_setup_steps(client)
+
+    finalize_response = client.post("/api/setup/wizard/finalize")
+    assert finalize_response.status_code == 200
+
+    ai_config = db_session.scalar(select(AIProviderConfig))
+    assert ai_config is not None
+    assert ai_config.health_status == AI_HEALTH_HEALTHY
+
+    instance_settings = db_session.scalar(select(InstanceSetting))
+    assert instance_settings is not None
+    assert instance_settings.smtp_host == "smtp.example.com"
+    assert instance_settings.smtp_test_recipient_email == "test@example.com"
+    assert instance_settings.password_reset_enabled is True
+    assert instance_settings.smtp_last_test_status == "passed"
 
 
 def test_setup_household_step_supports_multiple_rooms_and_persists_them(client):

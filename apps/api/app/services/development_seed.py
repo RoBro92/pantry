@@ -18,7 +18,15 @@ from app.services.auth import (
     create_platform_admin,
     create_user,
 )
+from app.services.ai_config import upsert_instance_provider_config
 from app.services.e2e_seed import reset_application_data
+from app.services.instance_integration_checks import (
+    run_instance_ai_health_check,
+    run_instance_smtp_health_check,
+)
+from app.services.instance_settings import get_or_create_instance_settings, upsert_smtp_settings
+from app.services.local_ai_bootstrap import resolve_local_ai_bootstrap_config
+from app.services.local_smtp_bootstrap import resolve_local_smtp_bootstrap_config
 from app.services.open_food_facts import OPEN_FOOD_FACTS_SOURCE, OpenFoodFactsUnavailableError
 from app.services.pantry_catalog import create_location, create_location_group, create_product
 from app.services.pantry_stock import add_stock_lot
@@ -527,6 +535,40 @@ def seed_demo_development_state(db: Session, *, off_client=None) -> DevelopmentS
 
     if actor is None:
         raise ValueError("Demo development seed requires at least one platform admin.")
+
+    ai_bootstrap = resolve_local_ai_bootstrap_config()
+    if ai_bootstrap is not None:
+        config = upsert_instance_provider_config(
+            db,
+            actor=actor,
+            provider_type=ai_bootstrap.provider_type,
+            base_url=ai_bootstrap.base_url,
+            default_model=ai_bootstrap.default_model,
+            api_key=ai_bootstrap.api_key,
+            is_enabled=True,
+        )
+        run_instance_ai_health_check(db, config=config)
+
+    smtp_bootstrap = resolve_local_smtp_bootstrap_config()
+    if smtp_bootstrap is not None:
+        upsert_smtp_settings(
+            db,
+            actor=actor,
+            host=smtp_bootstrap.host,
+            port=smtp_bootstrap.port,
+            username=smtp_bootstrap.username,
+            password=smtp_bootstrap.password,
+            from_email=smtp_bootstrap.from_email,
+            from_name=smtp_bootstrap.from_name,
+            test_recipient_email=smtp_bootstrap.test_recipient_email,
+            security=smtp_bootstrap.security,
+            is_enabled=smtp_bootstrap.is_enabled,
+        )
+        settings = get_or_create_instance_settings(db)
+        settings.password_reset_enabled = smtp_bootstrap.password_reset_enabled
+        db.add(settings)
+        db.commit()
+        run_instance_smtp_health_check(db, actor=actor)
 
     household = create_household(db, name="demohouse")
     for user_seed in DEMO_USERS:

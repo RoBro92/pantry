@@ -35,6 +35,8 @@ Pantry provides a repo-root wrapper for local branch work:
 - check the current stack with `./pantry status`
 - rebuild images only when Dockerfiles or dependencies changed with `./pantry rebuild`
 - the helper prefers `.env.local`, falls back to `.env`, and bootstraps `.env.local` from `.env.example` if needed
+- set `PANTRY_LOCAL_AI_*` and `PANTRY_LOCAL_SMTP_*` in `.env.local` if you want fresh setup and demo mode to come up with local AI and SMTP config already populated
+- bootstrap validation runs once after demo seed or setup finalize; Pantry does not background-poll AI or SMTP health in local development
 - web edits in `apps/web` and `packages/shared-types` hot reload in browser
 - API edits in `apps/api/app` and Alembic files auto-reload the FastAPI process
 - worker edits in `apps/worker/worker` and shared API-side worker dependencies restart the worker process automatically

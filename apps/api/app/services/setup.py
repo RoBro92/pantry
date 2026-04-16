@@ -52,15 +52,22 @@ from app.services.backups import clear_staged_backup, load_staged_backup, restor
 from app.services.ai_config import _normalize_base_url, get_instance_provider_config
 from app.services.audit import record_audit_event
 from app.services.auth import count_platform_admins, get_user_by_email, get_user_by_external_id
+from app.services.instance_integration_checks import (
+    run_instance_ai_health_check,
+    run_instance_smtp_health_check,
+)
 from app.services.instance_settings import (
     _normalize_optional_text,
     _normalize_smtp_port,
     _require_valid_email,
+    get_instance_settings,
     get_or_create_instance_settings,
     normalize_public_base_url,
     normalize_smtp_host,
     normalize_smtp_security,
 )
+from app.services.local_ai_bootstrap import resolve_local_ai_bootstrap_config
+from app.services.local_smtp_bootstrap import resolve_local_smtp_bootstrap_config
 from app.services.pantry_normalization import dedupe_preserving_order, normalize_lookup_name, require_text
 from app.services.roles import get_role_by_code
 from app.services.secrets import decrypt_secret, encrypt_secret
@@ -154,6 +161,38 @@ def _default_payload() -> dict[str, object]:
     }
 
 
+def _build_initial_setup_state() -> tuple[dict[str, object], str | None, str | None]:
+    payload = _default_payload()
+    ai_bootstrap = resolve_local_ai_bootstrap_config()
+    smtp_bootstrap = resolve_local_smtp_bootstrap_config()
+
+    if ai_bootstrap is not None:
+        payload["ai"] = {
+            "provider_type": ai_bootstrap.provider_type,
+            "base_url": ai_bootstrap.base_url,
+            "default_model": ai_bootstrap.default_model,
+            "is_enabled": True,
+        }
+
+    if smtp_bootstrap is not None:
+        payload["smtp"] = {
+            "host": smtp_bootstrap.host,
+            "port": smtp_bootstrap.port,
+            "username": smtp_bootstrap.username or "",
+            "from_email": smtp_bootstrap.from_email or "",
+            "from_name": smtp_bootstrap.from_name or "",
+            "security": smtp_bootstrap.security,
+            "is_enabled": smtp_bootstrap.is_enabled,
+            "password_reset_enabled": smtp_bootstrap.password_reset_enabled,
+        }
+
+    return (
+        payload,
+        ai_bootstrap.api_key if ai_bootstrap is not None else None,
+        smtp_bootstrap.password if smtp_bootstrap is not None else None,
+    )
+
+
 def _normalize_setup_rooms(raw_rooms: list[dict[str, object]] | None) -> list[dict[str, object]]:
     if not raw_rooms:
         return [_default_room_payload()]
@@ -190,7 +229,14 @@ def _get_setup_state_record(db: Session) -> SetupState | None:
 def _get_or_create_setup_state(db: Session) -> SetupState:
     state = _get_setup_state_record(db)
     if state is None:
-        state = SetupState(scope_key=SETUP_SCOPE_KEY, status=SETUP_STATUS_IN_PROGRESS, payload=_default_payload())
+        payload, ai_api_key, smtp_password = _build_initial_setup_state()
+        state = SetupState(
+            scope_key=SETUP_SCOPE_KEY,
+            status=SETUP_STATUS_IN_PROGRESS,
+            payload=payload,
+            encrypted_ai_api_key=encrypt_secret(ai_api_key) if ai_api_key else None,
+            encrypted_smtp_password=encrypt_secret(smtp_password) if smtp_password else None,
+        )
         db.add(state)
         db.flush()
     return state
@@ -1024,6 +1070,8 @@ def finalize_setup(db: Session) -> User:
             role = household_admin_role if role_code == HOUSEHOLD_ADMIN_ROLE else household_user_role
             db.add(Membership(user_id=user.id, household_id=household.id, role_id=role.id, is_active=True))
 
+        local_smtp_bootstrap = resolve_local_smtp_bootstrap_config()
+
         settings = get_or_create_instance_settings(db)
         settings.public_base_url = _normalize_optional_public_base_url(
             payload.get("public_base_url") if isinstance(payload.get("public_base_url"), str) else None
@@ -1038,6 +1086,9 @@ def finalize_setup(db: Session) -> User:
             settings.encrypted_smtp_password = state.encrypted_smtp_password
             settings.smtp_from_email = smtp_payload.get("from_email")
             settings.smtp_from_name = smtp_payload.get("from_name")
+            settings.smtp_test_recipient_email = (
+                local_smtp_bootstrap.test_recipient_email if local_smtp_bootstrap is not None else None
+            )
             settings.smtp_security = smtp_payload.get("security")
             settings.smtp_enabled = bool(smtp_payload.get("is_enabled"))
             settings.password_reset_enabled = bool(smtp_payload.get("password_reset_enabled"))
@@ -1103,4 +1154,13 @@ def finalize_setup(db: Session) -> User:
         db.rollback()
         raise
 
-    return get_user_by_external_id(db, created_users[DEFAULT_ADMIN_STAGE_ID].external_id) or created_users[DEFAULT_ADMIN_STAGE_ID]
+    completed_user = get_user_by_external_id(db, created_users[DEFAULT_ADMIN_STAGE_ID].external_id) or created_users[DEFAULT_ADMIN_STAGE_ID]
+    ai_config = get_instance_provider_config(db)
+    if ai_config is not None and ai_config.is_enabled:
+        run_instance_ai_health_check(db, config=ai_config)
+
+    smtp_settings = get_instance_settings(db)
+    if smtp_settings is not None and smtp_settings.smtp_host and smtp_settings.smtp_enabled:
+        run_instance_smtp_health_check(db, actor=completed_user)
+
+    return completed_user
