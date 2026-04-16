@@ -69,7 +69,7 @@ export default async function HouseholdPantryPage({
         <article className="panel">
           <div className="stack compact-stack">
             <p className="eyebrow">Recent Activity</p>
-            <h2 className="section-heading">Pantry log</h2>
+            <h2 className="section-heading">Inventory log</h2>
             <p className="section-copy">
               A compact record of product creation, stock changes, enrichment links, and setup
               milestones.

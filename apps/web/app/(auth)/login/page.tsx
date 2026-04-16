@@ -30,7 +30,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
     <main className="page-shell">
       <section className="auth-stage-shell">
         <div className="auth-stage-intro">
-          <p className="eyebrow">Pantry {process.env.NEXT_PUBLIC_APP_VERSION ?? ""}</p>
+          <p className="eyebrow">Pantro {process.env.NEXT_PUBLIC_APP_VERSION ?? ""}</p>
           <h1>Welcome back</h1>
           <p className="lede">
             Sign in to view your pantry inventory, manage your shopping lists, and more.

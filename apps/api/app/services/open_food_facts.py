@@ -329,7 +329,7 @@ class OpenFoodFactsClient:
         *,
         timeout_seconds: float = 5.0,
         base_url: str = OPEN_FOOD_FACTS_BASE_URL,
-        user_agent: str = "Pantry/1.0 (+https://github.com/RoBro92/pantry)",
+        user_agent: str = "Pantro/1.0 (+https://github.com/RoBro92/pantry)",
         transport: httpx.BaseTransport | None = None,
         ttl_seconds: float = 600.0,
         max_cache_entries: int = 128,

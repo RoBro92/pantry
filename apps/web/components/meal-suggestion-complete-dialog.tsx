@@ -73,13 +73,13 @@ export function MealSuggestionCompleteDialog({
   return (
     <ModalShell
       title="Complete recipe"
-      description={`Confirm what Pantry should deduct for ${suggestion.title}.`}
+      description={`Confirm what to deduct from stock for ${suggestion.title}.`}
       onClose={onClose}
       panelClassName="modal-panel meal-complete-panel"
     >
       <div className="stack">
         <p className="helper-text">
-          Pantry only deducts matched ingredients with compatible pantry units. Missing or extra
+          Only matched ingredients with compatible stock units are deducted automatically. Missing or extra
           ingredients stay informational and will not fail the completion flow.
         </p>
         <div className="meal-complete-list">
@@ -105,8 +105,8 @@ export function MealSuggestionCompleteDialog({
                 </div>
                 <div className="meal-complete-grid">
                   <div className="stack compact-stack">
-                    <span className="helper-text">Pantry match</span>
-                    <strong>{ingredient.pantry_product_name ?? "No pantry match"}</strong>
+                    <span className="helper-text">Inventory match</span>
+                    <strong>{ingredient.pantry_product_name ?? "No inventory match"}</strong>
                   </div>
                   <div className="stack compact-stack">
                     <span className="helper-text">Available now</span>
@@ -119,7 +119,7 @@ export function MealSuggestionCompleteDialog({
                     </strong>
                   </div>
                   <label className="field">
-                    <span>Deduct from Pantry</span>
+                    <span>Deduct from stock</span>
                     <input
                       type="number"
                       min="0"
@@ -142,8 +142,8 @@ export function MealSuggestionCompleteDialog({
                 ) : null}
                 {!canConsume ? (
                   <p className="helper-text">
-                    Pantry cannot deduct this ingredient automatically because it is missing,
-                    unmatched, or uses a different pantry unit.
+                    Pantro cannot deduct this ingredient automatically because it is missing,
+                    unmatched, or uses a different stock unit.
                   </p>
                 ) : null}
               </article>

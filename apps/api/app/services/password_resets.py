@@ -82,7 +82,7 @@ def _render_template(
         template.replace(PASSWORD_RESET_LINK_PLACEHOLDER, reset_link)
         .replace("{{user_name}}", user_name)
         .replace("{{user_identifier}}", user.email)
-        .replace("{{app_name}}", "Pantry")
+        .replace("{{app_name}}", "Pantro")
     )
 
 

@@ -125,7 +125,7 @@ export function AdminBackupsPanel({ households }: AdminBackupsPanelProps) {
           <p className="eyebrow">Full</p>
           <h2>Full instance backup</h2>
           <p className="section-copy">
-            Export a Pantry native JSON bundle containing the full instance database content for
+            Export a Pantro native JSON bundle containing the full instance database content for
             system admin controlled recovery.
           </p>
           <div className="page-actions">
@@ -189,13 +189,13 @@ export function AdminBackupsPanel({ households }: AdminBackupsPanelProps) {
         <p className="eyebrow">Restore</p>
         <h2>Import a full instance backup</h2>
         <p className="section-copy">
-          Supported format: Pantry backup bundle v1 JSON. Uploads are validated, staged in
+          Supported format: Pantro backup bundle v1 JSON. Uploads are validated, staged in
           quarantine, and never executed as code.
         </p>
         <div className="warning-callout">
           <strong>Destructive action</strong>
           <p>
-            Restoring a full instance backup replaces the current Pantry database content. After
+            Restoring a full instance backup replaces the current Pantro database content. After
             restore, sign in again and verify households, users, and settings.
           </p>
         </div>

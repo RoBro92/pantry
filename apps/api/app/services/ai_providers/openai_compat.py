@@ -123,17 +123,17 @@ def openai_completion_token_param(model: str | None) -> str:
 def build_openai_supported_model_failure_message(model: str | None) -> str:
     model_name = describe_openai_model(model)
     return (
-        f"Pantry could not complete a structured AI request with the OpenAI model '{model_name}'. "
+        f"Pantro could not complete a structured AI request with the OpenAI model '{model_name}'. "
         "Re-run the health check and try again. "
-        f"If it still fails, switch to another Pantry-supported OpenAI model: {recommended_openai_models_text()}."
+        f"If it still fails, switch to another Pantro-supported OpenAI model: {recommended_openai_models_text()}."
     )
 
 
 def build_openai_unsupported_model_message(model: str | None) -> str:
     model_name = describe_openai_model(model)
     return (
-        f"The OpenAI model '{model_name}' is not a good fit for Pantry's structured AI workflow. "
-        f"Use one of Pantry's supported OpenAI models: {recommended_openai_models_text()}."
+        f"The OpenAI model '{model_name}' is not a good fit for Pantro's structured AI workflow. "
+        f"Use one of Pantro's supported OpenAI models: {recommended_openai_models_text()}."
     )
 
 
@@ -179,7 +179,7 @@ def map_openai_http_error(exc: httpx.HTTPStatusError, *, model: str) -> AIProvid
         )
     if status_code == 429:
         return AIProviderError(
-            "OpenAI rate limits are currently preventing Pantry AI requests. Try again shortly.",
+            "OpenAI rate limits are currently preventing Pantro AI requests. Try again shortly.",
             diagnostic_message=provider_message,
             category="rate_limited",
         )
@@ -191,7 +191,7 @@ def map_openai_http_error(exc: httpx.HTTPStatusError, *, model: str) -> AIProvid
         )
     if status_code == 400 and is_openai_output_token_parameter_error(provider_message):
         return AIProviderError(
-            "OpenAI rejected Pantry's structured AI request parameters. Re-run the health check or try again.",
+            "OpenAI rejected Pantro's structured AI request parameters. Re-run the health check or try again.",
             diagnostic_message=provider_message,
             category="invalid_request",
         )
@@ -225,7 +225,7 @@ def map_openai_http_error(exc: httpx.HTTPStatusError, *, model: str) -> AIProvid
                 build_openai_supported_model_failure_message(model)
                 if is_supported_openai_model(model)
                 else (
-                    "OpenAI rejected Pantry's structured AI request. "
+                    "OpenAI rejected Pantro's structured AI request. "
                     f"Re-run the health check or choose a recommended OpenAI model such as {recommended_models}."
                 )
             ),
@@ -233,7 +233,7 @@ def map_openai_http_error(exc: httpx.HTTPStatusError, *, model: str) -> AIProvid
             category="invalid_request",
         )
     return AIProviderError(
-        "Pantry could not complete the OpenAI request.",
+        "Pantro could not complete the OpenAI request.",
         diagnostic_message=provider_message,
         category="provider_error",
     )
@@ -241,7 +241,7 @@ def map_openai_http_error(exc: httpx.HTTPStatusError, *, model: str) -> AIProvid
 
 def map_openai_transport_error(exc: httpx.HTTPError) -> AIProviderError:
     return AIProviderError(
-        "Pantry could not reach OpenAI. Check the base URL, network access, and firewall settings.",
+        "Pantro could not reach OpenAI. Check the base URL, network access, and firewall settings.",
         diagnostic_message=str(exc),
         category="network_error",
     )

@@ -803,13 +803,13 @@ def _deserialize_table_rows(bundle: dict[str, Any], *, table_name: str) -> list[
 
 def _restore_scope_description(allowed_restore_scopes: set[str]) -> str:
     if allowed_restore_scopes == {"instance"}:
-        return "Restore currently supports full instance Pantry backup bundles only."
+        return "Restore currently supports full instance Pantro backup bundles only."
     if allowed_restore_scopes == {"household"}:
-        return "Restore currently supports Pantry household backup bundles only."
+        return "Restore currently supports Pantro household backup bundles only."
     if allowed_restore_scopes == {"household", "instance"}:
-        return "Restore supports Pantry full instance and household backup bundles through dedicated flows."
+        return "Restore supports Pantro full instance and household backup bundles through dedicated flows."
     scopes = ", ".join(sorted(allowed_restore_scopes))
-    return f"Restore supports Pantry backup bundles for these scopes: {scopes}."
+    return f"Restore supports Pantro backup bundles for these scopes: {scopes}."
 
 
 def _validate_bundle_layout(
@@ -831,12 +831,12 @@ def _validate_bundle_layout(
         if unexpected_table_names:
             details.append(f"unexpected tables: {', '.join(unexpected_table_names)}")
         suffix = f" ({'; '.join(details)})" if details else ""
-        raise ValueError(f"Backup table layout does not match the running Pantry schema.{suffix}")
+        raise ValueError(f"Backup table layout does not match the running Pantro schema.{suffix}")
 
 
 def _validate_bundle_payload(payload: dict[str, Any]) -> dict[str, Any]:
     if payload.get("format") != BACKUP_FORMAT:
-        raise ValueError("Unsupported backup format. Pantry restore only accepts Pantry backup bundle v1 JSON files.")
+        raise ValueError("Unsupported backup format. Pantro restore only accepts Pantro backup bundle v1 JSON files.")
     if payload.get("format_version") != BACKUP_FORMAT_VERSION:
         raise ValueError("Unsupported backup format version.")
     if payload.get("scope") not in {"instance", "household"}:
@@ -886,14 +886,14 @@ def _restore_compatibility(*, current_revision: str | None, bundle_revision: str
 def _validate_restore_bundle(db: Session, bundle: dict[str, Any]) -> None:
     payload = _validate_bundle_payload(bundle)
     if payload["scope"] != "instance":
-        raise ValueError("Only full instance Pantry backups can be restored in this milestone.")
+        raise ValueError("Only full instance Pantro backups can be restored in this milestone.")
 
     current_revision = _current_schema_revision(db)
     bundle_revision = payload.get("schema_revision")
     compatibility = _restore_compatibility(current_revision=current_revision, bundle_revision=bundle_revision)
     if not compatibility.supported:
         raise ValueError(
-            "Backup schema revision does not match the running Pantry schema, and this older revision is not marked restore-compatible."
+            "Backup schema revision does not match the running Pantro schema, and this older revision is not marked restore-compatible."
         )
 
     _validate_bundle_layout(
@@ -916,14 +916,14 @@ def _validate_restore_bundle(db: Session, bundle: dict[str, Any]) -> None:
 def _validate_household_restore_bundle(db: Session, bundle: dict[str, Any]) -> tuple[RestoreCompatibility, dict[str, Any]]:
     payload = _validate_bundle_payload(bundle)
     if payload["scope"] != "household":
-        raise ValueError("Only Pantry household backup bundles can be restored through this flow.")
+        raise ValueError("Only Pantro household backup bundles can be restored through this flow.")
 
     current_revision = _current_schema_revision(db)
     bundle_revision = payload.get("schema_revision")
     compatibility = _restore_compatibility(current_revision=current_revision, bundle_revision=bundle_revision)
     if not compatibility.supported:
         raise ValueError(
-            "Backup schema revision does not match the running Pantry schema, and this older revision is not marked restore-compatible."
+            "Backup schema revision does not match the running Pantro schema, and this older revision is not marked restore-compatible."
         )
 
     _validate_bundle_layout(
@@ -934,7 +934,7 @@ def _validate_household_restore_bundle(db: Session, bundle: dict[str, Any]) -> t
 
     household_rows = _deserialize_table_rows(payload, table_name="households")
     if len(household_rows) != 1:
-        raise ValueError("Pantry household restore requires exactly one household record in the backup bundle.")
+        raise ValueError("Pantro household restore requires exactly one household record in the backup bundle.")
 
     return compatibility, household_rows[0]
 
@@ -1006,7 +1006,7 @@ async def stage_backup_upload(
     original_filename = sanitize_upload_filename(upload.filename)
     extension = Path(original_filename).suffix.lower()
     if extension not in ALLOWED_BACKUP_EXTENSIONS:
-        raise ValueError("Unsupported restore file type. Pantry restore only accepts .json backup bundles.")
+        raise ValueError("Unsupported restore file type. Pantro restore only accepts .json backup bundles.")
 
     data = await upload.read(settings.backup_max_upload_bytes + 1)
     if len(data) > settings.backup_max_upload_bytes:
@@ -1020,10 +1020,10 @@ async def stage_backup_upload(
     try:
         payload = json.loads(decoded)
     except json.JSONDecodeError as exc:
-        raise ValueError("Restore upload must be valid Pantry backup JSON.") from exc
+        raise ValueError("Restore upload must be valid Pantro backup JSON.") from exc
 
     if not isinstance(payload, dict):
-        raise ValueError("Restore upload must be a Pantry backup JSON object.")
+        raise ValueError("Restore upload must be a Pantro backup JSON object.")
 
     bundle = _validate_bundle_payload(payload)
     warnings: list[str] = [
@@ -1042,13 +1042,13 @@ async def stage_backup_upload(
         warnings.append("This backup scope can be exported, but it is not restorable through this flow.")
     if not compatibility.supported:
         warnings.append(
-            "This backup was created from a different Pantry schema revision, and this version gap is not restore-compatible yet."
+            "This backup was created from a different Pantro schema revision, and this version gap is not restore-compatible yet."
         )
     else:
         warnings.extend(compatibility.warnings)
     if bundle["scope"] == "household" and "household" in allowed_restore_scopes:
         warnings.append(
-            "Household restore creates a brand new household only. Pantry does not merge household backup data into an existing household."
+            "Household restore creates a brand new household only. Pantro does not merge household backup data into an existing household."
         )
         warnings.append(
             "Historical household audit events and original import upload blobs are not replayed during household restore."
@@ -1512,10 +1512,10 @@ def restore_household_backup_bundle(
 
         warnings = list(compatibility.warnings)
         warnings.append(
-            "Household restore always creates a new household. Pantry does not merge or overwrite an existing household through this flow."
+            "Household restore always creates a new household. Pantro does not merge or overwrite an existing household through this flow."
         )
         warnings.append(
-            "Historical household audit events are not replayed during household restore. Pantry records a new restore audit event instead."
+            "Historical household audit events are not replayed during household restore. Pantro records a new restore audit event instead."
         )
         warnings.append(
             "Uploaded import source files are not replayed during household restore. Import history is restored without original upload blobs."
@@ -1526,7 +1526,7 @@ def restore_household_backup_bundle(
             )
         if compatibility.allowed_missing_tables:
             warnings.append(
-                "This backup came from an older Pantry schema. Pantry restored the compatible data it could, but some records may be missing."
+                "This backup came from an older Pantro schema. Pantro restored the compatible data it could, but some records may be missing."
             )
 
         record_audit_event(

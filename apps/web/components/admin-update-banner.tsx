@@ -15,7 +15,7 @@ export function AdminUpdateBanner({ releaseStatus }: AdminUpdateBannerProps) {
       <div className="stack">
         <p className="eyebrow">Update available</p>
         <h2>
-          Pantry {releaseStatus.latest_version ?? "latest release"} is available for this
+          Pantro {releaseStatus.latest_version ?? "latest release"} is available for this
           installation
         </h2>
         <p className="section-copy">

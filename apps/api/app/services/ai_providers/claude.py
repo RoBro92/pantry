@@ -101,7 +101,7 @@ class ClaudeProviderAdapter:
             "tools": [
                 {
                     "name": STRUCTURED_OUTPUT_TOOL_NAME,
-                    "description": "Return the Pantry AI response in the expected structured format.",
+                    "description": "Return the Pantro AI response in the expected structured format.",
                     "input_schema": request.output_schema,
                 }
             ],

@@ -242,7 +242,7 @@ export function ImportReviewPanel({
       </article>
 
       <article className="panel">
-        <p className="eyebrow">Confirm To Pantry</p>
+        <p className="eyebrow">Confirm To Pantro</p>
         {locations.length === 0 ? (
           <p>
             Create a pantry location before confirming this import.{" "}

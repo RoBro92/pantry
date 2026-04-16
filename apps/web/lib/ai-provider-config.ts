@@ -56,12 +56,12 @@ const AI_PROVIDER_RECOMMENDED_MODELS: Record<AIProviderType, ProviderRecommendat
     {
       model: "gpt-4.1-mini",
       label: "Fastest / cheapest",
-      description: "Lowest-cost supported option for light Pantry AI runs."
+      description: "Lowest-cost supported option for light Pantro AI runs."
     },
     {
       model: "gpt-5.4-mini",
       label: "Recommended default",
-      description: "Best balance for Pantry suggestions and product intelligence."
+      description: "Best balance for Pantro suggestions and product intelligence."
     },
     {
       model: "gpt-5.4",
@@ -73,29 +73,29 @@ const AI_PROVIDER_RECOMMENDED_MODELS: Record<AIProviderType, ProviderRecommendat
     {
       model: "claude-haiku-4-5",
       label: "Fast / low cost",
-      description: "Fast and affordable for compact Pantry suggestions and classifications."
+      description: "Fast and affordable for compact Pantro suggestions and classifications."
     },
     {
       model: "claude-sonnet-4-6",
       label: "Balanced",
-      description: "Pantry’s default Anthropic option for speed and quality."
+      description: "Pantro’s default Anthropic option for speed and quality."
     },
     {
       model: "claude-opus-4-6",
       label: "Higher quality",
-      description: "Use when Pantry should prioritise quality over cost and latency."
+      description: "Use when Pantro should prioritise quality over cost and latency."
     }
   ],
   gemini: [
     {
       model: "gemini-2.5-flash-lite",
       label: "Fast / low cost",
-      description: "The lightest Pantry-supported Gemini option."
+      description: "The lightest Pantro-supported Gemini option."
     },
     {
       model: "gemini-2.5-flash",
       label: "Balanced",
-      description: "Pantry’s default Gemini choice for classification and suggestions."
+      description: "Pantro’s default Gemini choice for classification and suggestions."
     },
     {
       model: "gemini-2.5-pro",
@@ -112,7 +112,7 @@ const AI_PROVIDER_RECOMMENDED_MODELS: Record<AIProviderType, ProviderRecommendat
     {
       model: "qwen3:8b",
       label: "Balanced",
-      description: "Pantry’s default local model when it is available."
+      description: "Pantro’s default local model when it is available."
     },
     {
       model: "llama3.3",
@@ -127,25 +127,25 @@ const AI_PROVIDER_SUPPORT: Record<AIProviderType, ProviderSupportMetadata> = {
     isCurrentlySupported: true,
     statusLabel: "Supported",
     description:
-      "OpenAI is Pantry’s currently supported provider for product classification and guided meal suggestions."
+      "OpenAI is Pantro’s currently supported provider for product classification and guided meal suggestions."
   },
   claude: {
     isCurrentlySupported: false,
     statusLabel: "Foundation only",
     description:
-      "Anthropic groundwork remains in the codebase, but Claude is not currently supported for Pantry’s normal AI flows."
+      "Anthropic groundwork remains in the codebase, but Claude is not currently supported for Pantro’s normal AI flows."
   },
   gemini: {
     isCurrentlySupported: false,
     statusLabel: "Foundation only",
     description:
-      "Gemini setup and runtime groundwork remain available, but Gemini is not currently supported for Pantry’s normal AI flows."
+      "Gemini setup and runtime groundwork remain available, but Gemini is not currently supported for Pantro’s normal AI flows."
   },
   ollama: {
     isCurrentlySupported: false,
     statusLabel: "Foundation only",
     description:
-      "Ollama setup and local-model groundwork remain available, but Ollama is not currently supported for Pantry’s normal AI flows."
+      "Ollama setup and local-model groundwork remain available, but Ollama is not currently supported for Pantro’s normal AI flows."
   }
 };
 

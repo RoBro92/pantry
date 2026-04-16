@@ -65,14 +65,14 @@ class OpenAIProviderAdapter:
             raise map_openai_transport_error(exc) from exc
         except ValueError as exc:
             raise AIProviderError(
-                "OpenAI returned a response Pantry could not read.",
+                "OpenAI returned a response Pantro could not read.",
                 diagnostic_message=str(exc),
                 category="invalid_response",
             ) from exc
 
         if not isinstance(payload, dict):
             raise AIProviderError(
-                "OpenAI returned a response Pantry could not read.",
+                "OpenAI returned a response Pantro could not read.",
                 diagnostic_message=f"Unexpected response body type: {type(payload).__name__}",
                 category="invalid_response",
             )
@@ -112,7 +112,7 @@ class OpenAIProviderAdapter:
         choice = (body.get("choices") or [{}])[0]
         if not isinstance(choice, dict):
             raise AIProviderError(
-                "OpenAI returned a response Pantry could not read.",
+                "OpenAI returned a response Pantro could not read.",
                 diagnostic_message="choices[0] was not an object",
                 category="invalid_response",
             )
@@ -120,7 +120,7 @@ class OpenAIProviderAdapter:
         message = choice.get("message") or {}
         if not isinstance(message, dict):
             raise AIProviderError(
-                "OpenAI returned a response Pantry could not read.",
+                "OpenAI returned a response Pantro could not read.",
                 diagnostic_message="choices[0].message was not an object",
                 category="invalid_response",
             )
@@ -128,7 +128,7 @@ class OpenAIProviderAdapter:
         refusal = extract_openai_refusal(message)
         if refusal:
             raise AIProviderError(
-                "OpenAI refused this Pantry AI request. Try a simpler request or switch to a recommended OpenAI model.",
+                "OpenAI refused this Pantro AI request. Try a simpler request or switch to a recommended OpenAI model.",
                 diagnostic_message=refusal,
                 category="refusal",
             )
@@ -145,7 +145,7 @@ class OpenAIProviderAdapter:
             parsed_output = parse_json_output(output_text)
         except Exception as exc:
             raise AIProviderError(
-                "OpenAI returned a structured response Pantry could not validate.",
+                "OpenAI returned a structured response Pantro could not validate.",
                 diagnostic_message=f"Could not parse model {model} response: {output_text[:1000]}",
                 category="invalid_response",
             ) from exc
@@ -200,7 +200,7 @@ class OpenAIProviderAdapter:
                 model=self._config.default_model,
                 schema_name="pantry_openai_health_check",
                 system_prompt=(
-                    "Return only JSON for Pantry's OpenAI compatibility probe. "
+                    "Return only JSON for Pantro's OpenAI compatibility probe. "
                     "Set status to ok."
                 ),
                 user_payload={"probe": "pantry_openai_compatibility"},
@@ -268,7 +268,7 @@ class OpenAIProviderAdapter:
                 is_healthy=False,
                 status=AI_HEALTH_UNHEALTHY,
                 message=(
-                    "Pantry could not verify OpenAI structured-output compatibility. "
+                    "Pantro could not verify OpenAI structured-output compatibility. "
                     f"Choose a recommended OpenAI model such as {recommended_openai_models_text()}."
                 ),
                 models=models,

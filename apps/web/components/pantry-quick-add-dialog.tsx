@@ -101,12 +101,12 @@ function getSelectedCandidate(item: QuickAddItem) {
 
 function describeDuplicateMatch(matchedProduct: PantryProductMatchSummary) {
   if (matchedProduct.match_reason === "barcode_exact") {
-    return "This barcode already belongs to that Pantry product, so Pantry will add another lot there unless you clear or correct the barcode.";
+    return "This barcode already belongs to that product record, so Pantro will add another lot there unless you clear or correct the barcode.";
   }
   if (matchedProduct.match_reason === "name_similarity") {
-    return "Pantry found a likely existing product. Use it by default, or keep this scan separate if that is intentional.";
+    return "Pantro found a likely existing product record. Use it by default, or keep this scan separate if that is intentional.";
   }
-  return "Pantry found an existing product that already matches this item.";
+  return "Pantro found an existing product record that already matches this item.";
 }
 
 function buildLookupStatus(preview: PantryEnrichmentPreviewResponse, barcode: string) {
@@ -160,7 +160,7 @@ function buildSaveSummary(response: BulkPantryEntryMutationResponse) {
   }
 
   if (response.failed_count === 0) {
-    return `Added ${response.added_count} item${response.added_count === 1 ? "" : "s"} to Pantry.`;
+    return `Added ${response.added_count} item${response.added_count === 1 ? "" : "s"} to inventory.`;
   }
 
   return `Added ${response.added_count} item${response.added_count === 1 ? "" : "s"}. ${response.failed_count} still need review.`;
@@ -334,7 +334,7 @@ export function PantryQuickAddDialog({
         nextError =
           requestError instanceof Error
             ? requestError.message
-            : "Could not check for existing Pantry products.";
+            : "Could not check for existing product records.";
       }
     }
 
@@ -578,8 +578,8 @@ export function PantryQuickAddDialog({
   return (
     <>
       <ModalShell
-        title="Bulk scan pantry items"
-        description="Scan multiple barcodes first, let Pantry look up Open Food Facts data in the background, then review each queued item one at a time before saving the whole batch."
+        title="Bulk scan inventory items"
+        description="Scan multiple barcodes first, let Pantro look up Open Food Facts data in the background, then review each queued item one at a time before saving the whole batch."
         onClose={onClose}
         closeOnBackdropClick={false}
         panelClassName="modal-panel modal-panel-wide"
@@ -688,7 +688,7 @@ export function PantryQuickAddDialog({
             {statusMessage ? <p className="status-note">{statusMessage}</p> : null}
             {!canAdminister ? (
               <p className="helper-text">
-                Household admins can create new Pantry products during bulk scan. Non-admin users
+                Household admins can create new product records during bulk scan. Non-admin users
                 can still add to existing products when a match is found.
               </p>
             ) : null}

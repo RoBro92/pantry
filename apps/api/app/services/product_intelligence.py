@@ -87,7 +87,7 @@ class DerivedStapleProfile:
     ingredient_family_overrides: tuple[str, ...] = ()
     recipe_role_tags: tuple[str, ...] = ()
     substitution_groups: tuple[str, ...] = ()
-    pantry_use_tags: tuple[str, ...] = ("Pantry staple", "Shelf stable")
+    pantry_use_tags: tuple[str, ...] = ("Staple", "Shelf stable")
     product_format: str | None = None
     storage_profile: str | None = "Shelf stable"
     preparation_tags: tuple[str, ...] = ()
@@ -115,7 +115,7 @@ DERIVED_STAPLE_PROFILES: tuple[DerivedStapleProfile, ...] = (
         ingredient_family_overrides=("Wheat",),
         recipe_role_tags=("Carbohydrate", "Base"),
         substitution_groups=("Pasta",),
-        pantry_use_tags=("Pantry staple", "Quick meal", "Shelf stable"),
+        pantry_use_tags=("Staple", "Quick meal", "Shelf stable"),
         product_format="Dried",
         preparation_tags=("Boil",),
     ),
@@ -127,7 +127,7 @@ DERIVED_STAPLE_PROFILES: tuple[DerivedStapleProfile, ...] = (
         ingredient_family_overrides=("Rice",),
         recipe_role_tags=("Carbohydrate", "Base"),
         substitution_groups=("Rice",),
-        pantry_use_tags=("Pantry staple", "Quick meal", "Shelf stable"),
+        pantry_use_tags=("Staple", "Quick meal", "Shelf stable"),
         product_format="Dried",
         preparation_tags=("Boil",),
     ),
@@ -155,7 +155,7 @@ DERIVED_STAPLE_PROFILES: tuple[DerivedStapleProfile, ...] = (
         ingredient_family_overrides=("Legumes",),
         recipe_role_tags=("Protein", "Base"),
         substitution_groups=("Legumes",),
-        pantry_use_tags=("Pantry staple", "Bulk cooking", "Shelf stable"),
+        pantry_use_tags=("Staple", "Bulk cooking", "Shelf stable"),
         product_format="Canned",
     ),
     DerivedStapleProfile(
@@ -166,7 +166,7 @@ DERIVED_STAPLE_PROFILES: tuple[DerivedStapleProfile, ...] = (
         ingredient_family_overrides=("Flour",),
         recipe_role_tags=("Baking",),
         substitution_groups=("Flour",),
-        pantry_use_tags=("Pantry staple", "Baking", "Shelf stable"),
+        pantry_use_tags=("Staple", "Baking", "Shelf stable"),
         product_format="Dried",
     ),
     DerivedStapleProfile(
@@ -177,7 +177,7 @@ DERIVED_STAPLE_PROFILES: tuple[DerivedStapleProfile, ...] = (
         ingredient_family_overrides=("Oats",),
         recipe_role_tags=("Carbohydrate", "Base"),
         substitution_groups=("Oats",),
-        pantry_use_tags=("Pantry staple", "Breakfast", "Shelf stable"),
+        pantry_use_tags=("Staple", "Breakfast", "Shelf stable"),
         product_format="Dried",
     ),
 )
@@ -1016,7 +1016,7 @@ def _build_off_derived_output(
     pantry_use_tags: list[str] = []
 
     if include_semantic_defaults:
-        rationale = "Derived from barcode-matched Open Food Facts facts and Pantry staple rules."
+        rationale = "Derived from barcode-matched Open Food Facts facts and staple rules."
         confidence = 0.84 if derived_profile is not None else 0.78
         recipe_role_tags = list(derived_profile.recipe_role_tags) if derived_profile is not None else []
         substitution_groups = list(derived_profile.substitution_groups) if derived_profile is not None else []
@@ -1372,7 +1372,7 @@ def apply_product_intelligence_classification(
     intelligence.allergen_tags = _normalize_tags(parsed.allergen_tags, field_name="Allergen tag")
     intelligence.recipe_role_tags = _normalize_tags(parsed.recipe_role_tags, field_name="Recipe role")
     intelligence.substitution_groups = _normalize_tags(parsed.substitution_groups, field_name="Substitution group")
-    intelligence.pantry_use_tags = _normalize_tags(parsed.pantry_use_tags, field_name="Pantry use tag")
+    intelligence.pantry_use_tags = _normalize_tags(parsed.pantry_use_tags, field_name="Typical use tag")
     intelligence.structured_metadata = _normalize_structured_metadata(parsed.structured_metadata)
 
     record_audit_event(

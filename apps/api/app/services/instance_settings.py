@@ -23,14 +23,14 @@ SMTP_SECURITY_STARTTLS = "starttls"
 SMTP_SECURITY_VALUES = {SMTP_SECURITY_NONE, SMTP_SECURITY_SSL, SMTP_SECURITY_STARTTLS}
 PASSWORD_RESET_LINK_PLACEHOLDER = "{{reset_link}}"
 PASSWORD_RESET_TEMPLATE_KEY = "password_reset"
-DEFAULT_PASSWORD_RESET_SUBJECT_TEMPLATE = "Reset your Pantry password"
+DEFAULT_PASSWORD_RESET_SUBJECT_TEMPLATE = "Reset your Pantro password"
 DEFAULT_PASSWORD_RESET_BODY_TEMPLATE = (
     "Hello {{user_name}},\n\n"
-    "A request was made to reset the password for your Pantry account ({{user_identifier}}).\n\n"
+    "A request was made to reset the password for your Pantro account ({{user_identifier}}).\n\n"
     "Use this link to choose a new password:\n"
     "{{reset_link}}\n\n"
     "If you did not request this, you can ignore this email.\n\n"
-    "Pantry"
+    "Pantro"
 )
 
 

@@ -38,7 +38,7 @@ export function PantryActivityFeed({ events }: PantryActivityFeedProps) {
   );
 
   if (events.length === 0) {
-    return <p>No pantry activity has been recorded yet.</p>;
+    return <p>No inventory activity has been recorded yet.</p>;
   }
 
   const visibleEvents = filteredEvents.slice(0, 5);
@@ -108,8 +108,8 @@ export function PantryActivityFeed({ events }: PantryActivityFeedProps) {
 
       {isHistoryOpen ? (
         <ModalShell
-          title="Pantry activity history"
-          description="Review the recent pantry log in a denser scrollable view."
+          title="Inventory activity history"
+          description="Review the recent inventory log in a denser scrollable view."
           onClose={() => setIsHistoryOpen(false)}
           panelClassName="modal-panel modal-panel-wide"
         >

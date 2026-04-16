@@ -179,7 +179,7 @@ function loadZXingLibrary() {
 export function describeScannerError(error: unknown) {
   if (error instanceof DOMException) {
     if (error.name === "AbortError") {
-      return "Camera access was interrupted before Pantry could start scanning.";
+      return "Camera access was interrupted before Pantro could start scanning.";
     }
     if (error.name === "NotAllowedError") {
       return "Camera access was blocked. Allow camera permission or use manual/USB barcode entry instead.";
@@ -191,7 +191,7 @@ export function describeScannerError(error: unknown) {
       return "The camera is already in use by another application or browser tab.";
     }
     if (error.name === "OverconstrainedError") {
-      return "This camera could not satisfy Pantry's barcode scanning request.";
+      return "This camera could not satisfy Pantro's barcode scanning request.";
     }
     if (error.name === "SecurityError") {
       return "The browser blocked camera access for this page. Use HTTPS or manual/USB barcode entry instead.";
@@ -254,7 +254,7 @@ export async function detectBarcodeScannerSupport(): Promise<BarcodeScannerSuppo
       fallbackEngine: "zxing",
       permissionState,
       reason: null,
-      message: "Pantry can use the browser's built-in barcode scanner here.",
+      message: "Pantro can use the browser's built-in barcode scanner here.",
       nativeSupportedFormats: nativeFormats,
       canRetry: true,
     };
@@ -266,7 +266,7 @@ export async function detectBarcodeScannerSupport(): Promise<BarcodeScannerSuppo
     permissionState,
     reason: getBarcodeDetector() ? "native_formats_unavailable" : null,
     message:
-      "Pantry will use its compatible camera scanner here. If the camera still cannot start, use manual/USB barcode entry instead.",
+      "Pantro will use its compatible camera scanner here. If the camera still cannot start, use manual/USB barcode entry instead.",
     nativeSupportedFormats: nativeFormats,
     canRetry: true,
   };
@@ -290,7 +290,7 @@ export async function startBarcodeScanner({
     const detectorClass = getBarcodeDetector();
     if (!detectorClass || support.nativeSupportedFormats.length === 0) {
       if (support.fallbackEngine === "zxing") {
-        onStatus?.("Starting Pantry's compatible camera scanner…");
+        onStatus?.("Starting Pantro's compatible camera scanner…");
         return startBarcodeScanner({
           support: {
             ...support,
@@ -302,7 +302,7 @@ export async function startBarcodeScanner({
           onStatus,
         });
       }
-      throw new Error("This browser does not expose barcode formats Pantry can read.");
+      throw new Error("This browser does not expose barcode formats Pantro can read.");
     }
 
     try {
@@ -373,7 +373,7 @@ export async function startBarcodeScanner({
       };
     } catch (error) {
       if (support.fallbackEngine === "zxing") {
-        onStatus?.("Built-in scanning was unavailable. Starting Pantry's compatible scanner…");
+        onStatus?.("Built-in scanning was unavailable. Starting Pantro's compatible scanner…");
         return startBarcodeScanner({
           support: {
             ...support,
@@ -389,7 +389,7 @@ export async function startBarcodeScanner({
     }
   }
 
-  onStatus?.("Starting Pantry's compatible camera scanner…");
+  onStatus?.("Starting Pantro's compatible camera scanner…");
   const [zxingBrowser, zxingLibrary] = await Promise.all([loadZXingBrowser(), loadZXingLibrary()]);
   const {
     BarcodeFormat,

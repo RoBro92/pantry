@@ -336,7 +336,7 @@ def _resolve_default_pantry_location(
             external_id=explicit_location_external_id,
         )
         if location is None:
-            raise ValueError("Pantry storage location not found.")
+            raise ValueError("Storage location not found.")
         return location
 
     if product is None:
@@ -829,7 +829,7 @@ def export_active_shopping_list(
     db.refresh(new_active_list)
 
     exported_lines = [
-        "Pantry shopping list",
+        "Pantro shopping list",
         f"Household: {household.name}",
         f"Generated: {now.strftime('%d %b %Y %H:%M UTC')}",
         "",
@@ -1036,7 +1036,7 @@ def _write_purchased_item_to_pantry(
     purchased_on: date,
 ) -> None:
     if item.product is None:
-        raise ValueError(f"Create a Pantry product for {item.label} before finishing reconciliation.")
+        raise ValueError(f"Create a product record for {item.label} before finishing reconciliation.")
 
     quantity = item.quantity or item.requested_quantity or Decimal("1.000")
     unit = item.unit or item.requested_unit or item.product.default_unit
@@ -1047,7 +1047,7 @@ def _write_purchased_item_to_pantry(
     )
     if pantry_location is None:
         raise ValueError(
-            f"Choose a Pantry storage location for {item.product.name} before finishing reconciliation."
+            f"Choose a storage location for {item.product.name} before finishing reconciliation."
         )
 
     add_stock_lot(

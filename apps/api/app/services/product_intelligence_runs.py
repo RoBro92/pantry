@@ -673,7 +673,7 @@ def _execute_batch_with_retry(
                 )
                 task_description = (
                     "Fill the remaining semantic classification gaps for these pantry products "
-                    "while preserving the supplied Pantry facts."
+                    "while preserving the supplied product facts."
                 )
             completion = adapter.generate_structured_output(
                 StructuredCompletionRequest(

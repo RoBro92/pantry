@@ -97,9 +97,9 @@ export function PantryAddEntryDialog({
   canAdminister,
   locations,
   onClose,
-  title = "Add to pantry",
+  title = "Add to inventory",
   description = "Create a product and its first stock lot in one compact flow, with duplicate detection before you commit.",
-  submitLabel = "Add to pantry",
+  submitLabel = "Add to inventory",
   initialValues,
   onCompleted,
 }: PantryAddEntryDialogProps) {
@@ -392,7 +392,7 @@ export function PantryAddEntryDialog({
                 onScan={() => setIsScannerOpen(true)}
                 lookupPending={lookupPending}
                 lookupDisabled={!form.name.trim() && !getPrimaryBarcode(form.barcodesInput)}
-                helperText="USB scanners can type directly into this field. Camera scanning works in secure browser contexts over HTTPS or localhost when the device and browser allow it, and Pantry keeps manual/USB fallback available either way. Pantry also tries an Open Food Facts lookup when you leave the field. Extra barcodes can be added as comma-separated values."
+                helperText="USB scanners can type directly into this field. Camera scanning works in secure browser contexts over HTTPS or localhost when the device and browser allow it, and Pantro keeps manual/USB fallback available either way. Pantro also tries an Open Food Facts lookup when you leave the field. Extra barcodes can be added as comma-separated values."
               />
 
               <label className="field">
@@ -573,10 +573,10 @@ export function PantryAddEntryDialog({
                   <strong>{matchedProduct.name} already looks like the right product</strong>
                   <p className="helper-text">
                     {matchedProduct.match_reason === "barcode_exact"
-                      ? "This barcode already belongs to that product, so Pantry will route this lot there."
+                      ? "This barcode already belongs to that product, so Pantro will route this lot there."
                       : matchedProduct.match_reason === "name_similarity"
-                        ? "Pantry found a likely existing product before you add this lot."
-                        : "Pantry found an existing product with the same identity."}
+                        ? "Pantro found a likely existing product before you add this lot."
+                        : "Pantro found an existing product with the same identity."}
                   </p>
                 </div>
                 <div className="duplicate-choice-row">

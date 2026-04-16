@@ -78,8 +78,8 @@ export default async function HouseholdRecipeListPage({ params }: RecipeListPage
           <div className="stack">
             <p>No recipes have been created for this household yet.</p>
             <p className="section-copy">
-              Start with a recipe you cook often. Pantry coverage will stay useful even if some
-              ingredients do not have a direct pantry product match yet.
+              Start with a recipe you cook often. Inventory coverage will stay useful even if some
+              ingredients do not have a direct product match yet.
             </p>
             <div className="page-actions">
               <Link
@@ -92,7 +92,7 @@ export default async function HouseholdRecipeListPage({ params }: RecipeListPage
                 href={`/app/households/${response.household_external_id}`}
                 className="secondary-link"
               >
-                Check pantry setup
+                Check inventory setup
               </Link>
             </div>
           </div>

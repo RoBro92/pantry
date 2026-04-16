@@ -165,7 +165,7 @@ export function RecipeForm({
           <div>
             <p className="eyebrow">Ingredients</p>
             <p className="section-copy">
-              Link ingredients to pantry products when known. Leaving the link blank keeps the
+              Link ingredients to product records when known. Leaving the link blank keeps the
               ingredient in the recipe and lets the API fall back to deterministic name matching.
             </p>
           </div>
@@ -179,8 +179,8 @@ export function RecipeForm({
         </div>
         {products.length === 0 ? (
           <p className="section-copy">
-            No pantry products exist yet. You can still create the recipe now and rely on name-based
-            matching later, or add products from the pantry page first.
+            No product records exist yet. You can still create the recipe now and rely on name-based
+            matching later, or add products from the inventory page first.
           </p>
         ) : null}
 
@@ -234,7 +234,7 @@ export function RecipeForm({
                   />
                 </label>
                 <label className="field">
-                  <span>Pantry product</span>
+                  <span>Product record</span>
                   <select
                     value={ingredient.product_external_id}
                     onChange={(event) =>

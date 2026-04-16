@@ -54,7 +54,7 @@ export function LoginForm({
   return (
     <form className="panel form-panel" onSubmit={handleSubmit} data-testid="login-form">
       <p className="eyebrow">Sign In</p>
-      <h1>Pantry login</h1>
+      <h1>Pantro login</h1>
       <p className="section-copy">
         Use the account created during setup or one your platform admin has already staged for you.
       </p>

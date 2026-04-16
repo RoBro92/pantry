@@ -28,7 +28,7 @@ export function BarcodeScannerDialog({
   title = mode === "continuous" ? "Scan pantry items" : "Scan barcode",
   description = mode === "continuous"
     ? "Keep scanning to queue multiple barcodes. If the camera is unavailable, type or scan into the manual field instead."
-    : "Pantry can use the browser camera when supported. If the camera is unavailable, type or scan into the manual field instead.",
+    : "Pantro can use the browser camera when supported. If the camera is unavailable, type or scan into the manual field instead.",
 }: BarcodeScannerDialogProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const manualInputRef = useRef<HTMLInputElement | null>(null);

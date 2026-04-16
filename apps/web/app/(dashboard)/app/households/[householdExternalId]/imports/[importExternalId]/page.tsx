@@ -55,7 +55,7 @@ export default async function ImportDetailPage({ params }: ImportDetailPageProps
             Refresh
           </Link>
           <Link href={`/app/households/${householdExternalId}`} className="secondary-link">
-            Pantry
+            Inventory
           </Link>
         </div>
       </section>
@@ -79,7 +79,7 @@ export default async function ImportDetailPage({ params }: ImportDetailPageProps
         <StatusCard
           title="Confirmed"
           value={String(importJob.counts.confirmed_line_count)}
-          detail="Lines already written into pantry stock lots."
+          detail="Lines already written into inventory stock lots."
         />
       </section>
 
