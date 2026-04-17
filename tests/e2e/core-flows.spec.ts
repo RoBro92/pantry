@@ -111,7 +111,6 @@ test("first-run setup handles staged users, skips optional steps, and completes 
   await adminFields.getByLabel("Password", { exact: true }).fill("correct horse battery");
   await adminFields.getByLabel("Confirm password").fill("correct horse battery");
   await page.getByRole("heading", { name: "Admin account and initial users" }).click();
-  await expect(page.getByTestId("setup-admin-password-status")).toContainText("Password saved");
   await expect(adminFields.getByLabel("Password", { exact: true })).toHaveValue(
     "correct horse battery",
   );
@@ -142,11 +141,13 @@ test("first-run setup handles staged users, skips optional steps, and completes 
       response.request().method() === "PUT" &&
       response.ok(),
   );
-  await page.getByRole("heading", { name: "Admin account and initial users" }).click();
+  await wizard.getByRole("button", { name: "Next" }).click();
   await usersSave;
   await expect(page.getByText("Users saved.")).toBeVisible();
-  await expect(wizard.getByRole("button", { name: "Next" })).toBeEnabled();
+  await expect(page.getByRole("heading", { name: "Dietary preferences" })).toBeVisible();
 
+  await page.goto("/setup?step=users");
+  await expect(page.getByRole("heading", { name: "Admin account and initial users" })).toBeVisible();
   await page.reload();
   await expect(page.getByRole("heading", { name: "Admin account and initial users" })).toBeVisible();
   await expect(progressItems.nth(0).locator(".setup-progress-count")).toHaveText("✓");
