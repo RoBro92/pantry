@@ -1,39 +1,19 @@
 import Link from "next/link";
-import { StatusCard } from "../../../components/status-card";
-import { getHouseholdRoleLabel, getPlatformRoleLabel } from "../../../lib/role-labels";
+import { getHouseholdRoleLabel } from "../../../lib/role-labels";
 import { requireSession } from "../../../lib/server-auth";
 
 export default async function SessionPage() {
   const session = await requireSession();
+  const displayName = session.user.display_name ?? session.user.email;
 
   return (
     <div className="stack">
       <section className="panel">
-        <h1>Welcome back {session.user.display_name ?? session.user.email}</h1>
-        <p className="helper-text">
-          Logged in as {session.user.display_name ?? session.user.email}
-        </p>
+        <h1>Welcome back {displayName}</h1>
+        <p className="helper-text">Logged in as {displayName}</p>
         <p>
           This is your Pantro dashboard, where you can access your households, view your memberships, and manage your account. Use the links below to navigate to different sections of the app and start organizing your pantry!
         </p>
-      </section>
-
-      <section className="status-grid">
-        <StatusCard
-          title="User"
-          value={session.user.display_name ?? session.user.email}
-          detail={session.user.email}
-        />
-        <StatusCard
-          title="Platform Role"
-          value={getPlatformRoleLabel(session.user.platform_role)}
-          detail="Platform-wide access for this signed-in account."
-        />
-        <StatusCard
-          title="Memberships"
-          value={String(session.memberships.length)}
-          detail="Household relationships are resolved server-side."
-        />
       </section>
 
       <section className="panel">

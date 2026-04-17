@@ -1,4 +1,4 @@
-# Legacy compatibility alias for existing Pantry installs.
+# Legacy compatibility alias for existing Pantro installs.
 # Canonical self-hosted asset: infra/compose/pantro.yml
 name: pantry
 

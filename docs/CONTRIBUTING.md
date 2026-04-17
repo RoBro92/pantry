@@ -34,8 +34,9 @@ Pantro provides a repo-root wrapper for local branch work:
 - follow logs with `./pantro logs`
 - check the current stack with `./pantro status`
 - rebuild images only when Dockerfiles or dependencies changed with `./pantro rebuild`
-- the helper prefers `.env.local`, falls back to `.env`, and bootstraps `.env.local` from `.env.local.example` if needed
-- optional `PANTRO_LOCAL_AI_*` and `PANTRO_LOCAL_SMTP_*` values in `.env.local` pre-populate fresh setup and local demo-mode AI/SMTP settings without committing secrets to the repo
+- the helper prefers `local.env` when present, otherwise `.env.local`, then `.env`, and bootstraps `.env.local` from `.env.local.example` if needed
+- optional `PANTRO_LOCAL_AI_*` and `PANTRO_LOCAL_SMTP_*` values in `local.env` or `.env.local` pre-populate fresh setup and local demo-mode AI/SMTP settings without committing secrets to the repo
+- legacy `PANTRY_LOCAL_AI_*` and `PANTRY_LOCAL_SMTP_*` names are also supported for backward compatibility in the local source stack
 - bootstrap validation runs once after demo seed or setup finalize; Pantro does not background-poll AI or SMTP health in local development
 - web edits in `apps/web` and `packages/shared-types` hot reload in browser
 - API edits in `apps/api/app` and Alembic files auto-reload the FastAPI process
