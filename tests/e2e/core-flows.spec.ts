@@ -595,6 +595,10 @@ test("pantry flow covers room management, combined add flow, duplicate handling,
   await duplicateForm.getByRole("button", { name: "Add to inventory" }).click();
 
   await expect(page.getByText("Beef mince already looks like the right product")).toBeVisible();
+  await duplicateForm.getByRole("button", { name: "Add lot to existing product" }).click();
+  await expect(
+    duplicateForm.getByRole("button", { name: "Add lot to existing product" }),
+  ).toHaveClass(/primary-button/);
   await expect(duplicateForm.getByRole("button", { name: "Add to inventory" })).toBeEnabled();
   await duplicateForm.getByRole("button", { name: "Add to inventory" }).click();
 
