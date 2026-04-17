@@ -58,6 +58,10 @@ function renderStatusPills(product: PantryProductSummary) {
   );
 }
 
+function WrappedValue({ children }: { children: string }) {
+  return <span className="inventory-wrap-text">{children}</span>;
+}
+
 export function PantryProductBrowser({
   householdExternalId,
   products,
@@ -199,30 +203,36 @@ export function PantryProductBrowser({
     );
   }
 
-  function renderProductDetail(product: PantryProductSummary) {
+  function renderProductDetail(product: PantryProductSummary, mobile = false) {
     return (
-      <div className="inventory-detail-grid">
+      <div className={`inventory-detail-grid${mobile ? " inventory-detail-grid-compact" : ""}`}>
         <div className="inventory-context-card">
-          <div className="inventory-context-header">
-            <div className="stack compact-stack">
-              <strong>{product.product_name}</strong>
-              <p className="helper-text">
-                {product.stock_status === "out_of_stock"
-                  ? "This product record stays available so the household can restock it quickly."
-                  : `${formatQuantityWithUnit(product.total_quantity, product.unit)} across ${product.lot_count} active lot${product.lot_count === 1 ? "" : "s"}.`}
-              </p>
+          {!mobile ? (
+            <div className="inventory-context-header">
+              <div className="stack compact-stack">
+                <strong>{product.product_name}</strong>
+                <p className="helper-text">
+                  {product.stock_status === "out_of_stock"
+                    ? "This product record stays available so the household can restock it quickly."
+                    : `${formatQuantityWithUnit(product.total_quantity, product.unit)} across ${product.lot_count} active lot${product.lot_count === 1 ? "" : "s"}.`}
+                </p>
+              </div>
+              <div className="tag-row">{renderStatusPills(product)}</div>
             </div>
-            <div className="tag-row">{renderStatusPills(product)}</div>
-          </div>
+          ) : null}
 
           <dl className="inventory-meta-grid">
             <div>
               <dt>Rooms</dt>
-              <dd>{product.room_summary}</dd>
+              <dd>
+                <WrappedValue>{product.room_summary}</WrappedValue>
+              </dd>
             </div>
             <div>
               <dt>Storage</dt>
-              <dd>{product.storage_summary}</dd>
+              <dd>
+                <WrappedValue>{product.storage_summary}</WrappedValue>
+              </dd>
             </div>
             <div>
               <dt>Expiry</dt>
@@ -241,7 +251,7 @@ export function PantryProductBrowser({
                 {product.locations.map((location) => (
                   <li key={location.location_external_id}>
                     <strong>
-                      {location.location_group_name} / {location.location_name}
+                      <WrappedValue>{`${location.location_group_name} / ${location.location_name}`}</WrappedValue>
                     </strong>
                     <span>
                       {formatQuantityWithUnit(location.total_quantity, product.unit)} across {location.lot_count} lot
@@ -253,7 +263,7 @@ export function PantryProductBrowser({
             </div>
           ) : null}
 
-          {renderProductActions(product, true)}
+          {!mobile ? renderProductActions(product, true) : null}
 
           {product.notes || product.manual_ingredient_tags.length > 0 || product.aliases.length > 0 ? (
             <details className="compact-disclosure">
@@ -293,8 +303,7 @@ export function PantryProductBrowser({
               <div className="compact-disclosure-body">
                 <ProductEnrichmentDetails
                   enrichment={product.enrichment}
-                  title="Linked enrichment"
-                  subtitle="Enrichment stays secondary so the household can focus on stock, location, and action first."
+                  title="Linked data"
                 />
               </div>
             </details>
@@ -380,12 +389,12 @@ export function PantryProductBrowser({
                   <div className="pantry-lot-row-main pantry-lot-row-main-compact">
                     <div className="pantry-lot-row-heading pantry-lot-row-heading-compact">
                       <strong>{formatQuantityWithUnit(lot.quantity, lot.unit)}</strong>
-                      <span className="helper-text">
+                      <span className="helper-text inventory-wrap-text">
                         {lot.location_group_name} / {lot.location_name}
                       </span>
                       <span className="helper-text">Purchased {formatDateLabel(lot.purchased_on)}</span>
                       <span className="helper-text">Expiry {formatDateLabel(lot.expires_on)}</span>
-                      {lot.note ? <span className="helper-text">Note {lot.note}</span> : null}
+                      {lot.note ? <span className="helper-text inventory-wrap-text">Note {lot.note}</span> : null}
                     </div>
                     <div className="tag-row">
                       {lot.is_near_expiry ? <span className="pill is-warning">Near expiry</span> : null}
@@ -403,6 +412,72 @@ export function PantryProductBrowser({
           )}
         </div>
       </div>
+    );
+  }
+
+  function renderMobileProductActions(product: PantryProductSummary, isExpanded: boolean) {
+    return (
+      <div className="inventory-mobile-actions">
+        <button
+          type="button"
+          className="ghost-button compact-button inventory-mobile-action-button"
+          onClick={() =>
+            setExpandedProductId(isExpanded ? null : product.product_external_id)
+          }
+        >
+          {isExpanded ? "Hide details" : "Details"}
+        </button>
+        <button
+          type="button"
+          className="ghost-button compact-button inventory-mobile-action-button"
+          onClick={() => setStockLotEditorProduct(product)}
+        >
+          Add lot
+        </button>
+        <button
+          type="button"
+          className="ghost-button compact-button inventory-mobile-action-button"
+          disabled={product.is_in_shopping_list}
+          onClick={() => setShoppingDialogProduct(product)}
+        >
+          {product.is_in_shopping_list ? "On list" : "Buy again"}
+        </button>
+        {canAdminister ? (
+          <button
+            type="button"
+            className="ghost-button compact-button inventory-mobile-action-button"
+            onClick={() => setProductEditorProduct(product)}
+          >
+            Edit
+          </button>
+        ) : (
+          <span className="inventory-mobile-action-spacer" aria-hidden="true" />
+        )}
+      </div>
+    );
+  }
+
+  function renderMobileSummary(product: PantryProductSummary) {
+    if (product.stock_status === "out_of_stock") {
+      return "Out of stock";
+    }
+    return `${formatQuantityWithUnit(product.total_quantity, product.unit)} · ${product.lot_count} lot${product.lot_count === 1 ? "" : "s"}`;
+  }
+
+  function renderMobileMeta(product: PantryProductSummary) {
+    return (
+      <dl className="inventory-mobile-meta">
+        <div>
+          <dt>Stored</dt>
+          <dd>
+            <WrappedValue>{`${product.room_summary} / ${product.storage_summary}`}</WrappedValue>
+          </dd>
+        </div>
+        <div>
+          <dt>State</dt>
+          <dd>{formatExpirySummary(product)}</dd>
+        </div>
+      </dl>
     );
   }
 
@@ -428,10 +503,6 @@ export function PantryProductBrowser({
         <div className="inventory-header">
           <div className="stack compact-stack">
             <p className="eyebrow">Inventory</p>
-            <h2>Products</h2>
-            <p className="section-copy">
-              Card-first on small screens, table view on larger screens, with stock-lot detail on demand.
-            </p>
             <p className="helper-text">
               {hasActiveFilters
                 ? `${matchedProductCount} matching product${matchedProductCount === 1 ? "" : "s"}`
@@ -455,33 +526,18 @@ export function PantryProductBrowser({
                   <div className="inventory-mobile-card-header">
                     <div className="stack compact-stack">
                       <h3 className="inventory-product-name">{product.product_name}</h3>
-                      <p className="helper-text">
-                        {product.stock_status === "out_of_stock"
-                          ? "Out of stock"
-                          : `${formatQuantityWithUnit(product.total_quantity, product.unit)} across ${product.lot_count} lot${product.lot_count === 1 ? "" : "s"}`}
-                      </p>
+                      <p className="helper-text">{renderMobileSummary(product)}</p>
                     </div>
                     {renderStatusPills(product)}
                   </div>
 
-                  <dl className="inventory-mobile-meta">
-                    <div>
-                      <dt>Location</dt>
-                      <dd>{product.storage_summary}</dd>
-                    </div>
-                    <div>
-                      <dt>Room</dt>
-                      <dd>{product.room_summary}</dd>
-                    </div>
-                    <div>
-                      <dt>State</dt>
-                      <dd>{formatExpirySummary(product)}</dd>
-                    </div>
-                  </dl>
+                  {renderMobileMeta(product)}
 
-                  {renderProductActions(product, isExpanded, true)}
+                  {renderMobileProductActions(product, isExpanded)}
 
-                  {isExpanded ? <div className="inventory-mobile-detail">{renderProductDetail(product)}</div> : null}
+                  {isExpanded ? (
+                    <div className="inventory-mobile-detail">{renderProductDetail(product, true)}</div>
+                  ) : null}
                 </article>
               );
             })}

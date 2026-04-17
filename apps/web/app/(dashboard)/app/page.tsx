@@ -8,11 +8,11 @@ export default async function SessionPage() {
 
   return (
     <div className="stack">
-      <section className="panel">
+      <section className="panel dashboard-welcome-panel">
+        <p className="eyebrow">Dashboard</p>
         <h1>Welcome back {displayName}</h1>
-        <p className="helper-text">Logged in as {displayName}</p>
-        <p>
-          This is your Pantro dashboard, where you can access your households, view your memberships, and manage your account. Use the links below to navigate to different sections of the app and start organizing your pantry!
+        <p className="helper-text">
+          {session.memberships.length} household{session.memberships.length === 1 ? "" : "s"} ready.
         </p>
       </section>
 
@@ -47,28 +47,28 @@ export default async function SessionPage() {
           <div className="household-card-grid">
             {session.memberships.map((membership) => (
               <article key={membership.external_id} className="household-card">
-                <div>
+                <div className="stack compact-stack">
                   <strong>{membership.household_name}</strong>
                   <p>{getHouseholdRoleLabel(membership.role)}</p>
                 </div>
                 <div className="household-card-actions">
                   <Link
                     href={`/app/households/${membership.household_external_id}`}
-                    className="primary-link"
+                    className="primary-link compact-link"
                   >
-                    Open Inventory
+                    Inventory
                   </Link>
                   <Link
                     href={`/app/households/${membership.household_external_id}/recipes`}
-                    className="secondary-link"
+                    className="secondary-link compact-link"
                   >
-                    Open recipes
+                    Recipes
                   </Link>
                   <Link
                     href={`/app/households/${membership.household_external_id}/ai`}
-                    className="secondary-link"
+                    className="secondary-link compact-link"
                   >
-                    Meal suggestions
+                    Meals
                   </Link>
                 </div>
               </article>

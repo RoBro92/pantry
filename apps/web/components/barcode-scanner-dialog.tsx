@@ -244,11 +244,6 @@ export function BarcodeScannerDialog({
             </button>
           ) : null}
         </div>
-
-        <p className="helper-text">
-          USB barcode scanners usually act like a keyboard and finish with Enter, so this field
-          stays reliable when camera scanning is unavailable or less practical.
-        </p>
       </div>
     </div>
   );

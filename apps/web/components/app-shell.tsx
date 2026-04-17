@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type {
   ReleaseCheckResponse,
   SessionMembership,
@@ -10,7 +10,7 @@ import type {
 } from "../lib/api-types";
 import { appConfig } from "../lib/app-config";
 import { AdminReleaseNotesDialog } from "./admin-release-notes-dialog";
-import { LogoutButton } from "./logout-button";
+import { LogoutButtonInner } from "./logout-button";
 
 type AppShellProps = {
   session: SessionResponse;
@@ -21,17 +21,30 @@ type AppShellProps = {
 type NavItem = {
   href: string;
   label: string;
+  mobileLabel?: string;
   matchPrefix?: string;
+  isActive?: (pathname: string) => boolean;
 };
 
 function isActiveNav(pathname: string, item: NavItem) {
+  if (item.isActive) {
+    return item.isActive(pathname);
+  }
   if (pathname === item.href) {
     return true;
   }
   return item.matchPrefix ? pathname.startsWith(item.matchPrefix) : false;
 }
 
-function AppShellNavLink({ item, pathname }: { item: NavItem; pathname: string }) {
+function AppShellNavLink({
+  item,
+  pathname,
+  onClick,
+}: {
+  item: NavItem;
+  pathname: string;
+  onClick?: () => void;
+}) {
   const isActive = isActiveNav(pathname, item);
 
   return (
@@ -39,6 +52,7 @@ function AppShellNavLink({ item, pathname }: { item: NavItem; pathname: string }
       href={item.href}
       className={`shell-nav-link${isActive ? " shell-nav-link-active" : ""}`}
       aria-current={isActive ? "page" : undefined}
+      onClick={onClick}
     >
       {item.label}
     </Link>
@@ -52,11 +66,13 @@ function getHouseholdNavItems(membership: SessionMembership): NavItem[] {
     {
       href: basePath,
       label: "Inventory",
-      matchPrefix: `${basePath}/`,
+      mobileLabel: "Stock",
+      isActive: (pathname) => pathname === basePath,
     },
     {
       href: `${basePath}/shopping-list`,
       label: "Shopping List",
+      mobileLabel: "Shop",
       matchPrefix: `${basePath}/shopping-list`,
     },
     {
@@ -67,11 +83,13 @@ function getHouseholdNavItems(membership: SessionMembership): NavItem[] {
     {
       href: `${basePath}/ai`,
       label: "Meal Suggestions",
+      mobileLabel: "Meals",
       matchPrefix: `${basePath}/ai`,
     },
     {
       href: `${basePath}/imports`,
       label: "Imports",
+      mobileLabel: "Imports",
       matchPrefix: `${basePath}/imports`,
     },
   ];
@@ -79,56 +97,103 @@ function getHouseholdNavItems(membership: SessionMembership): NavItem[] {
 
 function getCurrentMembership(pathname: string, memberships: SessionMembership[]) {
   const match = pathname.match(/^\/app\/households\/([^/]+)/);
-  const currentHouseholdExternalId = match?.[1] ?? null;
-  return (
-    memberships.find((membership) => membership.household_external_id === currentHouseholdExternalId) ??
-    memberships[0] ??
-    null
-  );
+  if (!match) {
+    return null;
+  }
+
+  const currentHouseholdExternalId = match[1];
+  return memberships.find((membership) => membership.household_external_id === currentHouseholdExternalId) ?? null;
 }
 
 export function AppShell({ session, releaseStatus, children }: AppShellProps) {
   const pathname = usePathname() ?? "/app";
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const currentMembership = getCurrentMembership(pathname, session.memberships);
   const householdNavItems = currentMembership ? getHouseholdNavItems(currentMembership) : [];
-  const mobileBottomNavItems = currentMembership
-    ? householdNavItems.slice(0, 4)
-    : [
-        { href: "/app", label: "Dashboard" },
-        { href: "/app/settings", label: "Settings", matchPrefix: "/app/settings" },
-      ];
+  const mobileBottomNavItems = currentMembership ? householdNavItems.slice(0, 4) : [];
+  const mobileMenuHouseholdItems = currentMembership ? householdNavItems.slice(4) : [];
+  const mobileUtilityNavItems: NavItem[] = [
+    { href: "/app", label: "Dashboard" },
+    { href: "/app/settings", label: "Settings", matchPrefix: "/app/settings" },
+  ];
+  if (session.user.platform_role === "platform_admin") {
+    mobileUtilityNavItems.push({ href: "/admin", label: "Admin", matchPrefix: "/admin" });
+  }
+
+  const mobileShellTitle = currentMembership
+    ? currentMembership.household_name
+    : pathname.startsWith("/app/settings")
+      ? "Settings"
+      : "Dashboard";
+
+  useEffect(() => {
+    setIsMobileMenuOpen(false);
+  }, [pathname]);
 
   return (
     <main className="page-shell dashboard-page-shell">
       {releaseStatus ? <AdminReleaseNotesDialog initialReleaseStatus={releaseStatus} /> : null}
 
-      <div className="mobile-shell-header panel">
-        <div className="mobile-shell-summary">
+      <div className="mobile-shell-header">
+        <div className="mobile-shell-topbar">
           <div className="stack compact-stack">
             <p className="eyebrow">Pantro {appConfig.version}</p>
-            <h1 className="shell-title">
-              {currentMembership ? currentMembership.household_name : "Households"}
-            </h1>
+            <h1 className="shell-title mobile-shell-title">{mobileShellTitle}</h1>
             <p className="sidebar-copy">
               {currentMembership
-                ? "Mobile household shortcuts keep pantry, shopping, and recipes within thumb reach."
+                ? "Welcome to Pantro!"
                 : session.memberships.length > 0
                   ? `${session.memberships.length} household${session.memberships.length === 1 ? "" : "s"} available.`
                   : "Households appear here after a platform admin assigns memberships."}
             </p>
           </div>
 
-          <div className="mobile-shell-utility-links">
-            <AppShellNavLink item={{ href: "/app", label: "Dashboard" }} pathname={pathname} />
-            <AppShellNavLink
-              item={{ href: "/app/settings", label: "Settings", matchPrefix: "/app/settings" }}
-              pathname={pathname}
-            />
-            {session.user.platform_role === "platform_admin" ? (
-              <AppShellNavLink
-                item={{ href: "/admin", label: "Admin", matchPrefix: "/admin" }}
-                pathname={pathname}
-              />
+          <div className="mobile-account-menu">
+            <button
+              type="button"
+              className="ghost-button compact-button mobile-account-menu-trigger"
+              aria-expanded={isMobileMenuOpen}
+              aria-controls="mobile-account-menu-panel"
+              onClick={() => setIsMobileMenuOpen((current) => !current)}
+            >
+              Menu
+            </button>
+            {isMobileMenuOpen ? (
+              <>
+                <button
+                  type="button"
+                  className="mobile-account-menu-scrim"
+                  aria-label="Close menu"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                />
+                <div className="mobile-account-menu-panel" id="mobile-account-menu-panel">
+                  {mobileMenuHouseholdItems.length > 0 ? (
+                    <div className="mobile-account-menu-links">
+                      {mobileMenuHouseholdItems.map((item) => (
+                        <AppShellNavLink
+                          key={item.href}
+                          item={item}
+                          pathname={pathname}
+                          onClick={() => setIsMobileMenuOpen(false)}
+                        />
+                      ))}
+                    </div>
+                  ) : null}
+                  <div className="mobile-account-menu-links">
+                    {mobileUtilityNavItems.map((item) => (
+                      <AppShellNavLink
+                        key={item.href}
+                        item={item}
+                        pathname={pathname}
+                        onClick={() => setIsMobileMenuOpen(false)}
+                      />
+                    ))}
+                  </div>
+                  <LogoutButtonInner
+                    className="ghost-button compact-button mobile-account-menu-logout"
+                  />
+                </div>
+              </>
             ) : null}
           </div>
         </div>
@@ -151,14 +216,6 @@ export function AppShell({ session, releaseStatus, children }: AppShellProps) {
               );
             })}
           </div>
-        ) : null}
-
-        {currentMembership ? (
-          <nav className="mobile-household-nav" aria-label="Current household navigation">
-            {householdNavItems.map((item) => (
-              <AppShellNavLink key={item.href} item={item} pathname={pathname} />
-            ))}
-          </nav>
         ) : null}
       </div>
 
@@ -186,9 +243,10 @@ export function AppShell({ session, releaseStatus, children }: AppShellProps) {
             ))}
             {session.user.platform_role === "platform_admin" ? (
               <div className="nav-group">
-                <Link href="/admin" className="shell-nav-link sidebar-admin-link">
-                  Admin Dashboard
-                </Link>
+                <AppShellNavLink
+                  item={{ href: "/admin", label: "Admin Dashboard", matchPrefix: "/admin" }}
+                  pathname={pathname}
+                />
               </div>
             ) : null}
           </nav>
@@ -197,7 +255,7 @@ export function AppShell({ session, releaseStatus, children }: AppShellProps) {
               Households appear here after a platform admin assigns memberships.
             </p>
           ) : null}
-          <LogoutButton />
+          <LogoutButtonInner />
         </aside>
         <section className="shell-content">{children}</section>
       </div>
@@ -211,9 +269,12 @@ export function AppShell({ session, releaseStatus, children }: AppShellProps) {
                 key={item.href}
                 href={item.href}
                 className={`mobile-bottom-nav-link${isActive ? " mobile-bottom-nav-link-active" : ""}`}
+                aria-label={item.label}
                 aria-current={isActive ? "page" : undefined}
               >
-                {item.label}
+                <span className="mobile-bottom-nav-link-text">
+                  {item.mobileLabel ?? item.label}
+                </span>
               </Link>
             );
           })}

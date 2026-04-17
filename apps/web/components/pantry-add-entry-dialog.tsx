@@ -12,7 +12,6 @@ import type {
 import { postToApi } from "../lib/client-api";
 import { BarcodeScannerDialog } from "./barcode-scanner-dialog";
 import { ModalShell } from "./modal-shell";
-import { PantryBarcodeField } from "./pantry-barcode-field";
 import { ProductEnrichmentPreview } from "./product-enrichment-preview";
 import { TextTagInput } from "./text-tag-input";
 
@@ -93,6 +92,16 @@ function normalizeTagValue(value: string) {
   return value.trim();
 }
 
+function buildLookupStatus(preview: PantryEnrichmentPreviewResponse, barcode: string) {
+  if (preview.candidates.length > 0) {
+    return preview.message;
+  }
+  if (preview.status === "no_match" && barcode) {
+    return "No Open Food Facts result found for this barcode.";
+  }
+  return preview.message;
+}
+
 export function PantryAddEntryDialog({
   householdExternalId,
   canAdminister: _canAdminister,
@@ -102,8 +111,8 @@ export function PantryAddEntryDialog({
   title = entryMode === "scan" ? "Scan to add" : "Add manually",
   description =
     entryMode === "scan"
-      ? "Capture the barcode first, save the essentials, and keep optional detail behind secondary sections."
-      : "Create a pantry item with only the fields the household needs up front. Optional notes and enrichment stay secondary.",
+      ? "Capture the barcode first."
+      : "Create a pantry item manually",
   submitLabel = "Add to inventory",
   initialValues,
   onCompleted,
@@ -120,8 +129,8 @@ export function PantryAddEntryDialog({
   const [duplicateCheckPending, setDuplicateCheckPending] = useState(false);
   const [lookupPreview, setLookupPreview] = useState<PantryEnrichmentPreviewResponse | null>(null);
   const [lookupStatus, setLookupStatus] = useState<string | null>(null);
+  const [lookupSuccessMessage, setLookupSuccessMessage] = useState<string | null>(null);
   const [selectedEnrichmentSourceProductId, setSelectedEnrichmentSourceProductId] = useState<string | null>(null);
-  const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [isInlineScannerOpen, setIsInlineScannerOpen] = useState(
     entryMode === "scan" && !getPrimaryBarcode(initialForm.barcodesInput),
   );
@@ -137,6 +146,7 @@ export function PantryAddEntryDialog({
   function resetEnrichmentPreview() {
     setLookupPreview(null);
     setLookupStatus(null);
+    setLookupSuccessMessage(null);
     setSelectedEnrichmentSourceProductId(null);
   }
 
@@ -245,7 +255,12 @@ export function PantryAddEntryDialog({
       );
 
       setLookupPreview(response);
-      setSelectedEnrichmentSourceProductId(null);
+      const shouldAutoApply =
+        response.candidates.length === 1 || response.lookup_strategy === "barcode";
+      const nextSelectedSourceProductId = shouldAutoApply
+        ? response.candidates[0]?.source_product_id ?? null
+        : null;
+      setSelectedEnrichmentSourceProductId(nextSelectedSourceProductId);
 
       if (!candidateName) {
         const suggestedName = response.candidates[0]?.source_product_name?.trim() ?? "";
@@ -254,13 +269,10 @@ export function PantryAddEntryDialog({
         }
       }
 
-      if (response.candidates.length > 0) {
-        setLookupStatus(response.message);
-      } else if (response.status === "no_match" && candidateBarcode) {
-        setLookupStatus("No Open Food Facts result found.");
-      } else {
-        setLookupStatus(response.message);
-      }
+      setLookupStatus(buildLookupStatus(response, candidateBarcode));
+      setLookupSuccessMessage(
+        nextSelectedSourceProductId ? "Open Food Facts data found and ready to apply." : null,
+      );
 
       if (source === "blur") {
         lastBarcodeLookupValueRef.current = candidateBarcode;
@@ -409,8 +421,8 @@ export function PantryAddEntryDialog({
                 </h3>
                 <p className="helper-text">
                   {entryMode === "scan"
-                    ? "Keep the first step to barcode, name, quantity, and storage. Optional enrichment and notes stay secondary."
-                    : "Start with the essentials. Dates, aliases, enrichment, and notes only need attention when they help."}
+                    ? "Scan the barcodes on your products."
+                    : "Start with the essentials and save the product quickly."}
                 </p>
               </div>
               <span className="pill">
@@ -424,7 +436,7 @@ export function PantryAddEntryDialog({
                   <div className="stack compact-stack">
                     <strong>Barcode capture</strong>
                     <p className="helper-text">
-                      Start with the barcode and Pantro will try to fill in product context before you save.
+                      Start with the barcode and Pantro will try to fill in product details.
                     </p>
                   </div>
                   <div className="pantry-inline-action-row">
@@ -479,33 +491,14 @@ export function PantryAddEntryDialog({
                 )}
               </div>
             ) : (
-              <PantryBarcodeField
-                inputName="barcode"
-                value={form.barcodesInput}
-                onChange={(value) => {
-                  clearDuplicateState();
-                  resetEnrichmentPreview();
-                  setForm((current) => ({ ...current, barcodesInput: value }));
-                }}
-                onBlur={() => {
-                  const trimmedBarcode = getPrimaryBarcode(form.barcodesInput);
-                  void runDuplicateCheck();
-                  if (trimmedBarcode && trimmedBarcode !== lastBarcodeLookupValueRef.current) {
-                    void findProductDetails("blur");
-                  }
-                }}
-                onSubmitValue={() => {
-                  void runDuplicateCheck();
-                  if (getPrimaryBarcode(form.barcodesInput)) {
-                    void findProductDetails("manual");
-                  }
-                }}
-                onLookup={() => void findProductDetails("manual")}
-                onScan={() => setIsScannerOpen(true)}
-                lookupPending={lookupPending}
-                lookupDisabled={!form.name.trim() && !getPrimaryBarcode(form.barcodesInput)}
-                helperText="USB scanners can type directly into this field. Camera scanning stays available when the browser and device allow it."
-              />
+              <div className="inline-status-card">
+                <div className="stack compact-stack">
+                  <strong>Manual add keeps barcode lookup out of the way</strong>
+                  <p className="helper-text">
+                    Use the scan-first flow whenever you want to import Open Food Facts data from a barcode.
+                  </p>
+                </div>
+              </div>
             )}
 
             <div className="content-grid pantry-add-grid pantry-add-grid-core">
@@ -597,43 +590,12 @@ export function PantryAddEntryDialog({
               ) : null}
             </div>
 
+            {lookupSuccessMessage ? <p className="status-note" role="status">{lookupSuccessMessage}</p> : null}
+
             {showOptionalDetails ? (
               <details className="compact-disclosure" open>
                 <summary>Optional details</summary>
                 <div className="compact-disclosure-body stack">
-                  {entryMode === "scan" ? (
-                    <PantryBarcodeField
-                      inputName="barcode"
-                      value={form.barcodesInput}
-                      onChange={(value) => {
-                        clearDuplicateState();
-                        resetEnrichmentPreview();
-                        setForm((current) => ({ ...current, barcodesInput: value }));
-                      }}
-                      onBlur={() => {
-                        const trimmedBarcode = getPrimaryBarcode(form.barcodesInput);
-                        void runDuplicateCheck();
-                        if (
-                          trimmedBarcode &&
-                          trimmedBarcode !== lastBarcodeLookupValueRef.current
-                        ) {
-                          void findProductDetails("blur");
-                        }
-                      }}
-                      onSubmitValue={() => {
-                        void runDuplicateCheck();
-                        if (getPrimaryBarcode(form.barcodesInput)) {
-                          void findProductDetails("manual");
-                        }
-                      }}
-                      onLookup={() => void findProductDetails("manual")}
-                      onScan={() => setIsScannerOpen(true)}
-                      lookupPending={lookupPending}
-                      lookupDisabled={!form.name.trim() && !getPrimaryBarcode(form.barcodesInput)}
-                      helperText="Use this section to edit the saved barcode or add an extra one before you save."
-                    />
-                  ) : null}
-
                   <div className="content-grid pantry-add-grid pantry-add-grid-optional">
                     <label className="field">
                       <span>Aliases</span>
@@ -708,12 +670,11 @@ export function PantryAddEntryDialog({
                     onRemoveTag={removeManualIngredient}
                     placeholder="Add an ingredient such as Beef"
                     inputName="manual_ingredient"
-                    helperText="Manual ingredient tags stay alongside any imported enrichment."
+
                   />
 
                   <p className="helper-text">
-                    Aliases and extra barcodes accept either <code>value,value</code> or{" "}
-                    <code>value, value</code>.
+                    Aliases accept either <code>value,value</code> or <code>value, value</code>.
                   </p>
                 </div>
               </details>
@@ -813,15 +774,6 @@ export function PantryAddEntryDialog({
         </form>
       </ModalShell>
 
-      {isScannerOpen ? (
-        <BarcodeScannerDialog
-          onClose={() => setIsScannerOpen(false)}
-          onDetected={(barcode) => {
-            handleDetectedBarcode(barcode, "dialog");
-            setIsScannerOpen(false);
-          }}
-        />
-      ) : null}
     </>
   );
 }
