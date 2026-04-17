@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type {
   PantryDuplicateCheckResponse,
   PantryEnrichmentPreviewResponse,
@@ -117,6 +117,7 @@ export function PantryAddEntryDialog({
   const [selectedEnrichmentSourceProductId, setSelectedEnrichmentSourceProductId] = useState<string | null>(null);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [lastBarcodeLookupValue, setLastBarcodeLookupValue] = useState("");
+  const duplicateCheckRequestIdRef = useRef(0);
 
   const selectedCandidate =
     lookupPreview?.candidates.find(
@@ -168,8 +169,11 @@ export function PantryAddEntryDialog({
   async function runDuplicateCheck() {
     const candidateName = form.name.trim();
     const candidateBarcode = getPrimaryBarcode(form.barcodesInput);
+    const requestId = duplicateCheckRequestIdRef.current + 1;
+    duplicateCheckRequestIdRef.current = requestId;
     if (!candidateName && !candidateBarcode) {
       clearDuplicateState();
+      setDuplicateCheckPending(false);
       return;
     }
 
@@ -182,13 +186,21 @@ export function PantryAddEntryDialog({
           barcode: candidateBarcode || null,
         },
       );
+      if (duplicateCheckRequestIdRef.current !== requestId) {
+        return;
+      }
       applyDuplicateResult(response);
     } catch (requestError) {
+      if (duplicateCheckRequestIdRef.current !== requestId) {
+        return;
+      }
       setError(
         requestError instanceof Error ? requestError.message : "Could not check for duplicates.",
       );
     } finally {
-      setDuplicateCheckPending(false);
+      if (duplicateCheckRequestIdRef.current === requestId) {
+        setDuplicateCheckPending(false);
+      }
     }
   }
 
@@ -245,6 +257,8 @@ export function PantryAddEntryDialog({
   }
 
   async function submit() {
+    duplicateCheckRequestIdRef.current += 1;
+    setDuplicateCheckPending(false);
     setPending(true);
     setError(null);
     setStatusMessage(null);

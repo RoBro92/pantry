@@ -662,7 +662,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
     }
   ): Promise<boolean> {
     const suppressErrors = Boolean(options?.suppressErrors);
-    const snapshot = options?.stateSnapshot ?? wizard;
+    const snapshot = options?.stateSnapshot ?? wizardRef.current;
     const saveId = ++saveCounterRef.current;
 
     setIsSaving(true);
@@ -893,6 +893,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
   }
 
   function updateAdmin(fields: Partial<SetupWizardUserSummary>) {
+    markLocalDraftChange();
     setWizard((current) => {
       const nextWizard = {
         ...current,
@@ -907,6 +908,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
   }
 
   function updateInitialUser(stageId: string, fields: Partial<SetupWizardUserSummary>) {
+    markLocalDraftChange();
     setWizard((current) => {
       const nextWizard = {
         ...current,
@@ -925,6 +927,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
   }
 
   function addInitialUser() {
+    markLocalDraftChange();
     const current = wizardRef.current;
     const nextWizard = {
       ...current,
@@ -941,13 +944,10 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
     };
     wizardRef.current = nextWizard;
     setWizard(nextWizard);
-    void persistStep("users", {
-      suppressErrors: true,
-      stateSnapshot: nextWizard
-    });
   }
 
   function removeInitialUser(stageId: string) {
+    markLocalDraftChange();
     const current = wizardRef.current;
     const nextWizard = {
       ...current,
@@ -965,10 +965,6 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
       const nextDrafts = { ...current };
       delete nextDrafts[stageId];
       return nextDrafts;
-    });
-    void persistStep("users", {
-      suppressErrors: true,
-      stateSnapshot: nextWizard
     });
   }
 
@@ -1363,7 +1359,6 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                   autoCorrect="off"
                   spellCheck={false}
                   onChange={(event) => updateAdmin({ login: event.target.value })}
-                  onBlur={() => void persistStep("users", { suppressErrors: true })}
                   placeholder="owner"
                 />
               </label>
@@ -1378,7 +1373,6 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                   autoCorrect="off"
                   spellCheck={false}
                   onChange={(event) => updateAdmin({ display_name: event.target.value })}
-                  onBlur={() => void persistStep("users", { suppressErrors: true })}
                   placeholder="Pantro owner"
                 />
               </label>
@@ -1397,7 +1391,6 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
               passwordName="setup_admin_password"
               confirmName="setup_admin_confirm_password"
               autoCompleteSection="setup-admin"
-              onBlur={() => void persistStep("users", { suppressErrors: true })}
             />
             <p
               className={`helper-text${usersValidation.adminMessage ? " is-error" : ""}`}
@@ -1434,6 +1427,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                     <button
                       type="button"
                       className="inline-danger"
+                      onMouseDown={(event) => event.preventDefault()}
                       onClick={() => removeInitialUser(user.stage_id)}
                     >
                       Remove
@@ -1453,7 +1447,6 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                         onChange={(event) =>
                           updateInitialUser(user.stage_id, { login: event.target.value })
                         }
-                        onBlur={() => void persistStep("users", { suppressErrors: true })}
                         placeholder="alex"
                       />
                     </label>
@@ -1470,7 +1463,6 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                         onChange={(event) =>
                           updateInitialUser(user.stage_id, { display_name: event.target.value })
                         }
-                        onBlur={() => void persistStep("users", { suppressErrors: true })}
                         placeholder="Alex"
                       />
                     </label>
@@ -1491,7 +1483,6 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                     passwordName={`setup_user_${user.stage_id}_password`}
                     confirmName={`setup_user_${user.stage_id}_confirm_password`}
                     autoCompleteSection={`setup-user-${user.stage_id}`}
-                    onBlur={() => void persistStep("users", { suppressErrors: true })}
                   />
                   <p className="helper-text">Assign this user’s household role in the next step.</p>
                   <p
