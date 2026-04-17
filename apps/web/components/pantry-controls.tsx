@@ -50,7 +50,8 @@ export function PantryControls({
   const searchParams = useSearchParams();
   const roomSelectRef = useRef<HTMLSelectElement | null>(null);
   const locationSelectRef = useRef<HTMLSelectElement | null>(null);
-  const [isAddOpen, setIsAddOpen] = useState(false);
+  const [isManualAddOpen, setIsManualAddOpen] = useState(false);
+  const [isScanAddOpen, setIsScanAddOpen] = useState(false);
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
   const [isRoomOpen, setIsRoomOpen] = useState(false);
   const [isProductIntelligenceOpen, setIsProductIntelligenceOpen] = useState(false);
@@ -110,12 +111,15 @@ export function PantryControls({
             <p className="eyebrow">Inventory</p>
             <h1 className="pantry-page-title">{householdName}</h1>
             <p className="section-copy">
-              Search by product name, alias, or barcode. 
+              Scan or add household stock quickly, then narrow the pantry only when you need to.
             </p>
           </div>
-          <div className="pantry-action-pills">
-            <button type="button" className="primary-button" onClick={() => setIsAddOpen(true)}>
-              Add product
+          <div className="pantry-action-pills pantry-primary-actions">
+            <button type="button" className="primary-button" onClick={() => setIsScanAddOpen(true)}>
+              Scan item
+            </button>
+            <button type="button" className="ghost-button" onClick={() => setIsManualAddOpen(true)}>
+              Add manually
             </button>
             <button
               type="button"
@@ -128,6 +132,38 @@ export function PantryControls({
             >
               Bulk scan
             </button>
+          </div>
+        </div>
+
+        <div className="pantry-secondary-toolbar">
+          <div className="pantry-secondary-links">
+            <Link
+              href={`/app/households/${householdExternalId}/shopping-list`}
+              className="secondary-link compact-link"
+            >
+              Shopping list
+            </Link>
+            <Link
+              href={`/app/households/${householdExternalId}/recipes`}
+              className="secondary-link compact-link"
+            >
+              Recipes
+            </Link>
+            <Link
+              href={`/app/households/${householdExternalId}/ai`}
+              className="secondary-link compact-link"
+            >
+              Meal suggestions
+            </Link>
+            <Link
+              href={`/app/households/${householdExternalId}/imports`}
+              className="secondary-link compact-link"
+            >
+              Imports
+            </Link>
+          </div>
+
+          <div className="pantry-action-pills pantry-admin-actions">
             {canAdminister ? (
               <button type="button" className="ghost-button" onClick={() => setIsRoomOpen(true)}>
                 Manage rooms
@@ -142,24 +178,26 @@ export function PantryControls({
                 Product intelligence
               </button>
             ) : null}
-            <Link
-              href={`/app/households/${householdExternalId}/imports`}
-              className="secondary-link compact-link"
-            >
-              View imports
-            </Link>
-            <Link
-              href={`/app/households/${householdExternalId}/recipes`}
-              className="secondary-link compact-link"
-            >
-              View recipes
-            </Link>
-            <Link
-              href={`/app/households/${householdExternalId}/ai`}
-              className="secondary-link compact-link"
-            >
-              Meal suggestions
-            </Link>
+          </div>
+        </div>
+
+        <div className="pantry-mobile-add-note">
+          <div className="inline-status-card">
+            <div className="stack compact-stack">
+              <strong>Choose the fastest add path</strong>
+              <p className="helper-text">
+                Scan-first works best for packaged items. Manual add stays lighter for loose,
+                homemade, or label-free pantry entries.
+              </p>
+            </div>
+            <div className="pantry-inline-action-row">
+              <button type="button" className="primary-button compact-button" onClick={() => setIsScanAddOpen(true)}>
+                Scan first
+              </button>
+              <button type="button" className="ghost-button compact-button" onClick={() => setIsManualAddOpen(true)}>
+                Manual add
+              </button>
+            </div>
           </div>
         </div>
 
@@ -289,12 +327,23 @@ export function PantryControls({
         </div>
       </section>
 
-      {isAddOpen ? (
+      {isManualAddOpen ? (
         <PantryAddEntryDialog
           householdExternalId={householdExternalId}
           canAdminister={canAdminister}
           locations={locations}
-          onClose={() => setIsAddOpen(false)}
+          entryMode="manual"
+          onClose={() => setIsManualAddOpen(false)}
+        />
+      ) : null}
+
+      {isScanAddOpen ? (
+        <PantryAddEntryDialog
+          householdExternalId={householdExternalId}
+          canAdminister={canAdminister}
+          locations={locations}
+          entryMode="scan"
+          onClose={() => setIsScanAddOpen(false)}
         />
       ) : null}
 

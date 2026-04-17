@@ -15,6 +15,7 @@ type BarcodeScannerDialogProps = {
   mode?: "continuous" | "single";
   title?: string;
   description?: string;
+  variant?: "modal" | "inline";
 };
 
 function normalizeBarcodeInput(value: string) {
@@ -26,9 +27,11 @@ export function BarcodeScannerDialog({
   onClose,
   mode = "single",
   title = mode === "continuous" ? "Scan pantry items" : "Scan barcode",
-  description = mode === "continuous"
-    ? "Keep scanning to queue multiple barcodes. If the camera is unavailable, type or scan into the manual field instead."
-    : "Pantro can use the browser camera when supported. If the camera is unavailable, type or scan into the manual field instead.",
+  description =
+    mode === "continuous"
+      ? "Keep scanning to queue multiple barcodes. If the camera is unavailable, type or scan into the manual field instead."
+      : "Pantro can use the browser camera when supported. If the camera is unavailable, type or scan into the manual field instead.",
+  variant = "modal",
 }: BarcodeScannerDialogProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const manualInputRef = useRef<HTMLInputElement | null>(null);
@@ -67,7 +70,12 @@ export function BarcodeScannerDialog({
 
     const lastDetected = lastDetectedRef.current;
     const now = Date.now();
-    if (mode === "continuous" && lastDetected && lastDetected.value === barcode && now - lastDetected.detectedAt < 1200) {
+    if (
+      mode === "continuous" &&
+      lastDetected &&
+      lastDetected.value === barcode &&
+      now - lastDetected.detectedAt < 1200
+    ) {
       return;
     }
 
@@ -162,78 +170,96 @@ export function BarcodeScannerDialog({
     };
   }, [mode, retryToken]);
 
+  const body = (
+    <div
+      className={`stack${variant === "inline" ? " scanner-inline-shell" : ""}`}
+      data-testid="barcode-scanner-dialog"
+    >
+      {error ? (
+        <div className="warning-callout">
+          <strong>Camera scanning unavailable</strong>
+          <p>{error}</p>
+          {canRetryCamera ? (
+            <div className="page-actions">
+              <button
+                type="button"
+                className="ghost-button compact-button"
+                onClick={() => setRetryToken((current) => current + 1)}
+              >
+                Try camera again
+              </button>
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <div className="stack">
+          <div className="scanner-frame">
+            <video ref={videoRef} className="scanner-video" muted playsInline />
+          </div>
+          <div className="scanner-status-row">
+            {engineLabel ? <span className="pill">{engineLabel}</span> : null}
+            <p className="helper-text">{statusMessage}</p>
+          </div>
+        </div>
+      )}
+
+      <div className="scanner-manual-panel">
+        <label className="field">
+          <span>{mode === "continuous" ? "Type or scan barcodes" : "Type or scan barcode"}</span>
+          <input
+            ref={manualInputRef}
+            value={manualValue}
+            onChange={(event) => {
+              setManualValue(event.target.value);
+              if (manualError) {
+                setManualError(null);
+              }
+            }}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter") {
+                return;
+              }
+              event.preventDefault();
+              commitBarcode(manualValue);
+            }}
+            placeholder={
+              mode === "continuous" ? "Scan a barcode and wait for Enter" : "5000111046244"
+            }
+            autoComplete="off"
+            autoCorrect="off"
+            spellCheck={false}
+            inputMode="numeric"
+          />
+        </label>
+
+        {manualError ? <p className="error-text">{manualError}</p> : null}
+
+        <div className="scanner-manual-actions">
+          <button type="button" className="primary-button" onClick={() => commitBarcode(manualValue)}>
+            {mode === "continuous" ? "Queue barcode" : "Use barcode"}
+          </button>
+          {variant === "inline" ? (
+            <button type="button" className="ghost-button" onClick={onClose}>
+              Use manual entry instead
+            </button>
+          ) : null}
+        </div>
+
+        <p className="helper-text">
+          USB barcode scanners usually act like a keyboard and finish with Enter, so this field
+          stays reliable when camera scanning is unavailable or less practical.
+        </p>
+      </div>
+    </div>
+  );
+
+  if (variant === "inline") {
+    return body;
+  }
+
   return (
     <ModalShell title={title} description={description} onClose={onClose}>
-      <div className="stack" data-testid="barcode-scanner-dialog">
-        {error ? (
-          <div className="warning-callout">
-            <strong>Camera scanning unavailable</strong>
-            <p>{error}</p>
-            {canRetryCamera ? (
-              <div className="page-actions">
-                <button
-                  type="button"
-                  className="ghost-button compact-button"
-                  onClick={() => setRetryToken((current) => current + 1)}
-                >
-                  Try camera again
-                </button>
-              </div>
-            ) : null}
-          </div>
-        ) : (
-          <div className="stack">
-            <div className="scanner-frame">
-              <video ref={videoRef} className="scanner-video" muted playsInline />
-            </div>
-            <div className="scanner-status-row">
-              {engineLabel ? <span className="pill">{engineLabel}</span> : null}
-              <p className="helper-text">{statusMessage}</p>
-            </div>
-          </div>
-        )}
-
-        <div className="scanner-manual-panel">
-          <label className="field">
-            <span>{mode === "continuous" ? "Type or scan barcodes" : "Type or scan barcode"}</span>
-            <input
-              ref={manualInputRef}
-              value={manualValue}
-              onChange={(event) => {
-                setManualValue(event.target.value);
-                if (manualError) {
-                  setManualError(null);
-                }
-              }}
-              onKeyDown={(event) => {
-                if (event.key !== "Enter") {
-                  return;
-                }
-                event.preventDefault();
-                commitBarcode(manualValue);
-              }}
-              placeholder={mode === "continuous" ? "Scan a barcode and wait for Enter" : "5000111046244"}
-              autoComplete="off"
-              autoCorrect="off"
-              spellCheck={false}
-              inputMode="numeric"
-            />
-          </label>
-
-          {manualError ? <p className="error-text">{manualError}</p> : null}
-
-          <div className="scanner-manual-actions">
-            <button type="button" className="primary-button" onClick={() => commitBarcode(manualValue)}>
-              {mode === "continuous" ? "Queue barcode" : "Use barcode"}
-            </button>
-          </div>
-
-          <p className="helper-text">
-            USB barcode scanners usually act like a keyboard and finish with Enter, so this field
-            stays reliable when camera scanning is unavailable or less practical.
-          </p>
-        </div>
-      </div>
+      {body}
     </ModalShell>
   );
 }

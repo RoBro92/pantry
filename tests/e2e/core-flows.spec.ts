@@ -556,7 +556,7 @@ test("pantry flow covers room management, combined add flow, duplicate handling,
   await expect(createLocationForm.getByText("Saved.")).toBeVisible();
   await page.getByRole("button", { name: "Close" }).click();
 
-  await page.getByRole("button", { name: "Add product" }).click();
+  await page.getByRole("button", { name: "Add manually" }).click();
   const addEntryForm = page.getByTestId("pantry-add-entry-form");
   await addEntryForm.getByLabel("Product name").fill("Beef mince");
   await addEntryForm.getByLabel("Manual ingredients").fill("Beef");
@@ -578,7 +578,6 @@ test("pantry flow covers room management, combined add flow, duplicate handling,
   await expect(beefMinceCard).toContainText("2 kg across 1 lot");
   await expect(beefMinceCard).toContainText("Kitchen / Freezer");
   await expect(beefMinceCard).toContainText("4 Apr 2026");
-  await expect(beefMinceCard).toContainText("Beef");
 
   await page.getByLabel("Search products").fill("mince beef");
   await page.getByRole("button", { name: "Apply" }).click();
@@ -586,7 +585,7 @@ test("pantry flow covers room management, combined add flow, duplicate handling,
   await expect(page.getByLabel("Search products")).toHaveValue("mince beef");
   await expect(beefMinceCard).toContainText("Beef mince");
 
-  await page.getByRole("button", { name: "Add product" }).click();
+  await page.getByRole("button", { name: "Add manually" }).click();
   const duplicateForm = page.getByTestId("pantry-add-entry-form");
   await duplicateForm.getByLabel("Product name").fill("Mince beef");
   await duplicateForm.getByLabel("Storage location").selectOption({ label: "Kitchen / Shelf A" });
@@ -603,9 +602,10 @@ test("pantry flow covers room management, combined add flow, duplicate handling,
   await duplicateForm.getByLabel("Lot note").press("Enter");
 
   await expect(beefMinceCard).toContainText("3 kg across 2 lots");
-  await beefMinceCard.getByRole("button", { name: "Show" }).click();
+  await beefMinceCard.getByRole("button", { name: "Details" }).click();
   await expect(beefMinceCard.locator('[data-testid^="stock-lot-card-"]')).toHaveCount(2);
   await expect(beefMinceCard).toContainText("Second pack");
+  await expect(beefMinceCard).toContainText("Beef");
 });
 
 test("pantry add flow warns when an alias is already used by another product", async ({ page }) => {
@@ -615,7 +615,7 @@ test("pantry add flow warns when an alias is already used by another product", a
   });
 
   await page.goto(`/app/households/${manifest.household_external_id}`);
-  await page.getByRole("button", { name: "Add product" }).click();
+  await page.getByRole("button", { name: "Add manually" }).click();
 
   const addEntryForm = page.getByTestId("pantry-add-entry-form");
   await addEntryForm.getByLabel("Product name").fill("Soup base");
@@ -626,6 +626,42 @@ test("pantry add flow warns when an alias is already used by another product", a
   await addEntryForm.getByRole("button", { name: "Add to inventory" }).click();
 
   await expect(page.getByText("Dry pasta is already used by Pasta")).toBeVisible();
+});
+
+test("mobile household pantry uses bottom navigation, card-first inventory, and scan-first add", async ({
+  page
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await loginThroughApi(page, {
+    email: manifest.member_email,
+    password: manifest.password
+  });
+
+  await page.goto(`/app/households/${manifest.household_external_id}`);
+
+  await expect(page.locator(".mobile-shell-header")).toBeVisible();
+  await expect(page.locator(".mobile-bottom-nav")).toBeVisible();
+  await expect(
+    page
+      .getByLabel("Household quick navigation")
+      .getByRole("link", { name: "Shopping List" }),
+  ).toBeVisible();
+
+  const inventoryCards = page.locator(".inventory-mobile-list [data-testid^='product-card-']");
+  await expect(inventoryCards.first()).toBeVisible();
+
+  await page.getByRole("button", { name: "Scan first" }).click();
+  const addEntryForm = page.getByTestId("pantry-add-entry-form");
+  await expect(addEntryForm).toContainText("Scan-first household add");
+  await expect(addEntryForm).toContainText("Barcode capture");
+  await expect(addEntryForm.getByRole("button", { name: "Hide scanner" })).toBeVisible();
+  await page.getByRole("button", { name: "Close" }).click();
+
+  const pastaCard = page
+    .locator(".inventory-mobile-list [data-testid^='product-card-']")
+    .filter({ hasText: "Pasta" });
+  await pastaCard.getByRole("button", { name: "Details" }).click();
+  await expect(pastaCard).toContainText("Stock lots");
 });
 
 test("scanner dialog falls back cleanly to manual entry when camera access is blocked", async ({
@@ -646,7 +682,7 @@ test("scanner dialog falls back cleanly to manual entry when camera access is bl
   });
 
   await page.goto(`/app/households/${manifest.household_external_id}`);
-  await page.getByRole("button", { name: "Add product" }).click();
+  await page.getByRole("button", { name: "Add manually" }).click();
 
   const addEntryForm = page.getByTestId("pantry-add-entry-form");
   await addEntryForm.getByLabel("Scan barcode").click();
@@ -679,7 +715,7 @@ test("scanner dialog explains the secure-context requirement when camera scannin
   });
 
   await page.goto(`/app/households/${manifest.household_external_id}`);
-  await page.getByRole("button", { name: "Add product" }).click();
+  await page.getByRole("button", { name: "Add manually" }).click();
 
   const addEntryForm = page.getByTestId("pantry-add-entry-form");
   await addEntryForm.getByLabel("Scan barcode").click();

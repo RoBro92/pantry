@@ -395,6 +395,11 @@ code {
   grid-template-columns: 18.5rem minmax(0, 1fr);
 }
 
+.mobile-shell-header,
+.mobile-bottom-nav {
+  display: none;
+}
+
 .sidebar {
   display: grid;
   position: sticky;
@@ -423,11 +428,42 @@ code {
   font-weight: 700;
 }
 
-.nav-list a {
+.shell-nav-link,
+.mobile-household-pill,
+.mobile-bottom-nav-link {
   padding: 0.72rem 0.82rem;
   border-radius: 14px;
   border: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.35);
+}
+
+.shell-nav-link-active,
+.mobile-household-pill-active,
+.mobile-bottom-nav-link-active {
+  border-color: transparent;
+  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+  color: #fff9f0;
+}
+
+.mobile-shell-summary {
+  display: grid;
+  gap: 1rem;
+}
+
+.mobile-shell-utility-links,
+.mobile-household-switcher,
+.mobile-household-nav {
+  display: flex;
+  gap: 0.75rem;
+  overflow-x: auto;
+  padding-bottom: 0.1rem;
+}
+
+.mobile-shell-utility-links .shell-nav-link,
+.mobile-household-switcher .mobile-household-pill,
+.mobile-household-nav .shell-nav-link {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .sidebar-admin-link {
@@ -1531,6 +1567,26 @@ button.smtp-template-pill {
   gap: 0.75rem;
 }
 
+.pantry-primary-actions {
+  justify-content: flex-end;
+}
+
+.pantry-secondary-toolbar {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.pantry-secondary-links,
+.pantry-inline-action-row {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.pantry-mobile-add-note {
+  display: none;
+}
+
 .compact-link,
 .compact-button {
   min-height: 2.45rem;
@@ -1616,6 +1672,37 @@ button.smtp-template-pill {
 
 .pantry-add-form {
   gap: 0.85rem;
+}
+
+.pantry-add-grid-core {
+  grid-template-columns: minmax(0, 1.3fr) repeat(3, minmax(150px, 0.6fr));
+}
+
+.pantry-add-grid-optional {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.scan-first-panel,
+.scan-first-header,
+.scanner-inline-shell {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.scan-first-panel {
+  padding: 1rem;
+  border-radius: 22px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.48);
+}
+
+.scan-first-header {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+}
+
+.scanner-inline-shell {
+  padding-top: 0.2rem;
 }
 
 .modal-form-section:first-of-type {
@@ -1844,6 +1931,10 @@ button.smtp-template-pill {
   flex-wrap: wrap;
 }
 
+.inventory-row-actions-compact {
+  justify-content: flex-start;
+}
+
 .inventory-expanded-row td {
   background: rgba(255, 255, 255, 0.26);
 }
@@ -1851,6 +1942,50 @@ button.smtp-template-pill {
 .inventory-list {
   display: grid;
   gap: 1rem;
+}
+
+.inventory-mobile-list {
+  display: none;
+  gap: 0.9rem;
+}
+
+.inventory-mobile-card {
+  display: grid;
+  gap: 0.9rem;
+  padding: 1rem;
+  border-radius: 22px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.52);
+}
+
+.inventory-mobile-card-header {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.inventory-mobile-detail {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.inventory-mobile-meta {
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  margin: 0;
+}
+
+.inventory-mobile-meta dt {
+  color: var(--accent-strong);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.inventory-mobile-meta dd {
+  margin: 0.2rem 0 0;
+  color: var(--muted);
 }
 
 .inventory-list-card h3 {
@@ -2636,6 +2771,7 @@ button.smtp-template-pill {
   }
 
   .pantry-filter-bar,
+  .pantry-add-grid-core,
   .shopping-add-form,
   .shopping-add-form-compact,
   .pantry-quick-add-session-grid,
@@ -2668,7 +2804,7 @@ button.smtp-template-pill {
 @media (max-width: 640px) {
   .page-shell {
     width: min(100%, calc(100% - 1rem));
-    padding: 1rem 0 2.5rem;
+    padding: 1rem 0 6.5rem;
   }
 
   .auth-stage-shell,
@@ -2681,6 +2817,44 @@ button.smtp-template-pill {
 
   .wizard-actions {
     flex-direction: column-reverse;
+  }
+
+  .mobile-shell-header {
+    display: grid;
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  .mobile-bottom-nav {
+    position: fixed;
+    left: 0.5rem;
+    right: 0.5rem;
+    bottom: 0.5rem;
+    z-index: 30;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.55rem;
+    padding: 0.7rem;
+    border: 1px solid var(--border-strong);
+    border-radius: 24px;
+    background: rgba(255, 248, 239, 0.94);
+    box-shadow: var(--shadow);
+    backdrop-filter: blur(18px);
+  }
+
+  .mobile-bottom-nav-link {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 3.1rem;
+    padding: 0.65rem 0.45rem;
+    text-align: center;
+    font-size: 0.84rem;
+    font-weight: 700;
+  }
+
+  .sidebar {
+    display: none;
   }
 
   .wizard-actions-group {
@@ -2700,6 +2874,56 @@ button.smtp-template-pill {
   .primary-button,
   .ghost-button {
     width: 100%;
+  }
+
+  .mobile-shell-utility-links .shell-nav-link,
+  .mobile-household-switcher .mobile-household-pill,
+  .mobile-household-nav .shell-nav-link,
+  .pantry-inline-action-row > .ghost-button,
+  .pantry-inline-action-row > .primary-button {
+    width: auto;
+  }
+
+  .pantry-primary-actions,
+  .pantry-secondary-links,
+  .pantry-admin-actions {
+    display: none;
+  }
+
+  .pantry-mobile-add-note {
+    display: block;
+  }
+
+  .inventory-mobile-list {
+    display: grid;
+  }
+
+  .inventory-desktop-table {
+    display: none;
+  }
+
+  .inventory-mobile-card-header .pantry-status-pill-pair {
+    justify-content: flex-start;
+    min-width: 0;
+  }
+
+  .inventory-mobile-detail {
+    padding-top: 0.35rem;
+    border-top: 1px solid var(--border);
+  }
+
+  .scan-first-header {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .modal-panel-mobile-shell {
+    width: min(100vw, 100%);
+    min-height: 100vh;
+    max-height: 100vh;
+    margin: 0;
+    border-radius: 0;
+    border-inline: none;
+    overflow: auto;
   }
 
   .token-input-row {
