@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.1 - 2026-04-16
+
+Pantro 0.2.1 finalises the Pantry-to-Pantro migration with hardened AI support, faster scan-heavy workflows, and release-readiness follow-through.
+
+- Completed the Pantro rename and migration work across the shipped product and release surfaces.
+- Hardened OpenAI support and stabilised the supported model path for product-intelligence flows.
+- Continued the product-intelligence optimisation sprint to improve throughput and operational reliability.
+- Improved HTTPS barcode scanning and the bulk scan flow for faster pantry capture on supported devices.
+- Tightened release/readiness workflows, validation, and self-hosted release assets for a cleaner operator upgrade path.
+
+Full diff from previous release: https://github.com/RoBro92/pantry/compare/v0.2.0...v0.2.1
+
 ## 0.2.0 - 2026-04-16
 
 Pantro 0.2.0 focuses on release-readiness polish for the highest-frequency household flows.

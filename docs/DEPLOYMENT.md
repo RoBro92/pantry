@@ -44,7 +44,7 @@ When the install completes, open `http://<your-ip>:3000/`.
 1. Download the release assets for the version you want to run.
 
 ```bash
-export PANTRO_VERSION=0.2.0
+export PANTRO_VERSION=0.2.1
 mkdir -p /opt/pantro
 cd /opt/pantro
 curl -fsSLO "https://raw.githubusercontent.com/RoBro92/pantry/v${PANTRO_VERSION}/infra/compose/pantro.yml"
@@ -96,7 +96,7 @@ Update to the latest release:
 Pin a specific release:
 
 ```bash
-./update-pantro.sh --version 0.2.0
+./update-pantro.sh --version 0.2.1
 ```
 
 Keep your existing `pantro.yml` and `pantro.env.example` if you manage them manually:

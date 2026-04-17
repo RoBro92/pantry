@@ -2,11 +2,11 @@ name: pantro
 
 services:
   web:
-    image: ${PANTRO_IMAGE_NAMESPACE:-ghcr.io/robro92}/pantro-web:${PANTRO_VERSION:-0.2.0}
+    image: ${PANTRO_IMAGE_NAMESPACE:-ghcr.io/robro92}/pantro-web:${PANTRO_VERSION:-0.2.1}
     restart: unless-stopped
     environment:
       NODE_ENV: production
-      NEXT_PUBLIC_APP_VERSION: ${PANTRO_VERSION:-0.2.0}
+      NEXT_PUBLIC_APP_VERSION: ${PANTRO_VERSION:-0.2.1}
       INTERNAL_API_BASE_URL: ${INTERNAL_API_BASE_URL:-http://api:8000}
     ports:
       - "${WEB_BIND_ADDRESS:-0.0.0.0}:${WEB_PORT:-3000}:3000"
@@ -20,11 +20,11 @@ services:
       retries: 5
 
   api:
-    image: ${PANTRO_IMAGE_NAMESPACE:-ghcr.io/robro92}/pantro-api:${PANTRO_VERSION:-0.2.0}
+    image: ${PANTRO_IMAGE_NAMESPACE:-ghcr.io/robro92}/pantro-api:${PANTRO_VERSION:-0.2.1}
     restart: unless-stopped
     environment:
       API_SERVICE_NAME: pantro-api
-      APP_VERSION: ${PANTRO_VERSION:-0.2.0}
+      APP_VERSION: ${PANTRO_VERSION:-0.2.1}
       ENVIRONMENT: ${ENVIRONMENT:-production}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       DEPLOYMENT_MODE: ${DEPLOYMENT_MODE:-self_hosted}
@@ -74,11 +74,11 @@ services:
       retries: 5
 
   worker:
-    image: ${PANTRO_IMAGE_NAMESPACE:-ghcr.io/robro92}/pantro-worker:${PANTRO_VERSION:-0.2.0}
+    image: ${PANTRO_IMAGE_NAMESPACE:-ghcr.io/robro92}/pantro-worker:${PANTRO_VERSION:-0.2.1}
     restart: unless-stopped
     environment:
       WORKER_SERVICE_NAME: pantro-worker
-      APP_VERSION: ${PANTRO_VERSION:-0.2.0}
+      APP_VERSION: ${PANTRO_VERSION:-0.2.1}
       ENVIRONMENT: ${ENVIRONMENT:-production}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       DATABASE_URL: ${DATABASE_URL}
@@ -101,11 +101,11 @@ services:
       retries: 5
 
   migrate:
-    image: ${PANTRO_IMAGE_NAMESPACE:-ghcr.io/robro92}/pantro-api:${PANTRO_VERSION:-0.2.0}
+    image: ${PANTRO_IMAGE_NAMESPACE:-ghcr.io/robro92}/pantro-api:${PANTRO_VERSION:-0.2.1}
     profiles: ["manual"]
     restart: "no"
     environment:
-      APP_VERSION: ${PANTRO_VERSION:-0.2.0}
+      APP_VERSION: ${PANTRO_VERSION:-0.2.1}
       ENVIRONMENT: ${ENVIRONMENT:-production}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       DEPLOYMENT_MODE: ${DEPLOYMENT_MODE:-self_hosted}

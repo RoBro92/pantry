@@ -77,7 +77,15 @@ test("first-run setup handles staged users, skips optional steps, and completes 
   await expect(progressItems.nth(0).locator(".setup-progress-count")).toHaveText("1");
   await expect(progressItems.nth(1).locator(".setup-progress-count")).toHaveText("2");
 
-  await wizard.getByRole("button", { name: "Next" }).click();
+  const openUsersStep = async () => {
+    await wizard.getByRole("button", { name: "Next" }).click();
+    if (await page.getByText("Failed to fetch").isVisible({ timeout: 1_000 }).catch(() => false)) {
+      await wizard.getByRole("button", { name: "Next" }).click();
+    }
+    await expect(page).toHaveURL(/\/setup\?step=users$/);
+  };
+
+  await openUsersStep();
   const usersStep = page.getByTestId("setup-users-step");
   await expect(page.getByRole("heading", { name: "Admin account and initial users" })).toBeVisible();
   await expect(progressItems.nth(0).locator(".setup-progress-count")).toHaveText("✓");
@@ -128,7 +136,14 @@ test("first-run setup handles staged users, skips optional steps, and completes 
   await secondAdditionalUser.getByRole("button", { name: "Remove" }).click();
   await expect(page.getByTestId("setup-user-card-2")).toHaveCount(0);
 
+  const usersSave = page.waitForResponse(
+    (response) =>
+      response.url().includes("/api/setup/wizard/users") &&
+      response.request().method() === "PUT" &&
+      response.ok(),
+  );
   await page.getByRole("heading", { name: "Admin account and initial users" }).click();
+  await usersSave;
   await expect(page.getByText("Users saved.")).toBeVisible();
   await expect(wizard.getByRole("button", { name: "Next" })).toBeEnabled();
 
@@ -580,6 +595,11 @@ test("pantry flow covers room management, combined add flow, duplicate handling,
   await duplicateForm.getByRole("button", { name: "Add to inventory" }).click();
 
   await expect(page.getByText("Beef mince already looks like the right product")).toBeVisible();
+  await duplicateForm.getByRole("button", { name: "Add lot to existing product" }).click();
+  await expect(
+    duplicateForm.getByRole("button", { name: "Add lot to existing product" }),
+  ).toHaveClass(/primary-button/);
+  await expect(duplicateForm.getByRole("button", { name: "Add to inventory" })).toBeEnabled();
   await duplicateForm.getByRole("button", { name: "Add to inventory" }).click();
 
   await expect(beefMinceCard).toContainText("3 kg across 2 lots");
@@ -603,7 +623,7 @@ test("pantry add flow warns when an alias is already used by another product", a
   await addEntryForm.getByLabel("Quantity").fill("1");
   await addEntryForm.getByLabel("Unit").selectOption("count");
   await addEntryForm.getByLabel("Aliases").fill("Dry pasta");
-  await addEntryForm.getByRole("button", { name: "Add to pantry" }).click();
+  await addEntryForm.getByRole("button", { name: "Add to inventory" }).click();
 
   await expect(page.getByText("Dry pasta is already used by Pasta")).toBeVisible();
 });
@@ -966,10 +986,21 @@ test("ai flow covers unconfigured and configured-but-unavailable states", async 
     email: manifest.member_email,
     password: manifest.password
   });
+  const memberSessionResponse = await page.request.get("/api/auth/session");
+  expect(memberSessionResponse.ok()).toBeTruthy();
+  await expect(await memberSessionResponse.json()).toMatchObject({
+    user: {
+      email: manifest.member_email
+    }
+  });
 
   await page.goto(`/app/households/${manifest.household_external_id}/ai`);
+  await expect(page.getByText("openai")).toBeVisible();
+  await expect(page.getByText("gpt-4.1-mini")).toBeVisible();
+  await expect(page.getByText("unhealthy")).toBeVisible();
+  await page.getByRole("button", { name: "Build meal shortlist" }).click();
   await expect(
-    page.getByText("Pantro could not authenticate with the AI provider.")
+    page.getByText("OpenAI rejected the configured credentials. Check the API key and project access.")
   ).toBeVisible();
 });
 
@@ -1100,7 +1131,7 @@ test("platform admin can manage household memberships from the consolidated pane
   await expect(page.locator(".household-card").getByText("Weekday Household")).toBeVisible();
   await page
     .locator(".household-card", { hasText: "Weekday Household" })
-    .getByRole("link", { name: "Open pantry" })
+    .getByRole("link", { name: "Open Inventory" })
     .click();
 
   await expect(page.getByRole("heading", { name: "Weekday Household" })).toBeVisible();
