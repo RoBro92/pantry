@@ -87,11 +87,12 @@ export function StockLotEditorDialog({
           : `Update this ${initialValues.productName} lot.`
       }
       onClose={onClose}
+      panelClassName="modal-panel modal-panel-stock-lot"
     >
       <form className="stack" onSubmit={handleSubmit}>
-        <div className="content-grid">
+        <div className="content-grid stock-lot-form-grid">
           <label className="field">
-            <span>Quantity</span>
+            <span>Quantity ({initialValues.unit})</span>
             <input
               type="number"
               min="0.001"

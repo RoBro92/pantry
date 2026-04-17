@@ -61,7 +61,12 @@ export function StockLotAdjustDialog({
   }
 
   return (
-    <ModalShell title="Adjust quantity" description={`Update the remaining ${productName} amount in one step.`} onClose={onClose}>
+    <ModalShell
+      title="Adjust quantity"
+      description={`Update the remaining ${productName} amount in one step.`}
+      onClose={onClose}
+      panelClassName="modal-panel modal-panel-stock-lot"
+    >
       <form className="stack" onSubmit={handleSubmit}>
         <label className="field">
           <span>Remaining quantity ({unit})</span>

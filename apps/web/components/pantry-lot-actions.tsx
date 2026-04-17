@@ -122,6 +122,7 @@ export function PantryLotActions({
           lotExternalId={lot.external_id}
           currentLocationExternalId={lot.location_external_id}
           currentQuantity={lot.quantity}
+          unit={lot.unit}
           locations={locations}
           onClose={() => setDialog(null)}
         />

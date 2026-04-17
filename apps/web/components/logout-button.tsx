@@ -4,6 +4,14 @@ import { useRouter } from "next/navigation";
 import { appConfig } from "../lib/app-config";
 
 export function LogoutButton() {
+  return <LogoutButtonInner />;
+}
+
+type LogoutButtonProps = {
+  className?: string;
+};
+
+export function LogoutButtonInner({ className }: LogoutButtonProps = {}) {
   const router = useRouter();
 
   async function handleLogout() {
@@ -17,9 +25,8 @@ export function LogoutButton() {
   }
 
   return (
-    <button type="button" className="ghost-button" onClick={handleLogout}>
+    <button type="button" className={className ?? "ghost-button"} onClick={handleLogout}>
       Logout
     </button>
   );
 }
-

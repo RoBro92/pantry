@@ -6,6 +6,7 @@ WEB_PORT="${WEB_PORT:-3000}"
 DOCKER_COMPOSE_BIN="${DOCKER_COMPOSE_BIN:-docker compose}"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 DEFAULT_DEV_ENV_FILE="${ROOT_DIR}/.env.local"
+ALT_DEV_ENV_FILE="${ROOT_DIR}/local.env"
 LEGACY_DEV_ENV_FILE="${ROOT_DIR}/.env"
 LOCAL_DEV_ENV_TEMPLATE_FILE="${ROOT_DIR}/.env.local.example"
 EXAMPLE_ENV_FILE="${ROOT_DIR}/.env.example"
@@ -32,6 +33,8 @@ bootstrap_dev_env() {
     DEV_ENV_FILE="${PANTRO_DEV_ENV_FILE}"
   elif [[ -n "${PANTRY_DEV_ENV_FILE:-}" ]]; then
     DEV_ENV_FILE="${PANTRY_DEV_ENV_FILE}"
+  elif [[ -f "${ALT_DEV_ENV_FILE}" ]]; then
+    DEV_ENV_FILE="${ALT_DEV_ENV_FILE}"
   elif [[ -f "${DEFAULT_DEV_ENV_FILE}" ]]; then
     DEV_ENV_FILE="${DEFAULT_DEV_ENV_FILE}"
   elif [[ -f "${LEGACY_DEV_ENV_FILE}" ]]; then
@@ -93,7 +96,7 @@ Modes:
   demo   Reset and seed stable demo data, then land on /login
 
 Notes:
-  - Uses .env.local by default, falls back to .env if present, and bootstraps .env.local from .env.local.example when needed.
+  - Uses local.env first when present, otherwise .env.local, then .env, and bootstraps .env.local from .env.local.example when needed.
   - Start replaces the whole local dev stack so web, api, and worker all come up fresh together.
   - Reset re-seeds the running stack without forcing container replacement.
   - Use rebuild after Dockerfile or dependency changes.
