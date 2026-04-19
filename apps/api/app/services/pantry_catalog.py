@@ -9,6 +9,7 @@ from app.models.import_line import ImportLine
 from app.models.location import Location
 from app.models.location_group import LocationGroup
 from app.models.product import Product
+from app.models.product_canonical_link import ProductCanonicalLink
 from app.models.product_alias import ProductAlias
 from app.models.product_enrichment import ProductEnrichment
 from app.models.product_intelligence import ProductIntelligence
@@ -17,6 +18,7 @@ from app.models.shopping_list_item import ShoppingListItem
 from app.models.stock_lot import StockLot
 from app.models.user import User
 from app.services.audit import record_audit_event
+from app.services.canonical_knowledge import sync_product_canonical_link
 from app.services.pantry_normalization import (
     dedupe_preserving_order,
     normalize_barcode,
@@ -69,6 +71,7 @@ def get_product_by_external_id(
             selectinload(Product.barcodes),
             selectinload(Product.enrichments),
             selectinload(Product.intelligence_records),
+            selectinload(Product.canonical_link).selectinload(ProductCanonicalLink.canonical_item),
         )
     )
 
@@ -90,6 +93,7 @@ def get_product_by_lookup_name(
             selectinload(Product.barcodes),
             selectinload(Product.enrichments),
             selectinload(Product.intelligence_records),
+            selectinload(Product.canonical_link).selectinload(ProductCanonicalLink.canonical_item),
         )
     )
     if product is not None:
@@ -121,6 +125,7 @@ def get_product_by_barcode(
         .options(selectinload(Barcode.product).selectinload(Product.barcodes))
         .options(selectinload(Barcode.product).selectinload(Product.enrichments))
         .options(selectinload(Barcode.product).selectinload(Product.intelligence_records))
+        .options(selectinload(Barcode.product).selectinload(Product.canonical_link).selectinload(ProductCanonicalLink.canonical_item))
     )
     if barcode_record is None:
         return None
@@ -402,6 +407,12 @@ def create_product(
             "manual_ingredient_tags": ingredient_tags,
         },
     )
+    sync_product_canonical_link(
+        db,
+        household=household,
+        actor=actor,
+        product=product,
+    )
     if commit:
         db.commit()
         db.refresh(product)
@@ -518,6 +529,12 @@ def update_product(
             db.add(barcode_model)
 
     db.add(product)
+    sync_product_canonical_link(
+        db,
+        household=household,
+        actor=actor,
+        product=product,
+    )
     record_audit_event(
         db,
         household=household,
@@ -625,6 +642,7 @@ def delete_product(
         .where(ProductIntelligence.household_id == household.id)
         .where(ProductIntelligence.product_id == product.id)
     ).all()
+    canonical_link = db.scalar(select(ProductCanonicalLink).where(ProductCanonicalLink.product_id == product.id))
 
     record_audit_event(
         db,
@@ -640,6 +658,7 @@ def delete_product(
             "barcode_count": len(barcodes),
             "enrichment_count": len(enrichments),
             "intelligence_count": len(intelligence_records),
+            "canonical_linked": canonical_link is not None,
             "shopping_item_reference_count": len(shopping_items),
             "recipe_reference_count": len(recipe_ingredients),
             "import_line_reference_count": len(import_lines),
@@ -654,6 +673,8 @@ def delete_product(
         db.delete(enrichment)
     for intelligence in intelligence_records:
         db.delete(intelligence)
+    if canonical_link is not None:
+        db.delete(canonical_link)
     for lot in stock_lots:
         db.delete(lot)
 

@@ -10,7 +10,10 @@ from sqlalchemy import select
 from app.domain.ai import AI_PROVIDER_OLLAMA, AI_PROVIDER_OPENAI
 from app.domain.roles import HOUSEHOLD_ADMIN_ROLE, HOUSEHOLD_USER_ROLE
 from app.models.audit_event import AuditEvent
+from app.models.canonical_alias import CanonicalAlias
+from app.models.canonical_item import CanonicalItem
 from app.models.product import Product
+from app.models.product_canonical_link import ProductCanonicalLink
 from app.models.product_enrichment import ProductEnrichment
 from app.models.product_intelligence import ProductIntelligence
 from app.models.product_intelligence_run import ProductIntelligenceRun
@@ -20,6 +23,11 @@ from app.services.ai_config import RuntimeHealthCheckResult, upsert_instance_pro
 from app.services.ai_providers import AIProviderHealth, StructuredCompletionResult
 from app.services.ai_providers.errors import AIProviderError
 from app.services.auth import create_household, create_membership, create_platform_admin, create_user
+from app.services.canonical_knowledge import (
+    bootstrap_default_canonical_items,
+    ensure_canonical_item,
+    relink_household_products_to_canonical_items,
+)
 from app.services.pantry_catalog import create_location as create_location_record
 from app.services.pantry_catalog import create_location_group as create_location_group_record
 from app.services.pantry_catalog import create_product as create_product_record
@@ -1886,6 +1894,466 @@ def test_pantry_entry_creates_product_and_first_stock_lot_in_one_flow(client, db
     assert payload["lot"]["product_name"] == "Beef mince"
     assert payload["lot"]["location_name"] == "Shelf"
     assert payload["lot"]["note"] == "Family pack"
+
+
+def test_seeded_canonical_aliases_match_common_variants_without_creating_pending_proposal(client, db_session):
+    admin, household = create_household_with_role(
+        db_session,
+        email="entry-canonical-verified@example.com",
+        household_name="Entry Canonical Verified Household",
+        role_code=HOUSEHOLD_ADMIN_ROLE,
+    )
+    login(client, email="entry-canonical-verified@example.com")
+
+    room = create_location_group(client, household.external_id, "Kitchen")
+    shelf = create_location(client, household.external_id, room["external_id"], "Shelf")
+    bootstrap_default_canonical_items(
+        db_session,
+        household=household,
+        actor=admin,
+    )
+    db_session.commit()
+    canonical_item = db_session.scalar(
+        select(CanonicalItem)
+        .where(CanonicalItem.household_id == household.id)
+        .where(CanonicalItem.normalized_name == "mayonnaise")
+    )
+    assert canonical_item is not None
+
+    payload = create_pantry_entry(
+        client,
+        household.external_id,
+        name="  tesco mayonnaise  ",
+        quantity="1.000",
+        unit="jar",
+        location_external_id=shelf["external_id"],
+        aliases=[],
+        manual_ingredient_tags=[],
+        note=None,
+    )
+
+    assert payload["status"] == "created"
+    assert payload["product"]["canonical"]["canonical_item"]["external_id"] == canonical_item.external_id
+    assert payload["product"]["canonical"]["link_status"] == "verified"
+    assert payload["product"]["canonical"]["match_method"] == "product_name"
+    assert payload["product"]["canonical"]["canonical_item"]["name"] == "Mayonnaise"
+
+    seeded_aliases = db_session.scalars(
+        select(CanonicalAlias)
+        .where(CanonicalAlias.canonical_item_id == canonical_item.id)
+        .where(CanonicalAlias.review_status == "verified")
+    ).all()
+    assert {alias.value for alias in seeded_aliases} >= {
+        "Mayonnaise",
+        "Mayo",
+        "Tesco Mayonnaise",
+        "Tesco Mayo",
+    }
+    pending_links = db_session.scalars(
+        select(ProductCanonicalLink)
+        .where(ProductCanonicalLink.household_id == household.id)
+        .where(ProductCanonicalLink.link_status == "pending")
+    ).all()
+    assert pending_links == []
+    pending_items = db_session.scalars(
+        select(CanonicalItem)
+        .where(CanonicalItem.household_id == household.id)
+        .where(CanonicalItem.review_status == "pending")
+    ).all()
+    assert pending_items == []
+
+
+def test_pantry_entry_creates_pending_canonical_proposal_for_unmatched_manual_item(client, db_session):
+    _, household = create_household_with_role(
+        db_session,
+        email="entry-canonical-pending@example.com",
+        household_name="Entry Canonical Pending Household",
+        role_code=HOUSEHOLD_ADMIN_ROLE,
+    )
+    login(client, email="entry-canonical-pending@example.com")
+
+    room = create_location_group(client, household.external_id, "Kitchen")
+    shelf = create_location(client, household.external_id, room["external_id"], "Shelf")
+
+    payload = create_pantry_entry(
+        client,
+        household.external_id,
+        name="Mystery Crunch",
+        quantity="1.000",
+        unit="box",
+        location_external_id=shelf["external_id"],
+        aliases=["Crunchy Mystery"],
+        manual_ingredient_tags=[],
+        note=None,
+    )
+
+    assert payload["status"] == "created"
+    assert payload["product"]["canonical"]["link_status"] == "pending"
+    assert payload["product"]["canonical"]["match_method"] == "proposal"
+    assert payload["product"]["canonical"]["canonical_item"]["review_status"] == "pending"
+
+    pending_item = db_session.scalar(
+        select(CanonicalItem)
+        .where(CanonicalItem.household_id == household.id)
+        .where(CanonicalItem.normalized_name == "mystery crunch")
+    )
+    assert pending_item is not None
+    assert pending_item.review_status == "pending"
+    aliases = db_session.scalars(
+        select(CanonicalAlias).where(CanonicalAlias.canonical_item_id == pending_item.id).order_by(CanonicalAlias.value.asc())
+    ).all()
+    assert {alias.value for alias in aliases} >= {"Mystery Crunch", "Crunchy Mystery"}
+    assert all(alias.review_status == "pending" for alias in aliases)
+
+
+def test_product_rename_relinks_canonical_match_when_metadata_changes(client, db_session):
+    admin, household = create_household_with_role(
+        db_session,
+        email="entry-canonical-relink@example.com",
+        household_name="Entry Canonical Relink Household",
+        role_code=HOUSEHOLD_ADMIN_ROLE,
+    )
+    login(client, email="entry-canonical-relink@example.com")
+
+    product = create_product(
+        client,
+        household.external_id,
+        name="Mystery Grain",
+        default_unit="bag",
+        aliases=[],
+        barcodes=[],
+    )
+    initial_link = db_session.scalar(
+        select(ProductCanonicalLink)
+        .join(Product, Product.id == ProductCanonicalLink.product_id)
+        .where(Product.external_id == product["external_id"])
+    )
+    assert initial_link is not None
+    assert initial_link.link_status == "pending"
+    initial_canonical_item_id = initial_link.canonical_item_id
+
+    verified_item = ensure_canonical_item(
+        db_session,
+        household=household,
+        actor=admin,
+        name="Oats",
+        aliases=["Rolled Oats"],
+        barcodes=[],
+        review_status="verified",
+        source_name="test_seed",
+        provenance_payload={"test": True},
+    )
+    db_session.commit()
+
+    updated = update_product(
+        client,
+        household.external_id,
+        product["external_id"],
+        name="Rolled Oats",
+        default_unit="bag",
+        aliases=[],
+        barcodes=[],
+        notes=None,
+        manual_ingredient_tags=[],
+    )
+
+    assert updated["canonical"]["canonical_item"]["external_id"] == verified_item.external_id
+    assert updated["canonical"]["link_status"] == "verified"
+    assert updated["canonical"]["match_method"] == "product_name"
+
+    db_session.expire_all()
+    refreshed_link = db_session.scalar(
+        select(ProductCanonicalLink)
+        .join(Product, Product.id == ProductCanonicalLink.product_id)
+        .where(Product.external_id == product["external_id"])
+    )
+    assert refreshed_link is not None
+    assert refreshed_link.canonical_item_id == verified_item.id
+    assert refreshed_link.link_status == "verified"
+    assert refreshed_link.canonical_item_id != initial_canonical_item_id
+
+
+def test_existing_products_can_be_backfilled_to_seeded_canonical_items(db_session):
+    admin, household = create_household_with_role(
+        db_session,
+        email="entry-canonical-backfill@example.com",
+        household_name="Entry Canonical Backfill Household",
+        role_code=HOUSEHOLD_ADMIN_ROLE,
+    )
+
+    product = create_product_record(
+        db_session,
+        household=household,
+        actor=admin,
+        name="Tesco Mayonnaise",
+        default_unit="jar",
+        aliases=["Mayo"],
+        barcodes=[],
+    )
+    initial_link = db_session.scalar(
+        select(ProductCanonicalLink).where(ProductCanonicalLink.product_id == product.id)
+    )
+    assert initial_link is not None
+    assert initial_link.link_status == "pending"
+
+    bootstrap_default_canonical_items(
+        db_session,
+        household=household,
+        actor=admin,
+    )
+    processed_count = relink_household_products_to_canonical_items(
+        db_session,
+        household=household,
+        actor=admin,
+    )
+    db_session.commit()
+
+    assert processed_count == 1
+    canonical_item = db_session.scalar(
+        select(CanonicalItem)
+        .where(CanonicalItem.household_id == household.id)
+        .where(CanonicalItem.normalized_name == "mayonnaise")
+    )
+    assert canonical_item is not None
+    assert canonical_item.review_status == "verified"
+
+    db_session.expire_all()
+    refreshed_link = db_session.scalar(
+        select(ProductCanonicalLink).where(ProductCanonicalLink.product_id == product.id)
+    )
+    assert refreshed_link is not None
+    assert refreshed_link.canonical_item_id == canonical_item.id
+    assert refreshed_link.link_status == "verified"
+
+    tesco_alias = db_session.scalar(
+        select(CanonicalAlias)
+        .where(CanonicalAlias.household_id == household.id)
+        .where(CanonicalAlias.normalized_value == "tesco mayonnaise")
+    )
+    assert tesco_alias is not None
+    assert tesco_alias.canonical_item_id == canonical_item.id
+    assert tesco_alias.review_status == "verified"
+
+
+def test_canonical_duplicate_detection_reuses_existing_seeded_product(client, db_session):
+    admin, household = create_household_with_role(
+        db_session,
+        email="entry-canonical-duplicate@example.com",
+        household_name="Entry Canonical Duplicate Household",
+        role_code=HOUSEHOLD_ADMIN_ROLE,
+    )
+    login(client, email="entry-canonical-duplicate@example.com")
+
+    bootstrap_default_canonical_items(
+        db_session,
+        household=household,
+        actor=admin,
+    )
+    db_session.commit()
+
+    room = create_location_group(client, household.external_id, "Kitchen")
+    shelf = create_location(client, household.external_id, room["external_id"], "Shelf")
+    fridge = create_location(client, household.external_id, room["external_id"], "Fridge")
+
+    first_entry = create_pantry_entry(
+        client,
+        household.external_id,
+        name="Mayonnaise",
+        quantity="1.000",
+        unit="jar",
+        location_external_id=shelf["external_id"],
+        aliases=[],
+        note="Original jar",
+    )
+    assert first_entry["status"] == "created"
+    assert first_entry["product"]["canonical"]["canonical_item"]["name"] == "Mayonnaise"
+    assert first_entry["product"]["canonical"]["link_status"] == "verified"
+
+    duplicate_attempt = create_pantry_entry(
+        client,
+        household.external_id,
+        name="mayo",
+        quantity="1.000",
+        unit="jar",
+        location_external_id=fridge["external_id"],
+        aliases=[],
+        note="Second jar",
+    )
+    assert duplicate_attempt["status"] == "existing_product"
+    assert duplicate_attempt["duplicate_match_reason"] == "canonical_verified"
+    assert duplicate_attempt["can_keep_separate_product"] is False
+    assert duplicate_attempt["matched_product"]["name"] == "Mayonnaise"
+
+    confirmed_duplicate = create_pantry_entry(
+        client,
+        household.external_id,
+        name="mayo",
+        quantity="1.000",
+        unit="jar",
+        location_external_id=fridge["external_id"],
+        aliases=[],
+        note="Second jar",
+        existing_product_external_id=first_entry["product"]["external_id"],
+    )
+    assert confirmed_duplicate["status"] == "added_to_existing"
+    assert confirmed_duplicate["product"]["external_id"] == first_entry["product"]["external_id"]
+    assert confirmed_duplicate["lot"]["location_name"] == "Fridge"
+
+    products = db_session.scalars(
+        select(Product).where(Product.household_id == household.id).order_by(Product.name.asc())
+    ).all()
+    assert [product.name for product in products] == ["Mayonnaise"]
+
+
+def test_tesco_mayo_variant_reuses_existing_verified_canonical_product(client, db_session):
+    admin, household = create_household_with_role(
+        db_session,
+        email="entry-canonical-tesco-mayo@example.com",
+        household_name="Entry Canonical Tesco Mayo Household",
+        role_code=HOUSEHOLD_ADMIN_ROLE,
+    )
+    login(client, email="entry-canonical-tesco-mayo@example.com")
+
+    bootstrap_default_canonical_items(
+        db_session,
+        household=household,
+        actor=admin,
+    )
+    db_session.commit()
+
+    room = create_location_group(client, household.external_id, "Kitchen")
+    shelf = create_location(client, household.external_id, room["external_id"], "Shelf")
+    fridge = create_location(client, household.external_id, room["external_id"], "Fridge")
+
+    first_entry = create_pantry_entry(
+        client,
+        household.external_id,
+        name="Mayonnaise",
+        quantity="1.000",
+        unit="jar",
+        location_external_id=shelf["external_id"],
+        aliases=[],
+        note="Original jar",
+    )
+    assert first_entry["status"] == "created"
+
+    duplicate_attempt = create_pantry_entry(
+        client,
+        household.external_id,
+        name="Tesco mayo",
+        quantity="1.000",
+        unit="jar",
+        location_external_id=fridge["external_id"],
+        aliases=[],
+        note="Brand variant jar",
+    )
+    assert duplicate_attempt["status"] == "existing_product"
+    assert duplicate_attempt["duplicate_match_reason"] == "canonical_verified"
+    assert duplicate_attempt["matched_product"]["name"] == "Mayonnaise"
+
+    confirmed_duplicate = create_pantry_entry(
+        client,
+        household.external_id,
+        name="Tesco mayo",
+        quantity="1.000",
+        unit="jar",
+        location_external_id=fridge["external_id"],
+        aliases=[],
+        note="Brand variant jar",
+        existing_product_external_id=first_entry["product"]["external_id"],
+    )
+    assert confirmed_duplicate["status"] == "added_to_existing"
+    assert confirmed_duplicate["product"]["external_id"] == first_entry["product"]["external_id"]
+
+    products = db_session.scalars(
+        select(Product).where(Product.household_id == household.id).order_by(Product.name.asc())
+    ).all()
+    assert [product.name for product in products] == ["Mayonnaise"]
+
+
+def test_product_barcode_links_to_verified_canonical_item(client, db_session):
+    admin, household = create_household_with_role(
+        db_session,
+        email="entry-canonical-barcode@example.com",
+        household_name="Entry Canonical Barcode Household",
+        role_code=HOUSEHOLD_ADMIN_ROLE,
+    )
+    login(client, email="entry-canonical-barcode@example.com")
+
+    canonical_item = ensure_canonical_item(
+        db_session,
+        household=household,
+        actor=admin,
+        name="Chopped Tomatoes",
+        aliases=[],
+        barcodes=["5011223344556"],
+        review_status="verified",
+        source_name="test_seed",
+        provenance_payload={"test": True},
+    )
+    db_session.commit()
+
+    payload = create_product(
+        client,
+        household.external_id,
+        name="Store Brand Tomato Tin",
+        default_unit="can",
+        aliases=[],
+        barcodes=["5011223344556"],
+    )
+
+    assert payload["canonical"]["canonical_item"]["external_id"] == canonical_item.external_id
+    assert payload["canonical"]["link_status"] == "verified"
+    assert payload["canonical"]["match_method"] == "barcode_exact"
+
+
+def test_open_food_facts_enrichment_does_not_auto_verify_canonical_truth(client, db_session, monkeypatch):
+    _, household = create_household_with_role(
+        db_session,
+        email="entry-canonical-off@example.com",
+        household_name="Entry Canonical OFF Household",
+        role_code=HOUSEHOLD_ADMIN_ROLE,
+    )
+    login(client, email="entry-canonical-off@example.com")
+
+    class StubOpenFoodFactsClient:
+        def fetch_product_by_id(self, source_product_id):
+            return build_enrichment_candidate(
+                source_product_id=source_product_id,
+                source_product_name="Breakfast Cereal",
+                match_status="name_search",
+                match_confidence=0.82,
+            )
+
+    monkeypatch.setattr(
+        "app.services.product_enrichment.get_default_open_food_facts_client",
+        lambda: StubOpenFoodFactsClient(),
+    )
+
+    payload = create_product(
+        client,
+        household.external_id,
+        name="Store Brand Crunch",
+        default_unit="box",
+        aliases=[],
+        barcodes=[],
+        confirmed_enrichment={
+            "source_name": "open_food_facts",
+            "source_product_id": "5011223344556",
+            "match_status": "name_search",
+        },
+    )
+
+    assert payload["canonical"]["link_status"] == "pending"
+    assert payload["canonical"]["canonical_item"]["review_status"] == "pending"
+    assert payload["canonical"]["canonical_item"]["name"] == "Store Brand Crunch"
+
+    verified_items = db_session.scalars(
+        select(CanonicalItem)
+        .where(CanonicalItem.household_id == household.id)
+        .where(CanonicalItem.review_status == "verified")
+    ).all()
+    assert verified_items == []
 
 
 def test_product_update_replaces_product_metadata_and_notes(client, db_session):

@@ -3,6 +3,9 @@ from __future__ import annotations
 import re
 
 LOOKUP_TOKEN_PATTERN = re.compile(r"[a-z0-9]+")
+LOOKUP_TOKEN_EQUIVALENTS = {
+    "mayo": ("mayonnaise",),
+}
 
 
 def compact_whitespace(value: str) -> str:
@@ -23,6 +26,35 @@ def normalize_lookup_name(value: str) -> str:
 def lookup_tokens(value: str) -> list[str]:
     normalized = normalize_lookup_name(value)
     return LOOKUP_TOKEN_PATTERN.findall(normalized)
+
+
+def expand_lookup_name_variants(value: str) -> list[str]:
+    normalized = normalize_lookup_name(value)
+    tokens = LOOKUP_TOKEN_PATTERN.findall(normalized)
+    if not tokens:
+        return [normalized]
+
+    token_variants: set[tuple[str, ...]] = {tuple(tokens)}
+    for index, token in enumerate(tokens):
+        replacements = LOOKUP_TOKEN_EQUIVALENTS.get(token, ())
+        if not replacements:
+            continue
+        current_variants = list(token_variants)
+        for token_variant in current_variants:
+            for replacement in replacements:
+                next_variant = list(token_variant)
+                next_variant[index] = replacement
+                token_variants.add(tuple(next_variant))
+
+    results = [normalized]
+    seen = {normalized}
+    for token_variant in token_variants:
+        candidate = " ".join(token_variant)
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        results.append(candidate)
+    return results
 
 
 def lookup_token_signature(value: str) -> tuple[str, ...]:

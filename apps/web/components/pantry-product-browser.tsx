@@ -65,6 +65,18 @@ function WrappedValue({ children }: { children: string }) {
   return <span className="inventory-wrap-text">{children}</span>;
 }
 
+function describeCanonicalSummary(product: PantryProductSummary) {
+  if (!product.canonical) {
+    return null;
+  }
+
+  const matchMethod = product.canonical.match_method.replaceAll("_", " ");
+  if (product.canonical.link_status === "verified") {
+    return `Verified canonical link to ${product.canonical.canonical_item.name} via ${matchMethod}. Pantro uses this local household identity for deterministic matching and duplicate prevention.`;
+  }
+  return `Pending canonical proposal for ${product.canonical.canonical_item.name} via ${matchMethod}. This is a local suggestion captured from the product and is not verified canonical truth yet.`;
+}
+
 export function PantryProductBrowser({
   householdExternalId,
   catalogProducts,
@@ -209,6 +221,7 @@ export function PantryProductBrowser({
   }
 
   function renderProductDetail(product: PantryProductSummary, mobile = false) {
+    const canonicalSummary = describeCanonicalSummary(product);
     return (
       <div className={`inventory-detail-grid${mobile ? " inventory-detail-grid-compact" : ""}`}>
         <div className="inventory-context-card">
@@ -269,6 +282,17 @@ export function PantryProductBrowser({
           ) : null}
 
           {!mobile ? renderProductActions(product, true) : null}
+
+          {canonicalSummary ? (
+            <div className="inline-status-card">
+              <div className="stack compact-stack">
+                <strong>
+                  {product.canonical?.link_status === "verified" ? "Canonical link" : "Canonical proposal"}
+                </strong>
+                <p className="helper-text">{canonicalSummary}</p>
+              </div>
+            </div>
+          ) : null}
 
           {product.notes || product.manual_ingredient_tags.length > 0 || product.aliases.length > 0 ? (
             <details className="compact-disclosure">

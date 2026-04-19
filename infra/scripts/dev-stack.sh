@@ -6,7 +6,6 @@ WEB_PORT="${WEB_PORT:-3000}"
 DOCKER_COMPOSE_BIN="${DOCKER_COMPOSE_BIN:-docker compose}"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 DEFAULT_DEV_ENV_FILE="${ROOT_DIR}/.env.local"
-ALT_DEV_ENV_FILE="${ROOT_DIR}/local.env"
 LEGACY_DEV_ENV_FILE="${ROOT_DIR}/.env"
 LOCAL_DEV_ENV_TEMPLATE_FILE="${ROOT_DIR}/.env.local.example"
 EXAMPLE_ENV_FILE="${ROOT_DIR}/.env.example"
@@ -57,8 +56,6 @@ bootstrap_dev_env() {
     DEV_ENV_FILE="${PANTRO_DEV_ENV_FILE}"
   elif [[ -n "${PANTRY_DEV_ENV_FILE:-}" ]]; then
     DEV_ENV_FILE="${PANTRY_DEV_ENV_FILE}"
-  elif [[ -f "${ALT_DEV_ENV_FILE}" ]]; then
-    DEV_ENV_FILE="${ALT_DEV_ENV_FILE}"
   elif [[ -f "${DEFAULT_DEV_ENV_FILE}" ]]; then
     DEV_ENV_FILE="${DEFAULT_DEV_ENV_FILE}"
   elif [[ -f "${LEGACY_DEV_ENV_FILE}" ]]; then
@@ -101,6 +98,8 @@ bootstrap_dev_env() {
     export "PANTRO_WORKER_WATCHFILES_FORCE_POLLING=${PANTRO_WEB_WATCHPACK_POLLING}"
   fi
 
+  # Only forward shell-provided local bootstrap variables when they are explicitly set.
+  # This avoids overriding .env.local values with empty exported variables.
   export_alias_if_present "PANTRO_LOCAL_AI_PROVIDER_TYPE" "PANTRY_LOCAL_AI_PROVIDER_TYPE"
   export_alias_if_present "PANTRO_LOCAL_AI_BASE_URL" "PANTRY_LOCAL_AI_BASE_URL"
   export_alias_if_present "PANTRO_LOCAL_AI_DEFAULT_MODEL" "PANTRY_LOCAL_AI_DEFAULT_MODEL"
@@ -139,7 +138,7 @@ Modes:
   demo   Reset and seed stable demo data, then land on /login
 
 Notes:
-  - Uses local.env first when present, otherwise .env.local, then .env, and bootstraps .env.local from .env.local.example when needed.
+  - Uses .env.local first when present, otherwise .env, and bootstraps .env.local from .env.local.example when needed.
   - Start replaces the whole local dev stack so web, api, and worker all come up fresh together.
   - Reset re-seeds the running stack without forcing container replacement.
   - Use rebuild after Dockerfile or dependency changes.

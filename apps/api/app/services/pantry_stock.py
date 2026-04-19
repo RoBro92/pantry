@@ -13,6 +13,7 @@ from app.models.stock_lot import StockLot
 from app.models.base import utc_now
 from app.models.user import User
 from app.services.audit import record_audit_event
+from app.services.canonical_knowledge import get_linked_product_for_canonical_candidate, sync_product_canonical_link
 from app.services.pantry_catalog import (
     create_product,
     ensure_product_alias,
@@ -261,6 +262,7 @@ def create_or_add_pantry_entry(
         db,
         household=household,
         display_name=display_name,
+        aliases=aliases,
         barcode=barcode,
     )
     matched_product = duplicate_match["matched_product"]
@@ -425,6 +427,7 @@ def detect_pantry_duplicate(
     *,
     household: Household,
     display_name: str,
+    aliases: list[str] | None = None,
     barcode: str | None,
 ) -> dict[str, object]:
     candidate_name = display_name.strip()
@@ -437,12 +440,23 @@ def detect_pantry_duplicate(
         if candidate_name
         else None
     )
+    canonical_product = None
+    canonical_item = None
+    canonical_match_method = None
+    if barcode_product is None and name_product is None:
+        canonical_product, canonical_item, canonical_match_method = get_linked_product_for_canonical_candidate(
+            db,
+            household=household,
+            name=candidate_name,
+            aliases=aliases,
+            barcode=barcode,
+        )
     similar_product, similarity_score = _find_similar_product_match(
         db,
         household=household,
         display_name=candidate_name,
     )
-    matched_product = barcode_product or name_product or similar_product
+    matched_product = barcode_product or name_product or canonical_product or similar_product
     if matched_product is None:
         return {
             "matched_product": None,
@@ -478,6 +492,18 @@ def detect_pantry_duplicate(
             "match_reason": "name_exact",
             "match_confidence": 1.0,
             "can_keep_separate_product": False,
+        }
+    if canonical_product is not None and canonical_item is not None:
+        return {
+            "matched_product": canonical_product,
+            "message": (
+                f"{canonical_product.name} already exists for the verified canonical match "
+                f"{canonical_item.name}. Add stock there instead of creating a duplicate product."
+            ),
+            "match_reason": "canonical_verified",
+            "match_confidence": 1.0,
+            "can_keep_separate_product": False,
+            "canonical_match_method": canonical_match_method,
         }
     return {
         "matched_product": similar_product,
@@ -585,6 +611,13 @@ def _merge_existing_product_metadata(
 
     if not added_aliases and not added_barcodes and not manual_ingredients_updated and not notes_updated:
         return None
+
+    sync_product_canonical_link(
+        db,
+        household=household,
+        actor=actor,
+        product=product,
+    )
 
     record_audit_event(
         db,

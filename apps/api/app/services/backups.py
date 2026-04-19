@@ -40,6 +40,9 @@ HOUSEHOLD_EXPORT_TABLES = {
     "location_groups",
     "locations",
     "products",
+    "canonical_items",
+    "canonical_aliases",
+    "product_canonical_links",
     "product_enrichments",
     "product_aliases",
     "barcodes",
@@ -63,6 +66,9 @@ TABLE_EXTERNAL_ID_PREFIXES = {
     "location_groups": "lgr",
     "locations": "loc",
     "products": "prd",
+    "canonical_items": "can",
+    "canonical_aliases": "cal",
+    "product_canonical_links": "pcl",
     "product_aliases": "pal",
     "barcodes": "brc",
     "stock_lots": "lot",
@@ -649,8 +655,18 @@ _SCHEMA_COMPATIBILITY: dict[tuple[str | None, str | None], RestoreCompatibility]
 # Revisions listed here keep the same backup table layout and restore compatibility
 # behaviour as the mapped baseline revision.
 _SCHEMA_COMPATIBILITY_ALIASES: dict[str, str] = {
+    "20260419_000021": "20260412_000019",
     "20260416_000020": "20260412_000019",
     "20260409_000017": "20260409_000016",
+}
+
+_ADDITIVE_SCHEMA_TABLES: dict[str, tuple[frozenset[str], tuple[str, ...]]] = {
+    "20260419_000021": (
+        frozenset({"canonical_items", "canonical_aliases", "product_canonical_links"}),
+        (
+            "This backup predates canonical knowledge-base groundwork. Canonical items, aliases, and product links will restore as empty.",
+        ),
+    ),
 }
 
 
@@ -866,20 +882,29 @@ def _restore_compatibility(*, current_revision: str | None, bundle_revision: str
     normalized_bundle_revision = _SCHEMA_COMPATIBILITY_ALIASES.get(
         bundle_revision, bundle_revision
     )
+    additive_tables, additive_warnings = _ADDITIVE_SCHEMA_TABLES.get(current_revision or "", (frozenset(), ()))
+    current_has_additive_tables = bool(additive_tables) and bundle_revision != current_revision
 
     if normalized_current_revision == normalized_bundle_revision:
         return RestoreCompatibility(
             supported=True,
-            allowed_missing_tables=frozenset(),
-            warnings=(),
+            allowed_missing_tables=additive_tables if current_has_additive_tables else frozenset(),
+            warnings=additive_warnings if current_has_additive_tables else (),
         )
-    return _SCHEMA_COMPATIBILITY.get(
+    compatibility = _SCHEMA_COMPATIBILITY.get(
         (normalized_current_revision, normalized_bundle_revision),
         RestoreCompatibility(
             supported=False,
             allowed_missing_tables=frozenset(),
             warnings=(),
         ),
+    )
+    if not compatibility.supported or not current_has_additive_tables:
+        return compatibility
+    return RestoreCompatibility(
+        supported=True,
+        allowed_missing_tables=compatibility.allowed_missing_tables | additive_tables,
+        warnings=compatibility.warnings + additive_warnings,
     )
 
 
@@ -1273,6 +1298,9 @@ def _restore_household_tables(
         "location_groups": {},
         "locations": {},
         "products": {},
+        "canonical_items": {},
+        "canonical_aliases": {},
+        "product_canonical_links": {},
         "product_aliases": {},
         "barcodes": {},
         "stock_lots": {},
@@ -1309,6 +1337,34 @@ def _restore_household_tables(
         id_maps["products"][original_id] = copied["id"]
         db.execute(Base.metadata.tables["products"].insert(), [copied])
     table_counts["products"] = len(id_maps["products"])
+
+    for row in _deserialize_table_rows(bundle, table_name="canonical_items"):
+        original_id = row["id"]
+        copied = _copy_row_for_household_restore(row, table_name="canonical_items", household_id=target_household.id)
+        id_maps["canonical_items"][original_id] = copied["id"]
+        db.execute(Base.metadata.tables["canonical_items"].insert(), [copied])
+    table_counts["canonical_items"] = len(id_maps["canonical_items"])
+
+    for row in _deserialize_table_rows(bundle, table_name="canonical_aliases"):
+        original_id = row["id"]
+        copied = _copy_row_for_household_restore(row, table_name="canonical_aliases", household_id=target_household.id)
+        copied["canonical_item_id"] = id_maps["canonical_items"][row["canonical_item_id"]]
+        id_maps["canonical_aliases"][original_id] = copied["id"]
+        db.execute(Base.metadata.tables["canonical_aliases"].insert(), [copied])
+    table_counts["canonical_aliases"] = len(id_maps["canonical_aliases"])
+
+    for row in _deserialize_table_rows(bundle, table_name="product_canonical_links"):
+        original_id = row["id"]
+        copied = _copy_row_for_household_restore(
+            row,
+            table_name="product_canonical_links",
+            household_id=target_household.id,
+        )
+        copied["product_id"] = id_maps["products"][row["product_id"]]
+        copied["canonical_item_id"] = id_maps["canonical_items"][row["canonical_item_id"]]
+        id_maps["product_canonical_links"][original_id] = copied["id"]
+        db.execute(Base.metadata.tables["product_canonical_links"].insert(), [copied])
+    table_counts["product_canonical_links"] = len(id_maps["product_canonical_links"])
 
     for row in _deserialize_table_rows(bundle, table_name="product_aliases"):
         original_id = row["id"]

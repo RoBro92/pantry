@@ -12,6 +12,7 @@ from app.models.audit_event import AuditEvent
 from app.models.location import Location
 from app.models.location_group import LocationGroup
 from app.models.product import Product
+from app.models.product_canonical_link import ProductCanonicalLink
 from app.models.stock_lot import StockLot
 from app.schemas.pantry import (
     AuditEventSummary,
@@ -26,6 +27,7 @@ from app.schemas.pantry import (
     StockLotSummary,
 )
 from app.services.location_links import serialize_location_link
+from app.services.canonical_knowledge import serialize_product_canonical_summary
 from app.services.pantry_normalization import normalize_barcode, normalize_lookup_name
 from app.services.pantry_serialization import (
     serialize_product_enrichment_summary,
@@ -194,6 +196,7 @@ def _load_reference_lists(
             selectinload(Product.barcodes),
             selectinload(Product.enrichments),
             selectinload(Product.intelligence_records),
+            selectinload(Product.canonical_link).selectinload(ProductCanonicalLink.canonical_item),
         )
         .order_by(Product.name)
     ).all()
@@ -211,6 +214,7 @@ def _load_active_lots(db: Session, *, household_id) -> list[StockLot]:
             selectinload(StockLot.product).selectinload(Product.barcodes),
             selectinload(StockLot.product).selectinload(Product.enrichments),
             selectinload(StockLot.product).selectinload(Product.intelligence_records),
+            selectinload(StockLot.product).selectinload(Product.canonical_link).selectinload(ProductCanonicalLink.canonical_item),
             selectinload(StockLot.location).selectinload(Location.location_group),
         )
         .order_by(StockLot.expires_on, StockLot.created_at)
@@ -317,6 +321,7 @@ def _build_product_summary(
         aliases=[alias.name for alias in product.aliases],
         barcodes=[barcode.value for barcode in product.barcodes],
         is_in_shopping_list=product.id in open_shopping_product_ids,
+        canonical=serialize_product_canonical_summary(product),
         enrichment=serialize_product_enrichment_summary(product),
         intelligence=serialize_product_intelligence_summary(product),
         locations=_product_location_summaries(sorted_lots),

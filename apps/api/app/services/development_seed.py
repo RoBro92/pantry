@@ -20,6 +20,7 @@ from app.services.auth import (
     create_user,
 )
 from app.services.ai_config import upsert_instance_provider_config
+from app.services.canonical_knowledge import bootstrap_default_canonical_items, relink_household_products_to_canonical_items
 from app.services.e2e_seed import reset_application_data
 from app.services.instance_integration_checks import (
     run_instance_ai_health_check,
@@ -576,6 +577,7 @@ def seed_demo_development_state(db: Session, *, off_client=None) -> DevelopmentS
         run_instance_smtp_health_check(db, actor=actor)
 
     household = create_household(db, name="demohouse")
+    bootstrap_default_canonical_items(db, household=household, actor=actor)
     for user_seed in DEMO_USERS:
         create_membership(
             db,
@@ -640,6 +642,13 @@ def seed_demo_development_state(db: Session, *, off_client=None) -> DevelopmentS
         db.commit()
         db.refresh(product)
         product_external_ids[product_seed.name] = product.external_id
+
+    relink_household_products_to_canonical_items(
+        db,
+        household=household,
+        actor=actor,
+    )
+    db.commit()
 
     bootstrap_warnings: list[str] = []
     mark_setup_completed(db)

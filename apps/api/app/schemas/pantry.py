@@ -229,6 +229,21 @@ class LocationSummary(BaseModel):
     browser_url: str | None = None
 
 
+class CanonicalItemSummary(BaseModel):
+    external_id: str
+    name: str
+    review_status: str
+    item_type: str
+
+
+class ProductCanonicalSummary(BaseModel):
+    link_external_id: str
+    link_status: str
+    match_method: str
+    source_name: str | None = None
+    canonical_item: CanonicalItemSummary
+
+
 class ProductSummary(BaseModel):
     external_id: str
     name: str
@@ -237,6 +252,7 @@ class ProductSummary(BaseModel):
     barcodes: list[str]
     notes: str | None = None
     manual_ingredient_tags: list[str] = Field(default_factory=list)
+    canonical: ProductCanonicalSummary | None = None
     enrichment: ProductEnrichmentSummary | None = None
     intelligence: ProductIntelligenceSummary | None = None
 
@@ -269,6 +285,7 @@ class PantryProductSummary(BaseModel):
     aliases: list[str]
     barcodes: list[str]
     is_in_shopping_list: bool = False
+    canonical: ProductCanonicalSummary | None = None
     enrichment: ProductEnrichmentSummary | None = None
     intelligence: ProductIntelligenceSummary | None = None
     locations: list[ProductLocationSummary]

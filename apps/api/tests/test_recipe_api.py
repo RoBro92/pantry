@@ -9,6 +9,7 @@ from app.models.audit_event import AuditEvent
 from app.models.recipe import Recipe
 from app.models.recipe_url_import import RecipeURLImport
 from app.services.auth import create_household, create_membership, create_user
+from app.services.canonical_knowledge import ensure_canonical_item
 from app.services.platform_features import FLAG_RECIPE_URL_IMPORTS, upsert_feature_flag
 from app.services.recipe_url_imports import process_next_recipe_url_import
 
@@ -176,6 +177,64 @@ def test_recipe_create_detail_list_and_shopping_gap_use_deterministic_matching(c
     detail_payload = detail_response.json()["recipe"]
     assert detail_payload["title"] == "Weeknight Pasta"
     assert detail_payload["shopping_gap_items"] == recipe_payload["shopping_gap_items"]
+
+
+def test_recipe_matching_falls_back_to_canonical_links_when_direct_lookup_misses(client, db_session):
+    admin, household = create_member_household(
+        db_session,
+        email="recipe-canonical@example.com",
+        household_name="Recipe Canonical Household",
+    )
+    login(client, email="recipe-canonical@example.com")
+
+    ensure_canonical_item(
+        db_session,
+        household=household,
+        actor=admin,
+        name="Pasta",
+        aliases=["Spaghetti"],
+        barcodes=[],
+        review_status="verified",
+        source_name="test_seed",
+        provenance_payload={"test": True},
+    )
+    db_session.commit()
+
+    pantry_group = create_location_group(client, household.external_id, "Pantry")
+    shelf = create_location(client, household.external_id, pantry_group["external_id"], "Shelf")
+    pasta = create_product(
+        client,
+        household.external_id,
+        name="Pasta",
+        default_unit="pack",
+        aliases=[],
+        barcodes=[],
+    )
+
+    add_stock_lot(
+        client,
+        household.external_id,
+        product_external_id=pasta["external_id"],
+        location_external_id=shelf["external_id"],
+        quantity="1.000",
+    )
+
+    create_response = client.post(
+        f"/api/households/{household.external_id}/recipes",
+        json={
+            "title": "Simple Spaghetti",
+            "notes": "Canonical fallback should link this ingredient.",
+            "ingredients": [
+                {"name": "Spaghetti", "quantity": "1.000", "unit": "pack"},
+            ],
+        },
+    )
+    assert create_response.status_code == 201
+    recipe = create_response.json()["recipe"]
+
+    assert recipe["ingredients"][0]["match_source"] == "automatic_canonical"
+    assert recipe["ingredients"][0]["product"]["external_id"] == pasta["external_id"]
+    assert recipe["ingredients"][0]["coverage"]["status"] == "fully_covered"
 
 
 def test_recipe_update_replaces_ingredients_and_records_audit_events(client, db_session):

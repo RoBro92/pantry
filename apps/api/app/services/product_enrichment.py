@@ -18,6 +18,7 @@ from app.schemas.pantry import (
     ProductSummary,
 )
 from app.services.audit import record_audit_event
+from app.services.canonical_knowledge import serialize_product_canonical_summary, sync_product_canonical_link
 from app.services.open_food_facts import (
     OPEN_FOOD_FACTS_SOURCE,
     OpenFoodFactsClient,
@@ -86,6 +87,7 @@ def serialize_product_summary(product: Product) -> ProductSummary:
         barcodes=[barcode.value for barcode in product.barcodes],
         notes=product.notes,
         manual_ingredient_tags=list(product.manual_ingredient_tags or []),
+        canonical=serialize_product_canonical_summary(product),
         enrichment=serialize_product_enrichment(get_primary_enrichment(product)),
         intelligence=serialize_product_intelligence(get_primary_product_intelligence(product), product=product),
     )
@@ -259,6 +261,12 @@ def apply_confirmed_product_enrichment(
             "source_product_name": candidate.source_product_name,
             "match_status": enrichment.match_status,
         },
+    )
+    sync_product_canonical_link(
+        db,
+        household=household,
+        actor=actor,
+        product=product,
     )
     db.flush()
     return enrichment

@@ -7,12 +7,15 @@ from sqlalchemy.orm import selectinload
 
 from app.domain.ai import AI_HEALTH_HEALTHY
 from app.models.ai_provider_config import AIProviderConfig
+from app.models.canonical_alias import CanonicalAlias
+from app.models.canonical_item import CanonicalItem
 from app.models.household import Household
 from app.models.instance_setting import InstanceSetting
 from app.models.location import Location
 from app.models.location_group import LocationGroup
 from app.models.membership import Membership
 from app.models.product import Product
+from app.models.product_canonical_link import ProductCanonicalLink
 from app.models.product_enrichment import ProductEnrichment
 from app.models.setup_state import SetupState
 from app.models.stock_lot import StockLot
@@ -225,6 +228,38 @@ def test_demo_development_mode_seeds_expected_fixture_state(db_session):
 
     enrichments = db_session.scalars(select(ProductEnrichment)).all()
     assert enrichments == []
+
+    mayonnaise_item = db_session.scalar(
+        select(CanonicalItem)
+        .where(CanonicalItem.household_id == household.id)
+        .where(CanonicalItem.normalized_name == "mayonnaise")
+    )
+    assert mayonnaise_item is not None
+    assert mayonnaise_item.review_status == "verified"
+    mayonnaise_aliases = db_session.scalars(
+        select(CanonicalAlias)
+        .where(CanonicalAlias.canonical_item_id == mayonnaise_item.id)
+        .where(CanonicalAlias.review_status == "verified")
+    ).all()
+    assert {alias.value for alias in mayonnaise_aliases} >= {
+        "Mayonnaise",
+        "Mayo",
+        "Tesco Mayonnaise",
+        "Tesco Mayo",
+    }
+
+    mayonnaise_product = db_session.scalar(
+        select(Product)
+        .where(Product.household_id == household.id)
+        .where(Product.normalized_name == "mayonnaise")
+    )
+    assert mayonnaise_product is not None
+    mayonnaise_link = db_session.scalar(
+        select(ProductCanonicalLink).where(ProductCanonicalLink.product_id == mayonnaise_product.id)
+    )
+    assert mayonnaise_link is not None
+    assert mayonnaise_link.canonical_item_id == mayonnaise_item.id
+    assert mayonnaise_link.link_status == "verified"
 
 
 def test_demo_development_mode_bootstraps_local_ai_and_smtp_config_from_environment(
