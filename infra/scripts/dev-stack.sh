@@ -27,19 +27,27 @@ compose() {
   "${COMPOSE_CMD[@]}" --env-file "${DEV_ENV_FILE}" -f "${ROOT_DIR}/compose.yml" -f "${ROOT_DIR}/compose.dev.yml" "$@"
 }
 
-forward_local_bootstrap_env() {
+first_non_empty_env() {
+  local name
+  for name in "$@"; do
+    local value="${!name-}"
+    if [[ -n "${value}" ]]; then
+      printf '%s\n' "${value}"
+      return 0
+    fi
+  done
+  return 1
+}
+
+export_alias_if_present() {
   local target_name="$1"
-  local legacy_name="$2"
-  local target_value="${!target_name:-}"
-  local legacy_value="${!legacy_name:-}"
+  shift
 
-  if [[ -n "${target_value}" ]]; then
-    export "${target_name}=${target_value}"
-    return
-  fi
-
-  if [[ -n "${legacy_value}" ]]; then
-    export "${target_name}=${legacy_value}"
+  local resolved_value
+  if resolved_value="$(first_non_empty_env "${target_name}" "$@")"; then
+    export "${target_name}=${resolved_value}"
+  else
+    unset "${target_name}"
   fi
 }
 
@@ -73,21 +81,21 @@ bootstrap_dev_env() {
 
   # Only forward shell-provided local bootstrap variables when they are explicitly set.
   # This avoids overriding .env.local values with empty exported variables.
-  forward_local_bootstrap_env "PANTRO_LOCAL_AI_PROVIDER_TYPE" "PANTRY_LOCAL_AI_PROVIDER_TYPE"
-  forward_local_bootstrap_env "PANTRO_LOCAL_AI_BASE_URL" "PANTRY_LOCAL_AI_BASE_URL"
-  forward_local_bootstrap_env "PANTRO_LOCAL_AI_DEFAULT_MODEL" "PANTRY_LOCAL_AI_DEFAULT_MODEL"
-  forward_local_bootstrap_env "PANTRO_LOCAL_AI_API_KEY" "PANTRY_LOCAL_AI_API_KEY"
-  forward_local_bootstrap_env "PANTRO_LOCAL_AI_ENABLED" "PANTRY_LOCAL_AI_ENABLED"
-  forward_local_bootstrap_env "PANTRO_LOCAL_SMTP_HOST" "PANTRY_LOCAL_SMTP_HOST"
-  forward_local_bootstrap_env "PANTRO_LOCAL_SMTP_PORT" "PANTRY_LOCAL_SMTP_PORT"
-  forward_local_bootstrap_env "PANTRO_LOCAL_SMTP_USERNAME" "PANTRY_LOCAL_SMTP_USERNAME"
-  forward_local_bootstrap_env "PANTRO_LOCAL_SMTP_PASSWORD" "PANTRY_LOCAL_SMTP_PASSWORD"
-  forward_local_bootstrap_env "PANTRO_LOCAL_SMTP_FROM_EMAIL" "PANTRY_LOCAL_SMTP_FROM_EMAIL"
-  forward_local_bootstrap_env "PANTRO_LOCAL_SMTP_FROM_NAME" "PANTRY_LOCAL_SMTP_FROM_NAME"
-  forward_local_bootstrap_env "PANTRO_LOCAL_SMTP_SECURITY" "PANTRY_LOCAL_SMTP_SECURITY"
-  forward_local_bootstrap_env "PANTRO_LOCAL_SMTP_ENABLED" "PANTRY_LOCAL_SMTP_ENABLED"
-  forward_local_bootstrap_env "PANTRO_LOCAL_SMTP_TEST_RECIPIENT_EMAIL" "PANTRY_LOCAL_SMTP_TEST_RECIPIENT_EMAIL"
-  forward_local_bootstrap_env "PANTRO_LOCAL_SMTP_PASSWORD_RESET_ENABLED" "PANTRY_LOCAL_SMTP_PASSWORD_RESET_ENABLED"
+  export_alias_if_present "PANTRO_LOCAL_AI_PROVIDER_TYPE" "PANTRY_LOCAL_AI_PROVIDER_TYPE"
+  export_alias_if_present "PANTRO_LOCAL_AI_BASE_URL" "PANTRY_LOCAL_AI_BASE_URL"
+  export_alias_if_present "PANTRO_LOCAL_AI_DEFAULT_MODEL" "PANTRY_LOCAL_AI_DEFAULT_MODEL"
+  export_alias_if_present "PANTRO_LOCAL_AI_API_KEY" "PANTRY_LOCAL_AI_API_KEY"
+  export_alias_if_present "PANTRO_LOCAL_AI_ENABLED" "PANTRY_LOCAL_AI_ENABLED"
+  export_alias_if_present "PANTRO_LOCAL_SMTP_HOST" "PANTRY_LOCAL_SMTP_HOST"
+  export_alias_if_present "PANTRO_LOCAL_SMTP_PORT" "PANTRY_LOCAL_SMTP_PORT"
+  export_alias_if_present "PANTRO_LOCAL_SMTP_USERNAME" "PANTRY_LOCAL_SMTP_USERNAME"
+  export_alias_if_present "PANTRO_LOCAL_SMTP_PASSWORD" "PANTRY_LOCAL_SMTP_PASSWORD"
+  export_alias_if_present "PANTRO_LOCAL_SMTP_FROM_EMAIL" "PANTRY_LOCAL_SMTP_FROM_EMAIL"
+  export_alias_if_present "PANTRO_LOCAL_SMTP_FROM_NAME" "PANTRY_LOCAL_SMTP_FROM_NAME"
+  export_alias_if_present "PANTRO_LOCAL_SMTP_SECURITY" "PANTRY_LOCAL_SMTP_SECURITY"
+  export_alias_if_present "PANTRO_LOCAL_SMTP_ENABLED" "PANTRY_LOCAL_SMTP_ENABLED"
+  export_alias_if_present "PANTRO_LOCAL_SMTP_TEST_RECIPIENT_EMAIL" "PANTRY_LOCAL_SMTP_TEST_RECIPIENT_EMAIL"
+  export_alias_if_present "PANTRO_LOCAL_SMTP_PASSWORD_RESET_ENABLED" "PANTRY_LOCAL_SMTP_PASSWORD_RESET_ENABLED"
 }
 
 legacy_compose_down() {
