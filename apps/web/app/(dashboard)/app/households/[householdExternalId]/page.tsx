@@ -50,6 +50,7 @@ export default async function HouseholdPantryPage({
 
       <PantryProductBrowser
         householdExternalId={overview.household_external_id}
+        catalogProducts={overview.catalog_products}
         products={overview.products}
         locations={overview.locations}
         canAdminister={overview.can_administer}

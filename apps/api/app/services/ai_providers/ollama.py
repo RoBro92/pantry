@@ -8,6 +8,7 @@ import httpx
 
 from app.domain.ai import AI_HEALTH_HEALTHY, AI_HEALTH_UNHEALTHY
 from app.services.ai_providers.base import (
+    AIUsageMetrics,
     AIProviderHealth,
     AIProviderRuntimeConfig,
     StructuredCompletionRequest,
@@ -100,4 +101,24 @@ class OllamaProviderAdapter:
             output_text=output_text,
             parsed_output=json.loads(output_text),
             provider_request_id=None,
+            usage=_extract_ollama_usage(body),
         )
+
+
+def _extract_ollama_usage(body: dict[str, Any]) -> AIUsageMetrics | None:
+    prompt_tokens = body.get("prompt_eval_count")
+    completion_tokens = body.get("eval_count")
+    if not any(isinstance(value, int) for value in (prompt_tokens, completion_tokens)):
+        return None
+
+    resolved_input = prompt_tokens if isinstance(prompt_tokens, int) else None
+    resolved_output = completion_tokens if isinstance(completion_tokens, int) else None
+    total_tokens = None
+    if resolved_input is not None or resolved_output is not None:
+        total_tokens = (resolved_input or 0) + (resolved_output or 0)
+
+    return AIUsageMetrics(
+        input_tokens=resolved_input,
+        output_tokens=resolved_output,
+        total_tokens=total_tokens,
+    )

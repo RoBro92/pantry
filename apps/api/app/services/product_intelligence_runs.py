@@ -27,7 +27,11 @@ from app.schemas.pantry import (
     ProductIntelligenceRunResponse,
     ProductIntelligenceRunSummary,
 )
-from app.services.ai_config import refresh_provider_health, resolve_provider_config
+from app.services.ai_config import (
+    RUNTIME_HEALTH_CACHE_SOURCE_CACHED,
+    get_runtime_provider_health,
+    resolve_provider_config,
+)
 from app.services.ai_providers import StructuredCompletionRequest, build_ai_provider_adapter
 from app.services.ai_runtime import PantryAIError, normalize_ai_error
 from app.services.audit import record_audit_event
@@ -124,9 +128,9 @@ def queue_product_intelligence_run(
     if resolved is None:
         raise ValueError("No AI provider is configured for this installation.")
 
-    health = refresh_provider_health(db, config=resolved.record)
-    if not health.is_healthy:
-        raise ValueError(health.message or "The AI provider is unavailable.")
+    health_result = get_runtime_provider_health(db, config=resolved.record)
+    if not health_result.health.is_healthy:
+        raise ValueError(health_result.health.message or "The AI provider is unavailable.")
 
     products = _load_target_products(db, household=household, request=request)
     run = ProductIntelligenceRun(
@@ -149,6 +153,15 @@ def queue_product_intelligence_run(
         level="info",
         message=f"Queued classification run for {len(products)} product(s).",
     )
+    _append_run_event(
+        run,
+        level="info",
+        message=(
+            "Reused recent provider health status before queueing."
+            if health_result.source == RUNTIME_HEALTH_CACHE_SOURCE_CACHED
+            else "Ran a fresh provider health check before queueing."
+        ),
+    )
     record_audit_event(
         db,
         household=household,
@@ -161,6 +174,8 @@ def queue_product_intelligence_run(
             "provider_type": run.provider_type,
             "default_model": run.source_model,
             "total_candidates": len(products),
+            "provider_health_source": health_result.source,
+            "provider_health_cache_age_seconds": health_result.cache_age_seconds,
         },
     )
     db.commit()
@@ -344,6 +359,20 @@ def _process_claimed_run(db: Session, run: ProductIntelligenceRun) -> None:
             )
             newly_skipped += 1
             continue
+        if run.mode == "stale" and (intelligence is None or not staleness.is_stale):
+            _store_run_item(
+                run,
+                ProductIntelligenceRunItem(
+                    product_external_id=product.external_id,
+                    product_name=product.name,
+                    status="skipped",
+                    message="Product no longer needs a stale classification refresh.",
+                    stale_before_run=staleness.is_stale,
+                    intelligence=serialize_product_intelligence(intelligence, product=product),
+                ),
+            )
+            newly_skipped += 1
+            continue
 
         plan = _fit_batch_plan(
             product,
@@ -416,7 +445,7 @@ def _process_claimed_run(db: Session, run: ProductIntelligenceRun) -> None:
         if derived_only_count:
             message_parts.append(f"Derived {derived_only_count} high-confidence OFF product(s) without AI.")
         if newly_skipped:
-            message_parts.append(f"Skipped {newly_skipped} already-classified product(s).")
+            message_parts.append(f"Skipped {newly_skipped} product(s) that no longer matched the queued mode.")
         if missing_products:
             message_parts.append(f"Marked {missing_products} missing product(s) as failed.")
         _append_run_event(run, level="info", message=" ".join(message_parts))

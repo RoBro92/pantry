@@ -16,13 +16,14 @@ from app.schemas.ai import (
     AISuggestionResponse,
 )
 from app.services.ai_config import (
+    RUNTIME_HEALTH_CACHE_SOURCE_CACHED,
     get_ai_feature_enabled,
+    get_runtime_provider_health,
     has_selected_model,
     normalize_provider_model,
     normalize_provider_type,
     provider_is_ready_for_runtime,
     record_provider_runtime_failure,
-    refresh_provider_health,
     resolve_provider_config,
 )
 from app.services.ai_providers.openai_compat import is_supported_openai_model
@@ -30,7 +31,7 @@ from app.services.ai_context import build_household_ai_context
 from app.services.platform_features import FLAG_AI_SUGGESTIONS, get_effective_feature_flag, require_feature_enabled
 from app.services.ai_prompts import build_suggestion_prompt_plan
 from app.services.ai_providers import StructuredCompletionRequest, build_ai_provider_adapter
-from app.services.ai_runtime import normalize_ai_error
+from app.services.ai_runtime import estimate_ai_payload_tokens, normalize_ai_error, serialize_ai_usage_metrics
 from app.services.audit import record_audit_event
 from app.services.tenancy import HouseholdAccess
 from app.services.usage_counters import check_usage_quota
@@ -175,7 +176,8 @@ def generate_household_ai_suggestions(
     if not runtime_ready:
         raise ValueError(runtime_reason or "The AI provider configuration is incomplete.")
 
-    health = refresh_provider_health(db, config=resolved.record)
+    health_result = get_runtime_provider_health(db, config=resolved.record)
+    health = health_result.health
     feature = build_household_ai_feature_status(db, household=access.household)
     if not health.is_healthy or not feature.available:
         raise ValueError(feature.reason or health.message or "The AI provider is unavailable.")
@@ -186,6 +188,7 @@ def generate_household_ai_suggestions(
         request=request,
         context_payload=context_bundle.payload,
     )
+    approx_input_tokens = estimate_ai_payload_tokens(prompt_plan.user_payload)
     adapter = build_ai_provider_adapter(resolved.runtime)
 
     logger.info(
@@ -196,6 +199,12 @@ def generate_household_ai_suggestions(
         provider_type=resolved.record.provider_type,
         model=resolved.record.default_model,
         suggestion_kind=request.kind,
+        approx_input_tokens=approx_input_tokens,
+        approx_context_tokens=context_bundle.diagnostics["approx_context_tokens"],
+        provider_health_source=health_result.source,
+        provider_health_cache_age_seconds=health_result.cache_age_seconds,
+        used_cached_health_check=health_result.source == RUNTIME_HEALTH_CACHE_SOURCE_CACHED,
+        applied_optimizations=context_bundle.diagnostics["applied_optimizations"],
     )
     record_audit_event(
         db,
@@ -210,6 +219,10 @@ def generate_household_ai_suggestions(
             "default_model": resolved.record.default_model,
             "kind": request.kind,
             "recipe_external_id": request.recipe_external_id,
+            "approx_input_tokens": approx_input_tokens,
+            "provider_health_source": health_result.source,
+            "provider_health_cache_age_seconds": health_result.cache_age_seconds,
+            "context_optimizations": context_bundle.diagnostics["applied_optimizations"],
         },
     )
     db.commit()
@@ -244,6 +257,8 @@ def generate_household_ai_suggestions(
             model=resolved.record.default_model,
             suggestion_kind=request.kind,
             error=ai_error.technical_message,
+            provider_health_source=health_result.source,
+            approx_input_tokens=approx_input_tokens,
         )
         record_audit_event(
             db,
@@ -258,12 +273,15 @@ def generate_household_ai_suggestions(
                 "default_model": resolved.record.default_model,
                 "kind": request.kind,
                 "error": ai_error.technical_message,
+                "provider_health_source": health_result.source,
+                "approx_input_tokens": approx_input_tokens,
             },
         )
         db.commit()
         raise ai_error from exc
 
     duration_ms = round((perf_counter() - started) * 1000, 2)
+    provider_usage = serialize_ai_usage_metrics(completion.usage)
     logger.info(
         "ai.request.completed",
         household_external_id=access.household.external_id,
@@ -274,6 +292,10 @@ def generate_household_ai_suggestions(
         suggestion_count=len(parsed.suggestions),
         duration_ms=duration_ms,
         provider_request_id=completion.provider_request_id,
+        approx_input_tokens=approx_input_tokens,
+        provider_usage=provider_usage,
+        provider_health_source=health_result.source,
+        applied_optimizations=context_bundle.diagnostics["applied_optimizations"],
     )
     record_audit_event(
         db,
@@ -289,6 +311,11 @@ def generate_household_ai_suggestions(
             "kind": request.kind,
             "suggestion_count": len(parsed.suggestions),
             "duration_ms": duration_ms,
+            "approx_input_tokens": approx_input_tokens,
+            "provider_usage": provider_usage,
+            "provider_health_source": health_result.source,
+            "provider_health_cache_age_seconds": health_result.cache_age_seconds,
+            "context_optimizations": context_bundle.diagnostics["applied_optimizations"],
         },
     )
     db.commit()

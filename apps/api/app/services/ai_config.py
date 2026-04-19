@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.domain.ai import (
+    AI_HEALTH_HEALTHY,
     AI_HEALTH_UNHEALTHY,
     AI_HEALTH_UNKNOWN,
     AI_PROVIDER_API_KEY_REQUIRED,
@@ -33,6 +34,20 @@ from app.services.secrets import decrypt_secret, encrypt_secret
 class ResolvedAIProviderConfig:
     record: AIProviderConfig
     runtime: AIProviderRuntimeConfig
+
+
+@dataclass(frozen=True)
+class RuntimeHealthCheckResult:
+    health: AIProviderHealth
+    source: str
+    cache_age_seconds: int | None = None
+    cache_ttl_seconds: int | None = None
+
+
+RUNTIME_HEALTH_CACHE_SOURCE_CACHED = "cached"
+RUNTIME_HEALTH_CACHE_SOURCE_FRESH = "fresh"
+RUNTIME_HEALTH_CACHE_SECONDS_HEALTHY = 300
+RUNTIME_HEALTH_CACHE_SECONDS_UNHEALTHY = 45
 
 
 def _utc_now() -> datetime:
@@ -256,6 +271,26 @@ def refresh_provider_health(
     return health
 
 
+def get_runtime_provider_health(
+    db: Session,
+    *,
+    config: AIProviderConfig,
+    force_refresh: bool = False,
+) -> RuntimeHealthCheckResult:
+    validate_provider_health_check_ready(config)
+    if not force_refresh:
+        cached = _get_cached_runtime_health(config)
+        if cached is not None:
+            return cached
+
+    health = refresh_provider_health(db, config=config)
+    return RuntimeHealthCheckResult(
+        health=health,
+        source=RUNTIME_HEALTH_CACHE_SOURCE_FRESH,
+        cache_ttl_seconds=_runtime_health_cache_ttl_seconds(config.health_status),
+    )
+
+
 def record_provider_runtime_failure(
     db: Session,
     *,
@@ -269,6 +304,43 @@ def record_provider_runtime_failure(
     db.commit()
     db.refresh(config)
     return config
+
+
+def _get_cached_runtime_health(config: AIProviderConfig) -> RuntimeHealthCheckResult | None:
+    ttl_seconds = _runtime_health_cache_ttl_seconds(config.health_status)
+    age_seconds = _runtime_health_cache_age_seconds(config.health_checked_at)
+    if ttl_seconds is None or age_seconds is None or age_seconds > ttl_seconds:
+        return None
+
+    return RuntimeHealthCheckResult(
+        health=AIProviderHealth(
+            is_healthy=config.health_status == AI_HEALTH_HEALTHY,
+            status=config.health_status,
+            message=config.health_error,
+            models=[],
+            capabilities=config.capabilities or {},
+        ),
+        source=RUNTIME_HEALTH_CACHE_SOURCE_CACHED,
+        cache_age_seconds=age_seconds,
+        cache_ttl_seconds=ttl_seconds,
+    )
+
+
+def _runtime_health_cache_ttl_seconds(health_status: str | None) -> int | None:
+    if health_status == AI_HEALTH_HEALTHY:
+        return RUNTIME_HEALTH_CACHE_SECONDS_HEALTHY
+    if health_status == AI_HEALTH_UNHEALTHY:
+        return RUNTIME_HEALTH_CACHE_SECONDS_UNHEALTHY
+    return None
+
+
+def _runtime_health_cache_age_seconds(checked_at: datetime | None) -> int | None:
+    if checked_at is None:
+        return None
+
+    now = _utc_now()
+    reference = checked_at if checked_at.tzinfo is not None else checked_at.replace(tzinfo=timezone.utc)
+    return max(int((now - reference).total_seconds()), 0)
 
 
 def serialize_provider_config(config: AIProviderConfig | None) -> dict[str, object] | None:

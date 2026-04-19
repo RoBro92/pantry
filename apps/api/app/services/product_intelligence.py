@@ -1193,6 +1193,19 @@ def _load_target_products(
         if not selected:
             raise ValueError("Product not found.")
         return selected
+    if request.mode == "unclassified":
+        return [
+            product
+            for product in products
+            if get_primary_product_intelligence(product) is None
+        ]
+    if request.mode == "stale":
+        return [
+            product
+            for product in products
+            if (intelligence := get_primary_product_intelligence(product)) is not None
+            and get_product_intelligence_staleness(product, intelligence).is_stale
+        ]
     return products
 
 

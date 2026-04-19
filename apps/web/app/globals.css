@@ -460,6 +460,10 @@ code {
   background: var(--panel);
   box-shadow: var(--shadow-soft);
   backdrop-filter: blur(16px);
+  position: relative;
+  z-index: 20;
+  isolation: isolate;
+  overflow: visible;
 }
 
 .mobile-shell-topbar {
@@ -494,7 +498,7 @@ code {
   display: grid;
   justify-items: end;
   gap: 0.5rem;
-  z-index: 6;
+  z-index: 30;
 }
 
 .mobile-account-menu summary {
@@ -513,7 +517,7 @@ code {
 .mobile-account-menu-scrim {
   position: fixed;
   inset: 0;
-  z-index: 5;
+  z-index: 29;
   border: 0;
   background: transparent;
 }
@@ -522,7 +526,7 @@ code {
   position: absolute;
   right: 0;
   top: calc(100% + 0.5rem);
-  z-index: 6;
+  z-index: 30;
   display: grid;
   gap: 0.65rem;
   width: min(17rem, calc(100vw - 2rem));

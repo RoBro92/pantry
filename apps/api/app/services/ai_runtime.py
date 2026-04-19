@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass
 from typing import Any
 
@@ -8,6 +9,7 @@ import httpx
 from pydantic import ValidationError
 
 from app.domain.ai import AI_PROVIDER_OPENAI, canonical_provider_type
+from app.services.ai_providers.base import AIUsageMetrics
 from app.services.ai_providers.errors import AIProviderError
 from app.services.ai_providers.openai_compat import (
     build_openai_supported_model_failure_message,
@@ -50,6 +52,25 @@ class PantryAIError(ValueError):
         object.__setattr__(self, "technical_message", technical_message)
         object.__setattr__(self, "retryable", retryable)
         object.__setattr__(self, "status_code", status_code)
+
+
+def estimate_ai_payload_tokens(payload: object) -> int:
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str, ensure_ascii=False)
+    return max(1, math.ceil(len(encoded) / 4))
+
+
+def serialize_ai_usage_metrics(usage: AIUsageMetrics | None) -> dict[str, int] | None:
+    if usage is None or not usage.has_values:
+        return None
+
+    serialized: dict[str, int] = {}
+    if usage.input_tokens is not None:
+        serialized["input_tokens"] = usage.input_tokens
+    if usage.output_tokens is not None:
+        serialized["output_tokens"] = usage.output_tokens
+    if usage.total_tokens is not None:
+        serialized["total_tokens"] = usage.total_tokens
+    return serialized or None
 
 
 def get_provider_support_copy(provider_type: str | None) -> str:

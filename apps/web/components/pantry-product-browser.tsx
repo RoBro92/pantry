@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { PantryLocationSummary, PantryProductSummary } from "../lib/api-types";
+import type { PantryCatalogProductSummary } from "../lib/api-types";
 import { formatQuantityWithUnit } from "../lib/quantity-format";
 import { PantryLotActions } from "./pantry-lot-actions";
 import { PantryProductDeleteDialog } from "./pantry-product-delete-dialog";
@@ -10,11 +11,13 @@ import { PantryProductDialog } from "./pantry-product-create-dialog";
 import { ProductEnrichmentDetails } from "./product-enrichment-details";
 import { ProductEnrichmentLookupDialog } from "./product-enrichment-lookup-dialog";
 import { ProductIntelligenceDetails } from "./product-intelligence-details";
+import { ProductIntelligenceRunDialog } from "./product-intelligence-run-dialog";
 import { ShoppingListAddDialog } from "./shopping-list-add-dialog";
 import { StockLotEditorDialog } from "./stock-lot-editor-dialog";
 
 type PantryProductBrowserProps = {
   householdExternalId: string;
+  catalogProducts: PantryCatalogProductSummary[];
   products: PantryProductSummary[];
   locations: PantryLocationSummary[];
   canAdminister: boolean;
@@ -64,6 +67,7 @@ function WrappedValue({ children }: { children: string }) {
 
 export function PantryProductBrowser({
   householdExternalId,
+  catalogProducts,
   products,
   locations,
   canAdminister,
@@ -81,6 +85,7 @@ export function PantryProductBrowser({
   const [shoppingDialogProduct, setShoppingDialogProduct] = useState<PantryProductSummary | null>(null);
   const [stockLotEditorProduct, setStockLotEditorProduct] = useState<PantryProductSummary | null>(null);
   const [lookupDialogProduct, setLookupDialogProduct] = useState<PantryProductSummary | null>(null);
+  const [productIntelligenceProduct, setProductIntelligenceProduct] = useState<PantryProductSummary | null>(null);
   const [productEditorProduct, setProductEditorProduct] = useState<PantryProductSummary | null>(null);
   const [deleteProduct, setDeleteProduct] = useState<PantryProductSummary | null>(null);
 
@@ -342,6 +347,17 @@ export function PantryProductBrowser({
                       Lookup product data
                     </button>
                   ) : null}
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    onClick={() => setProductIntelligenceProduct(product)}
+                  >
+                    {product.intelligence?.is_stale
+                      ? "Refresh AI product details"
+                      : product.intelligence
+                        ? "Recheck AI product details"
+                        : "Add AI product details"}
+                  </button>
                   <button
                     type="button"
                     className="ghost-button"
@@ -645,6 +661,16 @@ export function PantryProductBrowser({
           householdExternalId={householdExternalId}
           product={lookupDialogProduct}
           onClose={() => setLookupDialogProduct(null)}
+        />
+      ) : null}
+
+      {productIntelligenceProduct ? (
+        <ProductIntelligenceRunDialog
+          householdExternalId={householdExternalId}
+          catalogProducts={catalogProducts}
+          initialMode="product"
+          initialProductExternalId={productIntelligenceProduct.product_external_id}
+          onClose={() => setProductIntelligenceProduct(null)}
         />
       ) : null}
 
