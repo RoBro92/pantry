@@ -1,6 +1,8 @@
 from app.models.ai_provider_config import AIProviderConfig
 from app.models.audit_event import AuditEvent
 from app.models.barcode import Barcode
+from app.models.canonical_alias import CanonicalAlias
+from app.models.canonical_item import CanonicalItem
 from app.models.base import Base
 from app.models.feature_flag import FeatureFlag
 from app.models.household import Household
@@ -13,6 +15,7 @@ from app.models.location_group import LocationGroup
 from app.models.membership import Membership
 from app.models.password_reset_token import PasswordResetToken
 from app.models.product import Product
+from app.models.product_canonical_link import ProductCanonicalLink
 from app.models.product_alias import ProductAlias
 from app.models.product_enrichment import ProductEnrichment
 from app.models.product_intelligence import ProductIntelligence
@@ -33,6 +36,8 @@ __all__ = [
     "AuditEvent",
     "Barcode",
     "Base",
+    "CanonicalAlias",
+    "CanonicalItem",
     "FeatureFlag",
     "Household",
     "ImportJob",
@@ -44,6 +49,7 @@ __all__ = [
     "Membership",
     "PasswordResetToken",
     "Product",
+    "ProductCanonicalLink",
     "ProductAlias",
     "ProductEnrichment",
     "ProductIntelligence",

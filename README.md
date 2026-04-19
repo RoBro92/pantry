@@ -82,8 +82,8 @@ Local branch work uses the Docker-based source stack that stays separate from th
 - `./pantro rebuild` is only needed after Dockerfile or dependency changes
 - `./pantro status` shows the current local stack state
 - `./pantro logs` follows the local service logs
-- the helper uses `local.env` first when present, otherwise `.env.local`, then `.env`, and creates `.env.local` from `.env.local.example` on first run
-- optional `PANTRO_LOCAL_AI_*` and `PANTRO_LOCAL_SMTP_*` values in `local.env` or `.env.local` can pre-populate fresh setup and local demo-mode AI/SMTP settings through Pantro’s normal encrypted local config storage
+- the helper uses `.env.local` first when present, otherwise `.env`, and creates `.env.local` from `.env.local.example` on first run
+- optional `PANTRO_LOCAL_AI_*` and `PANTRO_LOCAL_SMTP_*` values in `.env.local` can pre-populate fresh setup and local demo-mode AI/SMTP settings through Pantro’s normal encrypted local config storage
 - legacy `PANTRY_LOCAL_AI_*` and `PANTRY_LOCAL_SMTP_*` keys are also accepted by the local source stack for backward compatibility
 - local AI and SMTP bootstrap runs an initial validation pass after demo seed or setup finalize so the admin UI reflects the current status without an extra manual check
 - web changes hot reload in the browser, API changes auto-reload, and worker source changes restart the worker process in the dev stack

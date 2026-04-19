@@ -848,6 +848,21 @@ export type PantryEnrichmentPreviewResponse = {
   candidates: PantryEnrichmentCandidate[];
 };
 
+export type CanonicalItemSummary = {
+  external_id: string;
+  name: string;
+  review_status: string;
+  item_type: string;
+};
+
+export type ProductCanonicalSummary = {
+  link_external_id: string;
+  link_status: string;
+  match_method: string;
+  source_name: string | null;
+  canonical_item: CanonicalItemSummary;
+};
+
 export type PantryProductSummary = {
   product_external_id: string;
   product_name: string;
@@ -864,6 +879,7 @@ export type PantryProductSummary = {
   aliases: string[];
   barcodes: string[];
   is_in_shopping_list: boolean;
+  canonical: ProductCanonicalSummary | null;
   enrichment: ProductEnrichmentSummary | null;
   intelligence: ProductIntelligenceSummary | null;
   locations: PantryProductLocationSummary[];
@@ -878,6 +894,7 @@ export type PantryCatalogProductSummary = {
   barcodes: string[];
   notes: string | null;
   manual_ingredient_tags: string[];
+  canonical: ProductCanonicalSummary | null;
   enrichment: ProductEnrichmentSummary | null;
   intelligence: ProductIntelligenceSummary | null;
 };

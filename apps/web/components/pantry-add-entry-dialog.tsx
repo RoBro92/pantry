@@ -102,6 +102,19 @@ function buildLookupStatus(preview: PantryEnrichmentPreviewResponse, barcode: st
   return preview.message;
 }
 
+function describeDuplicateMatch(matchedProduct: PantryProductMatchSummary) {
+  if (matchedProduct.match_reason === "barcode_exact") {
+    return "This barcode already belongs to that product, so Pantro will route this lot there by default.";
+  }
+  if (matchedProduct.match_reason === "canonical_verified") {
+    return "Pantro matched this item to a verified local canonical record and will reuse the existing household product by default.";
+  }
+  if (matchedProduct.match_reason === "name_similarity") {
+    return "Pantro found a likely existing product before you add this lot. Reuse it unless you intentionally want a separate product record.";
+  }
+  return "Pantro found an existing product with the same identity.";
+}
+
 export function PantryAddEntryDialog({
   householdExternalId,
   canAdminister: _canAdminister,
@@ -142,6 +155,12 @@ export function PantryAddEntryDialog({
     lookupPreview?.candidates.find(
       (candidate) => candidate.source_product_id === selectedEnrichmentSourceProductId,
     ) ?? null;
+  const effectiveSubmitLabel =
+    matchedProduct && duplicateDecision !== "separate"
+      ? "Add lot to existing product"
+      : matchedProduct && duplicateDecision === "separate"
+        ? "Create separate product"
+        : submitLabel;
 
   function resetEnrichmentPreview() {
     setLookupPreview(null);
@@ -725,40 +744,42 @@ export function PantryAddEntryDialog({
               <div className="inline-status-card is-warning">
                 <div className="stack compact-stack">
                   <strong>{matchedProduct.name} already looks like the right product</strong>
-                  <p className="helper-text">
-                    {matchedProduct.match_reason === "barcode_exact"
-                      ? "This barcode already belongs to that product, so Pantro will route this lot there."
-                      : matchedProduct.match_reason === "name_similarity"
-                        ? "Pantro found a likely existing product before you add this lot."
-                        : "Pantro found an existing product with the same identity."}
-                  </p>
+                  <p className="helper-text">{describeDuplicateMatch(matchedProduct)}</p>
                 </div>
-                <div className="duplicate-choice-row">
-                  <button
-                    type="button"
-                    className={
-                      duplicateDecision === "existing"
-                        ? "primary-button compact-button"
-                        : "ghost-button compact-button"
-                    }
-                    onClick={() => setDuplicateDecision("existing")}
-                  >
-                    Add lot to existing product
-                  </button>
-                  {matchedProduct.can_keep_separate_product ? (
-                    <button
-                      type="button"
-                      className={
-                        duplicateDecision === "separate"
-                          ? "primary-button compact-button"
-                          : "ghost-button compact-button"
-                      }
-                      onClick={() => setDuplicateDecision("separate")}
-                    >
-                      Keep as separate product
-                    </button>
-                  ) : null}
-                </div>
+                <p className="helper-text">Default action: add this lot to the existing product.</p>
+                {matchedProduct.can_keep_separate_product ? (
+                  <details className="compact-disclosure">
+                    <summary>
+                      {duplicateDecision === "separate"
+                        ? "Separate product override selected"
+                        : "Create a separate product anyway"}
+                    </summary>
+                    <div className="compact-disclosure-body stack">
+                      <p className="helper-text">
+                        Only use a separate product if this should stay distinct in your household inventory.
+                      </p>
+                      <div className="page-actions">
+                        {duplicateDecision === "separate" ? (
+                          <button
+                            type="button"
+                            className="ghost-button compact-button"
+                            onClick={() => setDuplicateDecision("existing")}
+                          >
+                            Use existing product instead
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="ghost-button compact-button"
+                            onClick={() => setDuplicateDecision("separate")}
+                          >
+                            Create separate product
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </details>
+                ) : null}
               </div>
             </section>
           ) : null}
@@ -768,7 +789,7 @@ export function PantryAddEntryDialog({
 
           <div className="page-actions pantry-submit-actions">
             <button type="submit" className="primary-button" disabled={pending}>
-              {pending ? "Saving..." : submitLabel}
+              {pending ? "Saving..." : effectiveSubmitLabel}
             </button>
           </div>
         </form>

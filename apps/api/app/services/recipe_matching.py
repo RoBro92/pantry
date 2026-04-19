@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.models.household import Household
 from app.models.product import Product
 from app.models.product_alias import ProductAlias
+from app.services.canonical_knowledge import get_linked_product_for_canonical_name
 from app.services.pantry_normalization import normalize_lookup_name
 
 
@@ -44,6 +45,13 @@ def resolve_ingredient_product_match(
         .options(selectinload(ProductAlias.product))
     )
     if alias is None:
-        return None, "none"
+        product = get_linked_product_for_canonical_name(
+            db,
+            household=household,
+            ingredient_name=ingredient_name,
+        )
+        if product is None:
+            return None, "none"
+        return product, "automatic_canonical"
 
     return alias.product, "automatic"

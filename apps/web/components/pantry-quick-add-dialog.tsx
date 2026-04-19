@@ -103,6 +103,9 @@ function describeDuplicateMatch(matchedProduct: PantryProductMatchSummary) {
   if (matchedProduct.match_reason === "barcode_exact") {
     return "This barcode already belongs to that product record, so Pantro will add another lot there unless you clear or correct the barcode.";
   }
+  if (matchedProduct.match_reason === "canonical_verified") {
+    return "Pantro matched this item to a verified local canonical record and will reuse the existing household product on save.";
+  }
   if (matchedProduct.match_reason === "name_similarity") {
     return "Pantro found a likely existing product record. Use it by default, or keep this scan separate if that is intentional.";
   }
@@ -924,36 +927,44 @@ export function PantryQuickAddDialog({
                           {describeDuplicateMatch(currentItem.duplicateMatch)}
                         </p>
                       </div>
-                      <div className="duplicate-choice-row">
-                        <button
-                          type="button"
-                          className={
-                            currentItem.duplicateDecision === "existing"
-                              ? "primary-button compact-button"
-                              : "ghost-button compact-button"
-                          }
-                          onClick={() =>
-                            updateItem(currentItem.id, { duplicateDecision: "existing" })
-                          }
-                        >
-                          Add lot to existing product
-                        </button>
-                        {currentItem.duplicateMatch.can_keep_separate_product ? (
-                          <button
-                            type="button"
-                            className={
-                              currentItem.duplicateDecision === "separate"
-                                ? "primary-button compact-button"
-                                : "ghost-button compact-button"
-                            }
-                            onClick={() =>
-                              updateItem(currentItem.id, { duplicateDecision: "separate" })
-                            }
-                          >
-                            Keep separate
-                          </button>
-                        ) : null}
-                      </div>
+                      <p className="helper-text">Default action: save this scan as another lot on the existing product.</p>
+                      {currentItem.duplicateMatch.can_keep_separate_product ? (
+                        <details className="compact-disclosure">
+                          <summary>
+                            {currentItem.duplicateDecision === "separate"
+                              ? "Separate product override selected"
+                              : "Create a separate product anyway"}
+                          </summary>
+                          <div className="compact-disclosure-body stack">
+                            <p className="helper-text">
+                              Only use a separate product if this scan should stay distinct in your household inventory.
+                            </p>
+                            <div className="page-actions">
+                              {currentItem.duplicateDecision === "separate" ? (
+                                <button
+                                  type="button"
+                                  className="ghost-button compact-button"
+                                  onClick={() =>
+                                    updateItem(currentItem.id, { duplicateDecision: "existing" })
+                                  }
+                                >
+                                  Use existing product instead
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="ghost-button compact-button"
+                                  onClick={() =>
+                                    updateItem(currentItem.id, { duplicateDecision: "separate" })
+                                  }
+                                >
+                                  Create separate product
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </details>
+                      ) : null}
                     </div>
                   ) : null}
 

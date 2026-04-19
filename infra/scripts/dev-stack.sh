@@ -6,7 +6,6 @@ WEB_PORT="${WEB_PORT:-3000}"
 DOCKER_COMPOSE_BIN="${DOCKER_COMPOSE_BIN:-docker compose}"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 DEFAULT_DEV_ENV_FILE="${ROOT_DIR}/.env.local"
-ALT_DEV_ENV_FILE="${ROOT_DIR}/local.env"
 LEGACY_DEV_ENV_FILE="${ROOT_DIR}/.env"
 LOCAL_DEV_ENV_TEMPLATE_FILE="${ROOT_DIR}/.env.local.example"
 EXAMPLE_ENV_FILE="${ROOT_DIR}/.env.example"
@@ -28,13 +27,27 @@ compose() {
   "${COMPOSE_CMD[@]}" --env-file "${DEV_ENV_FILE}" -f "${ROOT_DIR}/compose.yml" -f "${ROOT_DIR}/compose.dev.yml" "$@"
 }
 
+forward_local_bootstrap_env() {
+  local target_name="$1"
+  local legacy_name="$2"
+  local target_value="${!target_name:-}"
+  local legacy_value="${!legacy_name:-}"
+
+  if [[ -n "${target_value}" ]]; then
+    export "${target_name}=${target_value}"
+    return
+  fi
+
+  if [[ -n "${legacy_value}" ]]; then
+    export "${target_name}=${legacy_value}"
+  fi
+}
+
 bootstrap_dev_env() {
   if [[ -n "${PANTRO_DEV_ENV_FILE:-}" ]]; then
     DEV_ENV_FILE="${PANTRO_DEV_ENV_FILE}"
   elif [[ -n "${PANTRY_DEV_ENV_FILE:-}" ]]; then
     DEV_ENV_FILE="${PANTRY_DEV_ENV_FILE}"
-  elif [[ -f "${ALT_DEV_ENV_FILE}" ]]; then
-    DEV_ENV_FILE="${ALT_DEV_ENV_FILE}"
   elif [[ -f "${DEFAULT_DEV_ENV_FILE}" ]]; then
     DEV_ENV_FILE="${DEFAULT_DEV_ENV_FILE}"
   elif [[ -f "${LEGACY_DEV_ENV_FILE}" ]]; then
@@ -58,21 +71,23 @@ bootstrap_dev_env() {
   export PANTRO_API_WATCHFILES_FORCE_POLLING="${PANTRO_API_WATCHFILES_FORCE_POLLING:-${PANTRY_API_WATCHFILES_FORCE_POLLING:-${PANTRO_WEB_WATCHPACK_POLLING}}}"
   export PANTRO_WORKER_WATCHFILES_FORCE_POLLING="${PANTRO_WORKER_WATCHFILES_FORCE_POLLING:-${PANTRY_WORKER_WATCHFILES_FORCE_POLLING:-${PANTRO_WEB_WATCHPACK_POLLING}}}"
 
-  export PANTRO_LOCAL_AI_PROVIDER_TYPE="${PANTRO_LOCAL_AI_PROVIDER_TYPE:-${PANTRY_LOCAL_AI_PROVIDER_TYPE:-}}"
-  export PANTRO_LOCAL_AI_BASE_URL="${PANTRO_LOCAL_AI_BASE_URL:-${PANTRY_LOCAL_AI_BASE_URL:-}}"
-  export PANTRO_LOCAL_AI_DEFAULT_MODEL="${PANTRO_LOCAL_AI_DEFAULT_MODEL:-${PANTRY_LOCAL_AI_DEFAULT_MODEL:-}}"
-  export PANTRO_LOCAL_AI_API_KEY="${PANTRO_LOCAL_AI_API_KEY:-${PANTRY_LOCAL_AI_API_KEY:-}}"
-  export PANTRO_LOCAL_AI_ENABLED="${PANTRO_LOCAL_AI_ENABLED:-${PANTRY_LOCAL_AI_ENABLED:-}}"
-  export PANTRO_LOCAL_SMTP_HOST="${PANTRO_LOCAL_SMTP_HOST:-${PANTRY_LOCAL_SMTP_HOST:-}}"
-  export PANTRO_LOCAL_SMTP_PORT="${PANTRO_LOCAL_SMTP_PORT:-${PANTRY_LOCAL_SMTP_PORT:-}}"
-  export PANTRO_LOCAL_SMTP_USERNAME="${PANTRO_LOCAL_SMTP_USERNAME:-${PANTRY_LOCAL_SMTP_USERNAME:-}}"
-  export PANTRO_LOCAL_SMTP_PASSWORD="${PANTRO_LOCAL_SMTP_PASSWORD:-${PANTRY_LOCAL_SMTP_PASSWORD:-}}"
-  export PANTRO_LOCAL_SMTP_FROM_EMAIL="${PANTRO_LOCAL_SMTP_FROM_EMAIL:-${PANTRY_LOCAL_SMTP_FROM_EMAIL:-}}"
-  export PANTRO_LOCAL_SMTP_FROM_NAME="${PANTRO_LOCAL_SMTP_FROM_NAME:-${PANTRY_LOCAL_SMTP_FROM_NAME:-}}"
-  export PANTRO_LOCAL_SMTP_SECURITY="${PANTRO_LOCAL_SMTP_SECURITY:-${PANTRY_LOCAL_SMTP_SECURITY:-}}"
-  export PANTRO_LOCAL_SMTP_ENABLED="${PANTRO_LOCAL_SMTP_ENABLED:-${PANTRY_LOCAL_SMTP_ENABLED:-}}"
-  export PANTRO_LOCAL_SMTP_TEST_RECIPIENT_EMAIL="${PANTRO_LOCAL_SMTP_TEST_RECIPIENT_EMAIL:-${PANTRY_LOCAL_SMTP_TEST_RECIPIENT_EMAIL:-}}"
-  export PANTRO_LOCAL_SMTP_PASSWORD_RESET_ENABLED="${PANTRO_LOCAL_SMTP_PASSWORD_RESET_ENABLED:-${PANTRY_LOCAL_SMTP_PASSWORD_RESET_ENABLED:-}}"
+  # Only forward shell-provided local bootstrap variables when they are explicitly set.
+  # This avoids overriding .env.local values with empty exported variables.
+  forward_local_bootstrap_env "PANTRO_LOCAL_AI_PROVIDER_TYPE" "PANTRY_LOCAL_AI_PROVIDER_TYPE"
+  forward_local_bootstrap_env "PANTRO_LOCAL_AI_BASE_URL" "PANTRY_LOCAL_AI_BASE_URL"
+  forward_local_bootstrap_env "PANTRO_LOCAL_AI_DEFAULT_MODEL" "PANTRY_LOCAL_AI_DEFAULT_MODEL"
+  forward_local_bootstrap_env "PANTRO_LOCAL_AI_API_KEY" "PANTRY_LOCAL_AI_API_KEY"
+  forward_local_bootstrap_env "PANTRO_LOCAL_AI_ENABLED" "PANTRY_LOCAL_AI_ENABLED"
+  forward_local_bootstrap_env "PANTRO_LOCAL_SMTP_HOST" "PANTRY_LOCAL_SMTP_HOST"
+  forward_local_bootstrap_env "PANTRO_LOCAL_SMTP_PORT" "PANTRY_LOCAL_SMTP_PORT"
+  forward_local_bootstrap_env "PANTRO_LOCAL_SMTP_USERNAME" "PANTRY_LOCAL_SMTP_USERNAME"
+  forward_local_bootstrap_env "PANTRO_LOCAL_SMTP_PASSWORD" "PANTRY_LOCAL_SMTP_PASSWORD"
+  forward_local_bootstrap_env "PANTRO_LOCAL_SMTP_FROM_EMAIL" "PANTRY_LOCAL_SMTP_FROM_EMAIL"
+  forward_local_bootstrap_env "PANTRO_LOCAL_SMTP_FROM_NAME" "PANTRY_LOCAL_SMTP_FROM_NAME"
+  forward_local_bootstrap_env "PANTRO_LOCAL_SMTP_SECURITY" "PANTRY_LOCAL_SMTP_SECURITY"
+  forward_local_bootstrap_env "PANTRO_LOCAL_SMTP_ENABLED" "PANTRY_LOCAL_SMTP_ENABLED"
+  forward_local_bootstrap_env "PANTRO_LOCAL_SMTP_TEST_RECIPIENT_EMAIL" "PANTRY_LOCAL_SMTP_TEST_RECIPIENT_EMAIL"
+  forward_local_bootstrap_env "PANTRO_LOCAL_SMTP_PASSWORD_RESET_ENABLED" "PANTRY_LOCAL_SMTP_PASSWORD_RESET_ENABLED"
 }
 
 legacy_compose_down() {
@@ -96,7 +111,7 @@ Modes:
   demo   Reset and seed stable demo data, then land on /login
 
 Notes:
-  - Uses local.env first when present, otherwise .env.local, then .env, and bootstraps .env.local from .env.local.example when needed.
+  - Uses .env.local first when present, otherwise .env, and bootstraps .env.local from .env.local.example when needed.
   - Start replaces the whole local dev stack so web, api, and worker all come up fresh together.
   - Reset re-seeds the running stack without forcing container replacement.
   - Use rebuild after Dockerfile or dependency changes.

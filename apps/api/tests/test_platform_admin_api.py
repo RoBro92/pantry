@@ -1246,3 +1246,27 @@ def test_location_qr_links_use_configured_public_base_url_and_access_is_scoped(c
     login(client, email="outsider@example.com")
     denied_response = client.get(f"/api/locations/{location.external_id}")
     assert denied_response.status_code == 404
+
+
+def test_public_base_url_environment_override_takes_precedence_over_saved_value(client, db_session, monkeypatch):
+    create_platform_admin(
+        db_session,
+        email="public-url-admin@example.com",
+        password=PASSWORD,
+        display_name="Public URL Admin",
+    )
+    login(client, email="public-url-admin@example.com")
+
+    settings = replace(get_settings(), public_browser_base_url="https://env.example.com")
+    monkeypatch.setattr("app.services.instance_settings.get_settings", lambda: settings)
+
+    response = client.put(
+        "/api/platform-admin/settings/public-base-url",
+        json={"public_base_url": "https://saved.example.com"},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["stored_value"] == "https://saved.example.com"
+    assert payload["effective_value"] == "https://env.example.com"
+    assert payload["effective_source"] == "environment"

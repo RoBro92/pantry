@@ -30,6 +30,7 @@ class Product(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     barcodes = relationship("Barcode", back_populates="product")
     enrichments = relationship("ProductEnrichment", back_populates="product")
     intelligence_records = relationship("ProductIntelligence", back_populates="product")
+    canonical_link = relationship("ProductCanonicalLink", back_populates="product", uselist=False)
     stock_lots = relationship("StockLot", back_populates="product")
     shopping_list_items = relationship("ShoppingListItem", back_populates="product")
     recipe_ingredients = relationship("RecipeIngredient", back_populates="product")
