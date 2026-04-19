@@ -16,10 +16,12 @@ import { ModalShell } from "./modal-shell";
 type ProductIntelligenceRunDialogProps = {
   householdExternalId: string;
   catalogProducts: PantryCatalogProductSummary[];
+  initialMode?: RunMode;
+  initialProductExternalId?: string | null;
   onClose: () => void;
 };
 
-type RunMode = "all" | "product" | "unclassified";
+type RunMode = "all" | "product" | "stale" | "unclassified";
 
 const ACTIVE_RUN_STATUSES = new Set(["queued", "running"]);
 
@@ -75,14 +77,18 @@ function formatApproxTokens(value: number) {
 export function ProductIntelligenceRunDialog({
   householdExternalId,
   catalogProducts,
+  initialMode = "unclassified",
+  initialProductExternalId = null,
   onClose
 }: ProductIntelligenceRunDialogProps) {
   const [status, setStatus] = useState<ProductIntelligenceStatusResponse | null>(null);
   const [currentRun, setCurrentRun] = useState<ProductIntelligenceRunResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [mode, setMode] = useState<RunMode>("unclassified");
+  const [mode, setMode] = useState<RunMode>(initialMode);
   const [query, setQuery] = useState("");
-  const [selectedProductExternalId, setSelectedProductExternalId] = useState("");
+  const [selectedProductExternalId, setSelectedProductExternalId] = useState(
+    initialProductExternalId ?? ""
+  );
   const [isLoadingStatus, setIsLoadingStatus] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -116,6 +122,14 @@ export function ProductIntelligenceRunDialog({
   const normalizedProviderType = normalizeAIProviderType(status?.provider_type);
   const providerSupport = normalizedProviderType ? getAIProviderSupport(normalizedProviderType) : null;
   const runDetails = currentRun;
+
+  useEffect(() => {
+    setMode(initialMode);
+  }, [initialMode]);
+
+  useEffect(() => {
+    setSelectedProductExternalId(initialProductExternalId ?? "");
+  }, [initialProductExternalId]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -294,6 +308,7 @@ export function ProductIntelligenceRunDialog({
                   <span>Mode</span>
                   <select value={mode} onChange={(event) => setMode(event.target.value as RunMode)}>
                     <option value="unclassified">Classify unclassified only</option>
+                    <option value="stale">Refresh stale only</option>
                     <option value="all">Classify all products</option>
                     <option value="product">Classify one product</option>
                   </select>

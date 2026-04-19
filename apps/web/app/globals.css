@@ -191,6 +191,11 @@ code {
   flex-wrap: wrap;
 }
 
+.dashboard-welcome-panel {
+  display: grid;
+  gap: 0.45rem;
+}
+
 .primary-link,
 .secondary-link,
 .primary-button,
@@ -395,6 +400,11 @@ code {
   grid-template-columns: 18.5rem minmax(0, 1fr);
 }
 
+.mobile-shell-header,
+.mobile-bottom-nav {
+  display: none;
+}
+
 .sidebar {
   display: grid;
   position: sticky;
@@ -423,11 +433,120 @@ code {
   font-weight: 700;
 }
 
-.nav-list a {
+.shell-nav-link,
+.mobile-household-pill,
+.mobile-bottom-nav-link {
   padding: 0.72rem 0.82rem;
   border-radius: 14px;
   border: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.35);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.shell-nav-link-active,
+.mobile-household-pill-active,
+.mobile-bottom-nav-link-active {
+  border-color: transparent;
+  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+  color: #fff9f0;
+}
+
+.mobile-shell-header {
+  gap: 0.85rem;
+  padding: 0.95rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  background: var(--panel);
+  box-shadow: var(--shadow-soft);
+  backdrop-filter: blur(16px);
+  position: relative;
+  z-index: 20;
+  isolation: isolate;
+  overflow: visible;
+}
+
+.mobile-shell-topbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.85rem;
+  align-items: start;
+}
+
+.mobile-shell-title {
+  font-size: clamp(1.4rem, 5vw, 2rem);
+}
+
+.mobile-shell-utility-links,
+.mobile-household-switcher,
+.mobile-household-nav {
+  display: flex;
+  gap: 0.75rem;
+  overflow-x: auto;
+  padding-bottom: 0.1rem;
+}
+
+.mobile-shell-utility-links .shell-nav-link,
+.mobile-household-switcher .mobile-household-pill,
+.mobile-household-nav .shell-nav-link {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.mobile-account-menu {
+  position: relative;
+  display: grid;
+  justify-items: end;
+  gap: 0.5rem;
+  z-index: 30;
+}
+
+.mobile-account-menu summary {
+  list-style: none;
+}
+
+.mobile-account-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.mobile-account-menu-trigger {
+  width: auto;
+  min-width: 5.25rem;
+}
+
+.mobile-account-menu-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 29;
+  border: 0;
+  background: transparent;
+}
+
+.mobile-account-menu-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.5rem);
+  z-index: 30;
+  display: grid;
+  gap: 0.65rem;
+  width: min(17rem, calc(100vw - 2rem));
+  max-height: min(24rem, calc(100dvh - 6rem));
+  padding: 0.8rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 20px;
+  background: rgba(255, 248, 239, 0.98);
+  box-shadow: var(--shadow);
+  overflow: auto;
+}
+
+.mobile-account-menu-links {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.mobile-account-menu-links .shell-nav-link,
+.mobile-account-menu-logout {
+  width: 100%;
 }
 
 .sidebar-admin-link {
@@ -592,6 +711,8 @@ code {
 }
 
 .household-card {
+  display: grid;
+  gap: 0.8rem;
   padding: 1.25rem;
   border: 1px solid var(--border);
   border-radius: 22px;
@@ -1250,7 +1371,9 @@ button.smtp-template-pill {
   z-index: 50;
   display: grid;
   place-items: center;
-  padding: 1rem;
+  padding: 0.75rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   background: rgba(39, 29, 19, 0.38);
   backdrop-filter: blur(6px);
 }
@@ -1260,8 +1383,8 @@ button.smtp-template-pill {
 }
 
 .modal-panel {
-  width: min(680px, 100%);
-  max-height: calc(100vh - 2rem);
+  width: min(680px, calc(100vw - 1rem));
+  max-height: min(calc(100dvh - 1rem), calc(100vh - 1rem));
   display: grid;
   gap: 1rem;
   padding: 1.5rem;
@@ -1270,6 +1393,7 @@ button.smtp-template-pill {
   background: var(--panel-strong);
   box-shadow: var(--shadow);
   overflow: auto;
+  overscroll-behavior: contain;
 }
 
 .modal-panel-wide {
@@ -1407,6 +1531,15 @@ button.smtp-template-pill {
 
 .release-notes-panel {
   pointer-events: auto;
+  width: min(680px, calc(100vw - 1rem));
+}
+
+.release-notes-panel,
+.release-notes-panel p,
+.release-notes-panel li,
+.release-notes-panel a,
+.release-notes-panel strong {
+  overflow-wrap: anywhere;
 }
 
 .modal-close-button {
@@ -1531,6 +1664,26 @@ button.smtp-template-pill {
   gap: 0.75rem;
 }
 
+.pantry-primary-actions {
+  justify-content: flex-end;
+}
+
+.pantry-secondary-toolbar {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.pantry-secondary-links,
+.pantry-inline-action-row {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.pantry-mobile-add-note {
+  display: none;
+}
+
 .compact-link,
 .compact-button {
   min-height: 2.45rem;
@@ -1616,6 +1769,41 @@ button.smtp-template-pill {
 
 .pantry-add-form {
   gap: 0.85rem;
+}
+
+.pantry-add-grid-core {
+  grid-template-columns: minmax(0, 1.3fr) repeat(3, minmax(150px, 0.6fr));
+}
+
+.pantry-add-grid-optional {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.stock-lot-form-grid {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.scan-first-panel,
+.scan-first-header,
+.scanner-inline-shell {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.scan-first-panel {
+  padding: 1rem;
+  border-radius: 22px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.48);
+}
+
+.scan-first-header {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+}
+
+.scanner-inline-shell {
+  padding-top: 0.2rem;
 }
 
 .modal-form-section:first-of-type {
@@ -1844,6 +2032,20 @@ button.smtp-template-pill {
   flex-wrap: wrap;
 }
 
+.inventory-row-actions-compact {
+  justify-content: flex-start;
+}
+
+.inventory-wrap-text {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.inventory-product-name {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 .inventory-expanded-row td {
   background: rgba(255, 255, 255, 0.26);
 }
@@ -1851,6 +2053,74 @@ button.smtp-template-pill {
 .inventory-list {
   display: grid;
   gap: 1rem;
+}
+
+.inventory-mobile-list {
+  display: none;
+  gap: 0.75rem;
+}
+
+.inventory-mobile-card {
+  display: grid;
+  gap: 0.6rem;
+  padding: 0.78rem 0.82rem;
+  border-radius: 22px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.52);
+}
+
+.inventory-mobile-card-header {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.inventory-mobile-detail {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.inventory-mobile-meta {
+  display: grid;
+  gap: 0.5rem 0.8rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+}
+
+.inventory-mobile-meta > div {
+  min-width: 0;
+}
+
+.inventory-mobile-meta dt {
+  color: var(--accent-strong);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.inventory-mobile-meta dd {
+  margin: 0.2rem 0 0;
+  color: var(--muted);
+}
+
+.inventory-mobile-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+
+.inventory-mobile-action-button,
+.inventory-mobile-action-spacer {
+  min-width: 0;
+}
+
+.inventory-mobile-action-button {
+  width: 100%;
+}
+
+.inventory-detail-grid-compact {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.75rem;
 }
 
 .inventory-list-card h3 {
@@ -1880,7 +2150,7 @@ button.smtp-template-pill {
   justify-content: center;
   gap: 0.45rem;
   flex-wrap: wrap;
-  min-width: 12rem;
+  min-width: 0;
 }
 
 .pantry-inventory-table th:first-child,
@@ -2042,6 +2312,7 @@ button.smtp-template-pill {
 
 .pantry-lot-row-heading-compact {
   gap: 0.35rem 0.8rem;
+  align-items: flex-start;
 }
 
 .pantry-lot-inline-grid {
@@ -2096,19 +2367,25 @@ button.smtp-template-pill {
 .lot-action-button {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 2.2rem;
-  min-width: 2.2rem;
-  height: 2.2rem;
+  justify-content: flex-start;
+  width: auto;
+  min-width: 0;
+  height: auto;
   border-radius: 13px;
   border: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.76);
   color: var(--text);
+  padding: 0.55rem 0.72rem;
+  gap: 0.45rem;
   transition: transform 120ms ease, background-color 120ms ease, border-color 120ms ease;
 }
 
 .lot-action-button:hover {
   transform: translateY(-1px);
+}
+
+.lot-action-button .icon-button-label {
+  display: inline;
 }
 
 .lot-action-button svg {
@@ -2636,6 +2913,7 @@ button.smtp-template-pill {
   }
 
   .pantry-filter-bar,
+  .pantry-add-grid-core,
   .shopping-add-form,
   .shopping-add-form-compact,
   .pantry-quick-add-session-grid,
@@ -2665,10 +2943,10 @@ button.smtp-template-pill {
   }
 }
 
-@media (max-width: 640px) {
+@media (max-width: 640px), ((max-height: 500px) and (orientation: landscape)) {
   .page-shell {
     width: min(100%, calc(100% - 1rem));
-    padding: 1rem 0 2.5rem;
+    padding: 1rem 0 6.5rem;
   }
 
   .auth-stage-shell,
@@ -2681,6 +2959,49 @@ button.smtp-template-pill {
 
   .wizard-actions {
     flex-direction: column-reverse;
+  }
+
+  .mobile-shell-header {
+    display: grid;
+    gap: 0.85rem;
+    margin-bottom: 1rem;
+  }
+
+  .mobile-bottom-nav {
+    position: fixed;
+    left: 0.5rem;
+    right: 0.5rem;
+    bottom: 0.5rem;
+    z-index: 30;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.55rem;
+    padding: 0.7rem;
+    border: 1px solid var(--border-strong);
+    border-radius: 24px;
+    background: rgba(255, 248, 239, 0.94);
+    box-shadow: var(--shadow);
+    backdrop-filter: blur(18px);
+  }
+
+  .mobile-bottom-nav-link {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 3rem;
+    padding: 0.65rem 0.45rem;
+    text-align: center;
+    font-size: 0.78rem;
+    font-weight: 700;
+  }
+
+  .mobile-bottom-nav-link-text {
+    display: block;
+    line-height: 1.1;
+  }
+
+  .sidebar {
+    display: none;
   }
 
   .wizard-actions-group {
@@ -2700,6 +3021,86 @@ button.smtp-template-pill {
   .primary-button,
   .ghost-button {
     width: 100%;
+  }
+
+  .mobile-shell-utility-links .shell-nav-link,
+  .mobile-household-switcher .mobile-household-pill,
+  .mobile-household-nav .shell-nav-link,
+  .mobile-account-menu-trigger,
+  .household-card-actions > .primary-link,
+  .household-card-actions > .secondary-link,
+  .pantry-inline-action-row > .ghost-button,
+  .pantry-inline-action-row > .primary-button {
+    width: auto;
+  }
+
+  .pantry-primary-actions,
+  .pantry-secondary-links,
+  .pantry-admin-actions {
+    display: none;
+  }
+
+  .pantry-mobile-add-note {
+    display: block;
+  }
+
+  .inventory-mobile-list {
+    display: grid;
+  }
+
+  .inventory-desktop-table {
+    display: none;
+  }
+
+  .inventory-mobile-card-header .pantry-status-pill-pair {
+    justify-content: flex-start;
+    min-width: 0;
+  }
+
+  .inventory-mobile-detail {
+    padding-top: 0.35rem;
+    border-top: 1px solid var(--border);
+  }
+
+  .inventory-mobile-meta,
+  .pantry-add-grid-optional,
+  .stock-lot-form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .lot-actions-row {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .pantry-lot-list-compact {
+    max-height: none;
+    overflow: visible;
+    padding-right: 0;
+  }
+
+  .scan-first-header {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .modal-panel-mobile-shell {
+    width: min(100vw, 100%);
+    min-height: 100dvh;
+    max-height: 100dvh;
+    margin: 0;
+    border-radius: 0;
+    border-inline: none;
+    overflow: auto;
+  }
+
+  .modal-panel-stock-lot {
+    width: min(32rem, calc(100vw - 1rem));
+    min-height: 0;
+    max-height: min(calc(100dvh - 1rem), calc(100vh - 1rem));
+    margin: 0;
+    border-radius: 24px;
+    border-inline: 1px solid var(--border);
+    overflow: auto;
   }
 
   .token-input-row {
@@ -2772,7 +3173,6 @@ button.smtp-template-pill {
   .shopping-row-heading,
   .shopping-history-item-row,
   .activity-feed-item,
-  .lot-actions-row,
   .inline-form,
   .login-helper-row,
   .duplicate-choice-row,
@@ -2839,7 +3239,6 @@ button.smtp-template-pill {
     min-width: 0;
   }
 
-  .lot-action-button,
   .shopping-icon-button {
     width: auto;
     min-width: 0;
@@ -2849,8 +3248,12 @@ button.smtp-template-pill {
     justify-content: flex-start;
   }
 
-  .icon-button-label {
-    display: inline;
+  .shopping-icon-button .icon-button-label {
+    display: none;
+  }
+
+  .lot-actions-row {
+    justify-content: flex-start;
   }
 
   .activity-feed-item {

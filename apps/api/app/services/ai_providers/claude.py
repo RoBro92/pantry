@@ -8,6 +8,7 @@ import httpx
 
 from app.domain.ai import AI_HEALTH_HEALTHY, AI_HEALTH_UNHEALTHY
 from app.services.ai_providers.base import (
+    AIUsageMetrics,
     AIProviderHealth,
     AIProviderRuntimeConfig,
     StructuredCompletionRequest,
@@ -131,6 +132,30 @@ class ClaudeProviderAdapter:
                     output_text=json.dumps(parsed_output),
                     parsed_output=parsed_output,
                     provider_request_id=body.get("id"),
+                    usage=_extract_claude_usage(body),
                 )
 
         raise ValueError("Claude did not return the structured response tool payload.")
+
+
+def _extract_claude_usage(body: dict[str, Any]) -> AIUsageMetrics | None:
+    usage = body.get("usage")
+    if not isinstance(usage, dict):
+        return None
+
+    input_tokens = usage.get("input_tokens")
+    output_tokens = usage.get("output_tokens")
+    if not any(isinstance(value, int) for value in (input_tokens, output_tokens)):
+        return None
+
+    resolved_input = input_tokens if isinstance(input_tokens, int) else None
+    resolved_output = output_tokens if isinstance(output_tokens, int) else None
+    total_tokens = None
+    if resolved_input is not None or resolved_output is not None:
+        total_tokens = (resolved_input or 0) + (resolved_output or 0)
+
+    return AIUsageMetrics(
+        input_tokens=resolved_input,
+        output_tokens=resolved_output,
+        total_tokens=total_tokens,
+    )

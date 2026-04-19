@@ -79,7 +79,7 @@ export function ShoppingListAddDialog({
       description={
         sourceType === "pantry_depleted"
           ? `Start from ${formatQuantityWithUnit(defaultQuantity, defaultUnit, "1")} and adjust the replenishment amount if needed.`
-          : `Choose the amount to add. Defaulting to ${formatQuantityWithUnit(defaultQuantity, defaultUnit, "1")} keeps the request explicit.`
+          : `Choose the amount to add. Default is ${formatQuantityWithUnit(defaultQuantity, defaultUnit, "1")}`
       }
       onClose={onClose}
     >

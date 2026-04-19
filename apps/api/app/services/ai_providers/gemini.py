@@ -7,6 +7,7 @@ import httpx
 
 from app.domain.ai import AI_HEALTH_HEALTHY, AI_HEALTH_UNHEALTHY
 from app.services.ai_providers.base import (
+    AIUsageMetrics,
     AIProviderHealth,
     AIProviderRuntimeConfig,
     StructuredCompletionRequest,
@@ -135,4 +136,23 @@ class GeminiProviderAdapter:
             output_text=output_text,
             parsed_output=parsed_output,
             provider_request_id=body.get("responseId"),
+            usage=_extract_gemini_usage(body),
         )
+
+
+def _extract_gemini_usage(body: dict[str, object]) -> AIUsageMetrics | None:
+    usage = body.get("usageMetadata")
+    if not isinstance(usage, dict):
+        return None
+
+    input_tokens = usage.get("promptTokenCount")
+    output_tokens = usage.get("candidatesTokenCount")
+    total_tokens = usage.get("totalTokenCount")
+    if not any(isinstance(value, int) for value in (input_tokens, output_tokens, total_tokens)):
+        return None
+
+    return AIUsageMetrics(
+        input_tokens=input_tokens if isinstance(input_tokens, int) else None,
+        output_tokens=output_tokens if isinstance(output_tokens, int) else None,
+        total_tokens=total_tokens if isinstance(total_tokens, int) else None,
+    )

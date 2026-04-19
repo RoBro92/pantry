@@ -1,39 +1,19 @@
 import Link from "next/link";
-import { StatusCard } from "../../../components/status-card";
-import { getHouseholdRoleLabel, getPlatformRoleLabel } from "../../../lib/role-labels";
+import { getHouseholdRoleLabel } from "../../../lib/role-labels";
 import { requireSession } from "../../../lib/server-auth";
 
 export default async function SessionPage() {
   const session = await requireSession();
+  const displayName = session.user.display_name ?? session.user.email;
 
   return (
     <div className="stack">
-      <section className="panel">
-        <h1>Welcome back {session.user.display_name ?? session.user.email}</h1>
+      <section className="panel dashboard-welcome-panel">
+        <p className="eyebrow">Dashboard</p>
+        <h1>Welcome back {displayName}</h1>
         <p className="helper-text">
-          Logged in as {session.user.display_name ?? session.user.email}
+          {session.memberships.length} household{session.memberships.length === 1 ? "" : "s"} ready.
         </p>
-        <p>
-          This is your Pantro dashboard, where you can access your households, view your memberships, and manage your account. Use the links below to navigate to different sections of the app and start organizing your pantry!
-        </p>
-      </section>
-
-      <section className="status-grid">
-        <StatusCard
-          title="User"
-          value={session.user.display_name ?? session.user.email}
-          detail={session.user.email}
-        />
-        <StatusCard
-          title="Platform Role"
-          value={getPlatformRoleLabel(session.user.platform_role)}
-          detail="Platform-wide access for this signed-in account."
-        />
-        <StatusCard
-          title="Memberships"
-          value={String(session.memberships.length)}
-          detail="Household relationships are resolved server-side."
-        />
       </section>
 
       <section className="panel">
@@ -67,28 +47,28 @@ export default async function SessionPage() {
           <div className="household-card-grid">
             {session.memberships.map((membership) => (
               <article key={membership.external_id} className="household-card">
-                <div>
+                <div className="stack compact-stack">
                   <strong>{membership.household_name}</strong>
                   <p>{getHouseholdRoleLabel(membership.role)}</p>
                 </div>
                 <div className="household-card-actions">
                   <Link
                     href={`/app/households/${membership.household_external_id}`}
-                    className="primary-link"
+                    className="primary-link compact-link"
                   >
-                    Open Inventory
+                    Inventory
                   </Link>
                   <Link
                     href={`/app/households/${membership.household_external_id}/recipes`}
-                    className="secondary-link"
+                    className="secondary-link compact-link"
                   >
-                    Open recipes
+                    Recipes
                   </Link>
                   <Link
                     href={`/app/households/${membership.household_external_id}/ai`}
-                    className="secondary-link"
+                    className="secondary-link compact-link"
                   >
-                    Meal suggestions
+                    Meals
                   </Link>
                 </div>
               </article>

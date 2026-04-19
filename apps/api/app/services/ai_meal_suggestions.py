@@ -28,16 +28,17 @@ from app.schemas.ai import (
     CompletedAIMealSuggestionIngredient,
 )
 from app.services.ai_config import (
+    RUNTIME_HEALTH_CACHE_SOURCE_CACHED,
+    get_runtime_provider_health,
     provider_is_ready_for_runtime,
     record_provider_runtime_failure,
-    refresh_provider_health,
     resolve_provider_config,
 )
 from app.services.ai_meal_context import build_ai_meal_context, build_meal_planner_response
 from app.services.ai_meal_prompts import build_ai_meal_prompt_plan
 from app.services.ai_providers import StructuredCompletionRequest, build_ai_provider_adapter
 from app.services.ai_providers.errors import AIProviderError
-from app.services.ai_runtime import normalize_ai_error
+from app.services.ai_runtime import estimate_ai_payload_tokens, normalize_ai_error, serialize_ai_usage_metrics
 from app.services.ai_suggestions import build_household_ai_feature_status
 from app.services.audit import record_audit_event
 from app.services.pantry_normalization import lookup_token_overlap, normalize_lookup_name, normalize_unit
@@ -306,7 +307,8 @@ def generate_ai_meal_suggestions(
     if not runtime_ready:
         raise ValueError(runtime_reason or "The AI provider configuration is incomplete.")
 
-    health = refresh_provider_health(db, config=resolved.record)
+    health_result = get_runtime_provider_health(db, config=resolved.record)
+    health = health_result.health
     feature = build_household_ai_feature_status(db, household=access.household)
     if not health.is_healthy or not feature.available:
         raise ValueError(feature.reason or health.message or "The AI provider is unavailable.")
@@ -320,6 +322,7 @@ def generate_ai_meal_suggestions(
         request=request,
         context_payload=context_bundle.payload,
     )
+    approx_input_tokens = estimate_ai_payload_tokens(prompt_plan.user_payload)
     adapter = build_ai_provider_adapter(resolved.runtime)
 
     logger.info(
@@ -331,6 +334,12 @@ def generate_ai_meal_suggestions(
         model=resolved.record.default_model,
         pantry_only=request.pantry_only,
         meal_type=request.meal_type,
+        approx_input_tokens=approx_input_tokens,
+        approx_context_tokens=context_bundle.diagnostics["approx_context_tokens"],
+        provider_health_source=health_result.source,
+        provider_health_cache_age_seconds=health_result.cache_age_seconds,
+        used_cached_health_check=health_result.source == RUNTIME_HEALTH_CACHE_SOURCE_CACHED,
+        applied_optimizations=context_bundle.diagnostics["applied_optimizations"],
     )
     record_audit_event(
         db,
@@ -349,6 +358,10 @@ def generate_ai_meal_suggestions(
             "pantry_only": request.pantry_only,
             "allow_extra_ingredients": request.allow_extra_ingredients,
             "selected_user_external_ids": request.selected_user_external_ids,
+            "approx_input_tokens": approx_input_tokens,
+            "provider_health_source": health_result.source,
+            "provider_health_cache_age_seconds": health_result.cache_age_seconds,
+            "context_optimizations": context_bundle.diagnostics["applied_optimizations"],
         },
     )
     db.commit()
@@ -389,6 +402,8 @@ def generate_ai_meal_suggestions(
             provider_type=resolved.record.provider_type,
             model=resolved.record.default_model,
             error=ai_error.technical_message,
+            provider_health_source=health_result.source,
+            approx_input_tokens=approx_input_tokens,
         )
         record_audit_event(
             db,
@@ -402,6 +417,8 @@ def generate_ai_meal_suggestions(
                 "provider_type": resolved.record.provider_type,
                 "default_model": resolved.record.default_model,
                 "error": ai_error.technical_message,
+                "provider_health_source": health_result.source,
+                "approx_input_tokens": approx_input_tokens,
             },
         )
         db.commit()
@@ -426,6 +443,7 @@ def generate_ai_meal_suggestions(
     ]
 
     duration_ms = round((perf_counter() - started) * 1000, 2)
+    provider_usage = serialize_ai_usage_metrics(completion.usage)
     logger.info(
         "ai.meal_suggestion.request.completed",
         household_external_id=access.household.external_id,
@@ -435,6 +453,10 @@ def generate_ai_meal_suggestions(
         suggestion_count=len(suggestions),
         duration_ms=duration_ms,
         provider_request_id=completion.provider_request_id,
+        approx_input_tokens=approx_input_tokens,
+        provider_usage=provider_usage,
+        provider_health_source=health_result.source,
+        applied_optimizations=context_bundle.diagnostics["applied_optimizations"],
     )
     record_audit_event(
         db,
@@ -449,6 +471,11 @@ def generate_ai_meal_suggestions(
             "default_model": resolved.record.default_model,
             "suggestion_count": len(suggestions),
             "duration_ms": duration_ms,
+            "approx_input_tokens": approx_input_tokens,
+            "provider_usage": provider_usage,
+            "provider_health_source": health_result.source,
+            "provider_health_cache_age_seconds": health_result.cache_age_seconds,
+            "context_optimizations": context_bundle.diagnostics["applied_optimizations"],
         },
     )
     db.commit()

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import type { ReleaseCheckResponse } from "../lib/api-types";
 import { postToApi } from "../lib/client-api";
+import { ModalShell } from "./modal-shell";
 
 type AdminReleaseNotesDialogProps = {
   initialReleaseStatus: ReleaseCheckResponse;
@@ -40,16 +41,16 @@ export function AdminReleaseNotesDialog({
   }
 
   return (
-    <div className="modal-backdrop release-notes-backdrop" role="presentation">
-      <section
-        className="modal-panel release-notes-panel"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="whats-new-title"
-        data-testid="admin-whats-new-dialog"
-      >
-        <p className="eyebrow">What Changed</p>
-        <h2 id="whats-new-title">Pantro {currentRelease.version}</h2>
+    <ModalShell
+      title="What Changed"
+      description={`Pantro ${currentRelease.version}`}
+      onClose={() => setHidden(true)}
+      closeOnBackdropClick={false}
+      showCloseButton={false}
+      panelClassName="modal-panel release-notes-panel"
+    >
+      <div aria-labelledby="whats-new-title" data-testid="admin-whats-new-dialog" className="stack">
+        <h2 id="whats-new-title">Highlights</h2>
         {currentRelease.changelog_summary ? (
           <div className="info-callout">
             <strong>Release summary</strong>
@@ -83,7 +84,7 @@ export function AdminReleaseNotesDialog({
             Review later
           </button>
         </div>
-      </section>
-    </div>
+      </div>
+    </ModalShell>
   );
 }

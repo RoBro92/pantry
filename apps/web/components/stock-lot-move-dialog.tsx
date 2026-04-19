@@ -12,6 +12,7 @@ type StockLotMoveDialogProps = {
   lotExternalId: string;
   currentLocationExternalId: string;
   currentQuantity: string;
+  unit?: string;
   locations: PantryLocationSummary[];
   onClose: () => void;
 };
@@ -21,6 +22,7 @@ export function StockLotMoveDialog({
   lotExternalId,
   currentLocationExternalId,
   currentQuantity,
+  unit,
   locations,
   onClose,
 }: StockLotMoveDialogProps) {
@@ -50,11 +52,16 @@ export function StockLotMoveDialog({
   }
 
   return (
-    <ModalShell title="Move stock lot" description="Move all or part of this lot to another storage location." onClose={onClose}>
+    <ModalShell
+      title="Move stock lot"
+      description="Move all or part of this lot to another storage location."
+      onClose={onClose}
+      panelClassName="modal-panel modal-panel-stock-lot"
+    >
       <form className="stack" onSubmit={handleSubmit}>
-        <div className="content-grid">
+        <div className="content-grid stock-lot-form-grid">
           <label className="field">
-            <span>Quantity to move</span>
+            <span>Quantity to move{unit ? ` (${unit})` : ""}</span>
             <input
               type="number"
               min="0.001"

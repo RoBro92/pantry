@@ -277,7 +277,7 @@ export function AdminAIConfigForm({
     config?.health_error ??
     (
       effectiveHealthStatus === "unknown"
-        ? "No health check has been recorded yet. Pantro rechecks provider health when AI requests run."
+        ? "No health check has been recorded yet. Pantro reuses recent runtime checks and refreshes stale provider health when needed."
         : "No issues reported."
     );
 
@@ -291,8 +291,9 @@ export function AdminAIConfigForm({
           automatically, secrets are not shown after save, and secrets are never written to logs.
         </p>
         <p className="helper-text">
-          Pantro records provider health when you save or explicitly recheck it here, and AI requests
-          also perform a fresh health check before they run.
+          Pantro records provider health when you save or explicitly recheck it here. Normal AI
+          requests reuse recent health results when they are still fresh and only fall back to a new
+          runtime check when needed.
         </p>
         <p className={`helper-text${providerSupport.isCurrentlySupported ? "" : " is-error"}`}>
           {providerSupport.statusLabel}. {providerSupport.description}

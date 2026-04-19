@@ -52,6 +52,7 @@ export function StockLotDeleteDialog({
       title="Use up stock lot"
       description={`Remove ${formatQuantityWithUnit(quantity, unit)} of ${productName}, or add the same amount to the shopping list first.`}
       onClose={onClose}
+      panelClassName="modal-panel modal-panel-stock-lot"
     >
       <div className="stack">
         <p className="helper-text">

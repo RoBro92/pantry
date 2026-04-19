@@ -1,6 +1,7 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 type ModalShellProps = {
   title: string;
@@ -21,7 +22,44 @@ export function ModalShell({
   panelClassName,
   children,
 }: ModalShellProps) {
-  return (
+  const panelRef = useRef<HTMLElement | null>(null);
+  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (typeof document === "undefined") {
+      return;
+    }
+
+    setPortalTarget(document.body);
+  }, []);
+
+  useEffect(() => {
+    if (typeof document === "undefined") {
+      return;
+    }
+
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+
+    const frame = window.requestAnimationFrame(() => {
+      panelRef.current?.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      document.body.style.overflow = previousBodyOverflow;
+      document.documentElement.style.overflow = previousHtmlOverflow;
+    };
+  }, []);
+
+  if (!portalTarget) {
+    return null;
+  }
+
+  return createPortal(
     <div
       className="modal-backdrop"
       role="presentation"
@@ -32,6 +70,7 @@ export function ModalShell({
       }}
     >
       <section
+        ref={panelRef}
         className={panelClassName ?? "modal-panel"}
         role="dialog"
         aria-modal="true"
@@ -51,6 +90,7 @@ export function ModalShell({
         </div>
         {children}
       </section>
-    </div>
+    </div>,
+    portalTarget,
   );
 }
