@@ -8,6 +8,7 @@ import httpx
 
 from app.domain.ai import AI_HEALTH_HEALTHY, AI_HEALTH_UNHEALTHY
 from app.services.ai_providers.base import (
+    AIUsageMetrics,
     AIProviderHealth,
     AIProviderRuntimeConfig,
     StructuredCompletionRequest,
@@ -154,6 +155,7 @@ class OpenAIProviderAdapter:
             output_text=output_text,
             parsed_output=parsed_output,
             provider_request_id=body.get("id"),
+            usage=_extract_openai_usage(body),
         )
 
     def _run_structured_completion(
@@ -280,3 +282,21 @@ class OpenAIProviderAdapter:
         request: StructuredCompletionRequest,
     ) -> StructuredCompletionResult:
         return self._run_structured_completion(request)
+
+
+def _extract_openai_usage(body: dict[str, Any]) -> AIUsageMetrics | None:
+    usage = body.get("usage")
+    if not isinstance(usage, dict):
+        return None
+
+    prompt_tokens = usage.get("prompt_tokens")
+    completion_tokens = usage.get("completion_tokens")
+    total_tokens = usage.get("total_tokens")
+    if not any(isinstance(value, int) for value in (prompt_tokens, completion_tokens, total_tokens)):
+        return None
+
+    return AIUsageMetrics(
+        input_tokens=prompt_tokens if isinstance(prompt_tokens, int) else None,
+        output_tokens=completion_tokens if isinstance(completion_tokens, int) else None,
+        total_tokens=total_tokens if isinstance(total_tokens, int) else None,
+    )

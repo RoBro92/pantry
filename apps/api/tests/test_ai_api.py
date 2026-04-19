@@ -15,7 +15,7 @@ from app.models.product_intelligence import ProductIntelligence
 from app.models.stock_lot import StockLot
 from app.schemas.pantry import ConfirmedProductEnrichmentRequest
 from app.schemas.ai import AISuggestionRequest
-from app.services.ai_config import upsert_instance_provider_config
+from app.services.ai_config import RuntimeHealthCheckResult, upsert_instance_provider_config
 from app.services.ai_context import build_household_ai_context
 from app.services.product_enrichment import apply_confirmed_product_enrichment
 from app.services.ai_providers import AIProviderHealth, StructuredCompletionResult
@@ -514,6 +514,52 @@ def test_household_ai_suggestions_use_provider_adapter_and_record_audit(
     ).all()
     assert "ai.suggestion.requested" in audit_actions
     assert "ai.suggestion.completed" in audit_actions
+
+
+def test_household_ai_suggestions_reuse_recent_runtime_health_checks(client, db_session, monkeypatch):
+    _, household = create_member_household(
+        db_session,
+        email="ai-health-cache@example.com",
+        household_name="AI Health Cache Household",
+    )
+    admin = create_platform_admin(
+        db_session,
+        email="ai-health-cache-admin@example.com",
+        password=PASSWORD,
+        display_name="AI Health Cache Admin",
+    )
+    upsert_instance_provider_config(
+        db_session,
+        actor=admin,
+        provider_type=AI_PROVIDER_OLLAMA,
+        base_url="http://ollama.local:11434",
+        default_model="llama3.2",
+        api_key=None,
+        is_enabled=True,
+    )
+
+    class CountingHealthAdapter(StubAIProviderAdapter):
+        def __init__(self):
+            self.health_calls = 0
+
+        def check_health(self) -> AIProviderHealth:
+            self.health_calls += 1
+            return super().check_health()
+
+    adapter = CountingHealthAdapter()
+    monkeypatch.setattr("app.services.ai_config.build_ai_provider_adapter", lambda config: adapter)
+    monkeypatch.setattr("app.services.ai_suggestions.build_ai_provider_adapter", lambda config: adapter)
+
+    login(client, email="ai-health-cache@example.com")
+
+    for _ in range(2):
+        response = client.post(
+            f"/api/households/{household.external_id}/ai/suggestions",
+            json={"kind": "meal_suggestions", "limit": 1},
+        )
+        assert response.status_code == 200
+
+    assert adapter.health_calls == 1
 
 
 def test_household_ai_suggestions_support_claude_provider_configs(
@@ -1220,6 +1266,8 @@ def test_ai_meal_suggestions_support_pantry_only_and_pantry_plus_extras_modes(
     assert "High-protein" in captured_payloads[0]["context"]["dietary_preferences"]["active_preferences"]
     assert "Mushrooms" in captured_payloads[0]["context"]["dietary_preferences"]["excluded_preferences"]
     assert captured_payloads[0]["context"]["recipe_candidates"][0]["recipe_external_id"] == recipe_external_id
+    assert "locations" not in captured_payloads[0]["context"]["pantry"]["products"][0]
+    assert "source_url" not in captured_payloads[0]["context"]["recipe_candidates"][0]
     assert captured_payloads[1]["request"]["pantry_only"] is False
 
 
@@ -1261,13 +1309,16 @@ def test_ai_meal_suggestions_hide_raw_openai_400_details(client, db_session, mon
             )
 
     monkeypatch.setattr(
-        "app.services.ai_meal_suggestions.refresh_provider_health",
-        lambda db, config: AIProviderHealth(
-            is_healthy=True,
-            status="healthy",
-            message=None,
-            models=["gpt-5.4-mini"],
-            capabilities={"supports_structured_output": True},
+        "app.services.ai_meal_suggestions.get_runtime_provider_health",
+        lambda db, config: RuntimeHealthCheckResult(
+            health=AIProviderHealth(
+                is_healthy=True,
+                status="healthy",
+                message=None,
+                models=["gpt-5.4-mini"],
+                capabilities={"supports_structured_output": True},
+            ),
+            source="fresh",
         ),
     )
     monkeypatch.setattr(
@@ -1331,13 +1382,16 @@ def test_ai_meal_suggestions_surface_empty_shortlist_as_friendly_error(client, d
             )
 
     monkeypatch.setattr(
-        "app.services.ai_meal_suggestions.refresh_provider_health",
-        lambda db, config: AIProviderHealth(
-            is_healthy=True,
-            status="healthy",
-            message=None,
-            models=["gpt-5.4"],
-            capabilities={"supports_structured_output": True},
+        "app.services.ai_meal_suggestions.get_runtime_provider_health",
+        lambda db, config: RuntimeHealthCheckResult(
+            health=AIProviderHealth(
+                is_healthy=True,
+                status="healthy",
+                message=None,
+                models=["gpt-5.4"],
+                capabilities={"supports_structured_output": True},
+            ),
+            source="fresh",
         ),
     )
     monkeypatch.setattr(

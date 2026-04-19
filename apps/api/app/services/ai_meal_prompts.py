@@ -48,6 +48,7 @@ def build_ai_meal_prompt_plan(
             "You are the meal suggestion engine for a household pantry application. "
             "Return valid JSON only. "
             "Use the structured household, dietary, pantry, and recipe-candidate context exactly as provided. "
+            "Prefer product intelligence when it is present and use enrichment or manual fallback fields only when intelligence is absent. "
             "Do not claim to update pantry stock or save recipes. "
             "Suggest 3 meal ideas when possible, otherwise return 2 strong options. "
             f"{_mode_copy(request)} "
@@ -66,6 +67,7 @@ def build_ai_meal_prompt_plan(
                     "Return 2 to 3 suggestions.",
                     "Keep titles specific and readable.",
                     "Every suggestion needs ingredients and step-by-step instructions.",
+                    "Use pantry.products[].intelligence before fallback enrichment or notes when both are present.",
                     "quantity must be numeric only; keep units in unit and move phrases like 'to taste' into note.",
                     "Mark truly extra ingredients with is_extra_ingredient=true.",
                     "Use source.kind=household_recipe_reference only when a recipe candidate from context clearly fits.",

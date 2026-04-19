@@ -289,20 +289,20 @@ def test_demo_development_mode_bootstraps_local_ai_and_smtp_config_from_environm
         "app.services.instance_integration_checks.run_smtp_connectivity_test",
         lambda db: SMTPTestResult(status="passed", ok=True, message="250 OK"),
     )
-    monkeypatch.setenv("PANTRY_LOCAL_AI_PROVIDER_TYPE", "openai")
-    monkeypatch.setenv("PANTRY_LOCAL_AI_BASE_URL", "https://api.openai.com/v1")
-    monkeypatch.setenv("PANTRY_LOCAL_AI_DEFAULT_MODEL", "gpt-5.4-mini")
-    monkeypatch.setenv("PANTRY_LOCAL_AI_API_KEY", "local-openai-secret")
-    monkeypatch.setenv("PANTRY_LOCAL_SMTP_HOST", "smtp.example.com")
-    monkeypatch.setenv("PANTRY_LOCAL_SMTP_PORT", "587")
-    monkeypatch.setenv("PANTRY_LOCAL_SMTP_USERNAME", "mailer")
-    monkeypatch.setenv("PANTRY_LOCAL_SMTP_PASSWORD", "local-smtp-secret")
-    monkeypatch.setenv("PANTRY_LOCAL_SMTP_FROM_EMAIL", "pantry@example.com")
-    monkeypatch.setenv("PANTRY_LOCAL_SMTP_FROM_NAME", "Pantro Local")
-    monkeypatch.setenv("PANTRY_LOCAL_SMTP_SECURITY", "starttls")
-    monkeypatch.setenv("PANTRY_LOCAL_SMTP_ENABLED", "true")
-    monkeypatch.setenv("PANTRY_LOCAL_SMTP_TEST_RECIPIENT_EMAIL", "test@example.com")
-    monkeypatch.setenv("PANTRY_LOCAL_SMTP_PASSWORD_RESET_ENABLED", "true")
+    monkeypatch.setenv("PANTRO_LOCAL_AI_PROVIDER_TYPE", "openai")
+    monkeypatch.setenv("PANTRO_LOCAL_AI_BASE_URL", "https://api.openai.com/v1")
+    monkeypatch.setenv("PANTRO_LOCAL_AI_DEFAULT_MODEL", "gpt-5.4-mini")
+    monkeypatch.setenv("PANTRO_LOCAL_AI_API_KEY", "local-openai-secret")
+    monkeypatch.setenv("PANTRO_LOCAL_SMTP_HOST", "smtp.example.com")
+    monkeypatch.setenv("PANTRO_LOCAL_SMTP_PORT", "587")
+    monkeypatch.setenv("PANTRO_LOCAL_SMTP_USERNAME", "mailer")
+    monkeypatch.setenv("PANTRO_LOCAL_SMTP_PASSWORD", "local-smtp-secret")
+    monkeypatch.setenv("PANTRO_LOCAL_SMTP_FROM_EMAIL", "pantry@example.com")
+    monkeypatch.setenv("PANTRO_LOCAL_SMTP_FROM_NAME", "Pantro Local")
+    monkeypatch.setenv("PANTRO_LOCAL_SMTP_SECURITY", "starttls")
+    monkeypatch.setenv("PANTRO_LOCAL_SMTP_ENABLED", "true")
+    monkeypatch.setenv("PANTRO_LOCAL_SMTP_TEST_RECIPIENT_EMAIL", "test@example.com")
+    monkeypatch.setenv("PANTRO_LOCAL_SMTP_PASSWORD_RESET_ENABLED", "true")
 
     manifest = bootstrap_development_mode(db_session, mode=DEV_MODE_DEMO, off_client=NoOpenFoodFactsClient())
 
@@ -358,8 +358,8 @@ def test_demo_development_mode_warns_when_local_ai_health_check_fails(db_session
         "app.services.instance_integration_checks.refresh_provider_health",
         stub_refresh_provider_health,
     )
-    monkeypatch.setenv("PANTRY_LOCAL_AI_PROVIDER_TYPE", "openai")
-    monkeypatch.setenv("PANTRY_LOCAL_AI_API_KEY", "local-openai-secret")
+    monkeypatch.setenv("PANTRO_LOCAL_AI_PROVIDER_TYPE", "openai")
+    monkeypatch.setenv("PANTRO_LOCAL_AI_API_KEY", "local-openai-secret")
 
     manifest = bootstrap_development_mode(db_session, mode=DEV_MODE_DEMO, off_client=NoOpenFoodFactsClient())
 
@@ -377,12 +377,12 @@ def test_demo_development_mode_warns_when_local_smtp_connectivity_test_fails(db_
         "app.services.instance_integration_checks.run_smtp_connectivity_test",
         lambda db: SMTPTestResult(status="failed", ok=False, message="SMTP auth failed."),
     )
-    monkeypatch.setenv("PANTRY_LOCAL_SMTP_HOST", "smtp.example.com")
-    monkeypatch.setenv("PANTRY_LOCAL_SMTP_PORT", "587")
-    monkeypatch.setenv("PANTRY_LOCAL_SMTP_USERNAME", "mailer")
-    monkeypatch.setenv("PANTRY_LOCAL_SMTP_PASSWORD", "local-smtp-secret")
-    monkeypatch.setenv("PANTRY_LOCAL_SMTP_FROM_EMAIL", "pantry@example.com")
-    monkeypatch.setenv("PANTRY_LOCAL_SMTP_SECURITY", "starttls")
+    monkeypatch.setenv("PANTRO_LOCAL_SMTP_HOST", "smtp.example.com")
+    monkeypatch.setenv("PANTRO_LOCAL_SMTP_PORT", "587")
+    monkeypatch.setenv("PANTRO_LOCAL_SMTP_USERNAME", "mailer")
+    monkeypatch.setenv("PANTRO_LOCAL_SMTP_PASSWORD", "local-smtp-secret")
+    monkeypatch.setenv("PANTRO_LOCAL_SMTP_FROM_EMAIL", "pantry@example.com")
+    monkeypatch.setenv("PANTRO_LOCAL_SMTP_SECURITY", "starttls")
 
     manifest = bootstrap_development_mode(db_session, mode=DEV_MODE_DEMO, off_client=NoOpenFoodFactsClient())
 
@@ -396,7 +396,7 @@ def test_demo_development_mode_warns_when_local_smtp_connectivity_test_fails(db_
 
 
 def test_demo_development_mode_warns_when_local_smtp_config_is_incomplete(db_session, monkeypatch):
-    monkeypatch.setenv("PANTRY_LOCAL_SMTP_USERNAME", "mailer")
+    monkeypatch.setenv("PANTRO_LOCAL_SMTP_USERNAME", "mailer")
 
     manifest = bootstrap_development_mode(db_session, mode=DEV_MODE_DEMO, off_client=NoOpenFoodFactsClient())
 
@@ -420,19 +420,19 @@ def test_demo_development_mode_ignores_open_food_facts_failures(db_session):
 
 
 def test_demo_development_mode_bootstraps_instance_ai_from_local_env(db_session, monkeypatch):
-    monkeypatch.setenv("PANTRY_LOCAL_AI_BASE_URL", "https://api.openai.com/v1")
-    monkeypatch.setenv("PANTRY_LOCAL_AI_DEFAULT_MODEL", "gpt-5.4-mini")
-    monkeypatch.setenv("PANTRY_LOCAL_AI_API_KEY", "openai-local-test-key")
-    monkeypatch.setenv("PANTRY_LOCAL_SMTP_HOST", "smtp.example.com")
-    monkeypatch.setenv("PANTRY_LOCAL_SMTP_PORT", "587")
-    monkeypatch.setenv("PANTRY_LOCAL_SMTP_USERNAME", "mailer")
-    monkeypatch.setenv("PANTRY_LOCAL_SMTP_PASSWORD", "smtp-password")
-    monkeypatch.setenv("PANTRY_LOCAL_SMTP_FROM_EMAIL", "pantry@example.com")
-    monkeypatch.setenv("PANTRY_LOCAL_SMTP_FROM_NAME", "Pantro")
-    monkeypatch.setenv("PANTRY_LOCAL_SMTP_SECURITY", "starttls")
-    monkeypatch.setenv("PANTRY_LOCAL_SMTP_ENABLED", "true")
-    monkeypatch.setenv("PANTRY_LOCAL_SMTP_TEST_RECIPIENT_EMAIL", "test@example.com")
-    monkeypatch.setenv("PANTRY_LOCAL_SMTP_PASSWORD_RESET_ENABLED", "true")
+    monkeypatch.setenv("PANTRO_LOCAL_AI_BASE_URL", "https://api.openai.com/v1")
+    monkeypatch.setenv("PANTRO_LOCAL_AI_DEFAULT_MODEL", "gpt-5.4-mini")
+    monkeypatch.setenv("PANTRO_LOCAL_AI_API_KEY", "openai-local-test-key")
+    monkeypatch.setenv("PANTRO_LOCAL_SMTP_HOST", "smtp.example.com")
+    monkeypatch.setenv("PANTRO_LOCAL_SMTP_PORT", "587")
+    monkeypatch.setenv("PANTRO_LOCAL_SMTP_USERNAME", "mailer")
+    monkeypatch.setenv("PANTRO_LOCAL_SMTP_PASSWORD", "smtp-password")
+    monkeypatch.setenv("PANTRO_LOCAL_SMTP_FROM_EMAIL", "pantry@example.com")
+    monkeypatch.setenv("PANTRO_LOCAL_SMTP_FROM_NAME", "Pantro")
+    monkeypatch.setenv("PANTRO_LOCAL_SMTP_SECURITY", "starttls")
+    monkeypatch.setenv("PANTRO_LOCAL_SMTP_ENABLED", "true")
+    monkeypatch.setenv("PANTRO_LOCAL_SMTP_TEST_RECIPIENT_EMAIL", "test@example.com")
+    monkeypatch.setenv("PANTRO_LOCAL_SMTP_PASSWORD_RESET_ENABLED", "true")
     def stub_refresh_provider_health(db, config):
         del db
         config.health_status = AI_HEALTH_HEALTHY
@@ -476,3 +476,23 @@ def test_demo_development_mode_bootstraps_instance_ai_from_local_env(db_session,
     assert smtp_settings.smtp_test_recipient_email == "test@example.com"
     assert smtp_settings.password_reset_enabled is True
     assert smtp_settings.smtp_last_test_status == "passed"
+
+
+def test_demo_development_mode_accepts_legacy_local_env_aliases(db_session, monkeypatch):
+    monkeypatch.setenv("PANTRY_LOCAL_AI_PROVIDER_TYPE", "openai")
+    monkeypatch.setenv("PANTRY_LOCAL_AI_API_KEY", "legacy-openai-secret")
+    monkeypatch.setenv("PANTRY_LOCAL_SMTP_HOST", "smtp.example.com")
+    monkeypatch.setenv("PANTRY_LOCAL_SMTP_USERNAME", "mailer")
+    monkeypatch.setenv("PANTRY_LOCAL_SMTP_PASSWORD", "legacy-smtp-secret")
+    monkeypatch.setenv("PANTRY_LOCAL_SMTP_FROM_EMAIL", "pantry@example.com")
+
+    bootstrap_development_mode(db_session, mode=DEV_MODE_DEMO, off_client=NoOpenFoodFactsClient())
+
+    ai_config = db_session.scalar(select(AIProviderConfig))
+    assert ai_config is not None
+    assert decrypt_secret(ai_config.encrypted_api_key) == "legacy-openai-secret"
+
+    instance_settings = db_session.scalar(select(InstanceSetting))
+    assert instance_settings is not None
+    assert instance_settings.smtp_host == "smtp.example.com"
+    assert decrypt_secret(instance_settings.encrypted_smtp_password) == "legacy-smtp-secret"

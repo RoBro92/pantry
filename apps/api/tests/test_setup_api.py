@@ -105,18 +105,18 @@ def test_setup_wizard_persists_staged_progress(client):
 
 
 def test_setup_wizard_prefills_local_ai_and_smtp_from_env(client, db_session, monkeypatch):
-    monkeypatch.setenv("PANTRY_LOCAL_AI_BASE_URL", "https://api.openai.com/v1")
-    monkeypatch.setenv("PANTRY_LOCAL_AI_DEFAULT_MODEL", "gpt-5.4-mini")
-    monkeypatch.setenv("PANTRY_LOCAL_AI_API_KEY", "openai-local-test-key")
-    monkeypatch.setenv("PANTRY_LOCAL_SMTP_HOST", "smtp.example.com")
-    monkeypatch.setenv("PANTRY_LOCAL_SMTP_PORT", "587")
-    monkeypatch.setenv("PANTRY_LOCAL_SMTP_USERNAME", "mailer")
-    monkeypatch.setenv("PANTRY_LOCAL_SMTP_PASSWORD", "smtp-password")
-    monkeypatch.setenv("PANTRY_LOCAL_SMTP_FROM_EMAIL", "pantry@example.com")
-    monkeypatch.setenv("PANTRY_LOCAL_SMTP_FROM_NAME", "Pantro")
-    monkeypatch.setenv("PANTRY_LOCAL_SMTP_SECURITY", "starttls")
-    monkeypatch.setenv("PANTRY_LOCAL_SMTP_ENABLED", "true")
-    monkeypatch.setenv("PANTRY_LOCAL_SMTP_PASSWORD_RESET_ENABLED", "true")
+    monkeypatch.setenv("PANTRO_LOCAL_AI_BASE_URL", "https://api.openai.com/v1")
+    monkeypatch.setenv("PANTRO_LOCAL_AI_DEFAULT_MODEL", "gpt-5.4-mini")
+    monkeypatch.setenv("PANTRO_LOCAL_AI_API_KEY", "openai-local-test-key")
+    monkeypatch.setenv("PANTRO_LOCAL_SMTP_HOST", "smtp.example.com")
+    monkeypatch.setenv("PANTRO_LOCAL_SMTP_PORT", "587")
+    monkeypatch.setenv("PANTRO_LOCAL_SMTP_USERNAME", "mailer")
+    monkeypatch.setenv("PANTRO_LOCAL_SMTP_PASSWORD", "smtp-password")
+    monkeypatch.setenv("PANTRO_LOCAL_SMTP_FROM_EMAIL", "pantry@example.com")
+    monkeypatch.setenv("PANTRO_LOCAL_SMTP_FROM_NAME", "Pantro")
+    monkeypatch.setenv("PANTRO_LOCAL_SMTP_SECURITY", "starttls")
+    monkeypatch.setenv("PANTRO_LOCAL_SMTP_ENABLED", "true")
+    monkeypatch.setenv("PANTRO_LOCAL_SMTP_PASSWORD_RESET_ENABLED", "true")
 
     response = client.get("/api/setup/wizard")
     assert response.status_code == 200
@@ -151,19 +151,19 @@ def test_setup_wizard_prefills_local_ai_and_smtp_from_env(client, db_session, mo
 
 
 def test_setup_finalize_runs_initial_integration_checks_for_local_env(client, db_session, monkeypatch):
-    monkeypatch.setenv("PANTRY_LOCAL_AI_BASE_URL", "https://api.openai.com/v1")
-    monkeypatch.setenv("PANTRY_LOCAL_AI_DEFAULT_MODEL", "gpt-5.4-mini")
-    monkeypatch.setenv("PANTRY_LOCAL_AI_API_KEY", "openai-local-test-key")
-    monkeypatch.setenv("PANTRY_LOCAL_SMTP_HOST", "smtp.example.com")
-    monkeypatch.setenv("PANTRY_LOCAL_SMTP_PORT", "587")
-    monkeypatch.setenv("PANTRY_LOCAL_SMTP_USERNAME", "mailer")
-    monkeypatch.setenv("PANTRY_LOCAL_SMTP_PASSWORD", "smtp-password")
-    monkeypatch.setenv("PANTRY_LOCAL_SMTP_FROM_EMAIL", "pantry@example.com")
-    monkeypatch.setenv("PANTRY_LOCAL_SMTP_FROM_NAME", "Pantro")
-    monkeypatch.setenv("PANTRY_LOCAL_SMTP_SECURITY", "starttls")
-    monkeypatch.setenv("PANTRY_LOCAL_SMTP_ENABLED", "true")
-    monkeypatch.setenv("PANTRY_LOCAL_SMTP_TEST_RECIPIENT_EMAIL", "test@example.com")
-    monkeypatch.setenv("PANTRY_LOCAL_SMTP_PASSWORD_RESET_ENABLED", "true")
+    monkeypatch.setenv("PANTRO_LOCAL_AI_BASE_URL", "https://api.openai.com/v1")
+    monkeypatch.setenv("PANTRO_LOCAL_AI_DEFAULT_MODEL", "gpt-5.4-mini")
+    monkeypatch.setenv("PANTRO_LOCAL_AI_API_KEY", "openai-local-test-key")
+    monkeypatch.setenv("PANTRO_LOCAL_SMTP_HOST", "smtp.example.com")
+    monkeypatch.setenv("PANTRO_LOCAL_SMTP_PORT", "587")
+    monkeypatch.setenv("PANTRO_LOCAL_SMTP_USERNAME", "mailer")
+    monkeypatch.setenv("PANTRO_LOCAL_SMTP_PASSWORD", "smtp-password")
+    monkeypatch.setenv("PANTRO_LOCAL_SMTP_FROM_EMAIL", "pantry@example.com")
+    monkeypatch.setenv("PANTRO_LOCAL_SMTP_FROM_NAME", "Pantro")
+    monkeypatch.setenv("PANTRO_LOCAL_SMTP_SECURITY", "starttls")
+    monkeypatch.setenv("PANTRO_LOCAL_SMTP_ENABLED", "true")
+    monkeypatch.setenv("PANTRO_LOCAL_SMTP_TEST_RECIPIENT_EMAIL", "test@example.com")
+    monkeypatch.setenv("PANTRO_LOCAL_SMTP_PASSWORD_RESET_ENABLED", "true")
 
     def stub_refresh_provider_health(db, config):
         del db

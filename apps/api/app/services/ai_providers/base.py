@@ -35,10 +35,22 @@ class StructuredCompletionRequest:
 
 
 @dataclass(frozen=True)
+class AIUsageMetrics:
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    total_tokens: int | None = None
+
+    @property
+    def has_values(self) -> bool:
+        return any(value is not None for value in (self.input_tokens, self.output_tokens, self.total_tokens))
+
+
+@dataclass(frozen=True)
 class StructuredCompletionResult:
     output_text: str
     parsed_output: dict[str, Any]
     provider_request_id: str | None
+    usage: AIUsageMetrics | None = None
 
 
 class AIProviderAdapter(Protocol):

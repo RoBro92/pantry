@@ -313,7 +313,7 @@ class ProductIntelligenceStatusResponse(BaseModel):
 
 
 class ProductIntelligenceRunRequest(BaseModel):
-    mode: str = Field(pattern="^(unclassified|all|product)$")
+    mode: str = Field(pattern="^(unclassified|stale|all|product)$")
     product_external_id: str | None = None
 
 

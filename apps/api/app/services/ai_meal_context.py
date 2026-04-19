@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 from dataclasses import dataclass
 
 from sqlalchemy import select
@@ -13,6 +14,7 @@ from app.schemas.ai import (
     AIMealSuggestionContextSnapshot,
     AIMealSuggestionRequest,
 )
+from app.services.ai_runtime import estimate_ai_payload_tokens
 from app.services.ai_suggestions import build_household_ai_feature_status
 from app.services.pantry_queries import PantryFilterOptions, build_near_expiry_response, build_pantry_overview
 from app.services.recipe_queries import build_recipe_list_response
@@ -20,6 +22,11 @@ from app.services.recipe_suggestion_providers import list_recipe_suggestion_cand
 from app.services.tenancy import HouseholdAccess
 
 DIETARY_NONE_OPTION = "None"
+AI_MEAL_CONTEXT_PRODUCT_POOL_SIZE = 80
+AI_MEAL_CONTEXT_MAX_PRODUCTS = 28
+AI_MEAL_CONTEXT_MAX_NEAR_EXPIRY_LOTS = 10
+AI_MEAL_CONTEXT_MAX_RECIPE_CANDIDATES = 5
+AI_MEAL_CONTEXT_MAX_RECIPE_INGREDIENTS = 8
 
 
 def _dedupe(values: list[str]) -> list[str]:
@@ -42,15 +49,76 @@ def _dedupe(values: list[str]) -> list[str]:
 def _serialize_enrichment(enrichment) -> dict[str, object] | None:
     if enrichment is None:
         return None
+    ingredient_tags = list(enrichment.ingredient_tags or [])[:6]
+    allergen_tags = list(enrichment.allergen_tags or [])[:6]
     return {
-        "ingredient_tags": list(enrichment.ingredient_tags or [])[:8],
-        "ingredients_text": (enrichment.ingredients_text or "")[:180] or None,
-        "allergen_tags": list(enrichment.allergen_tags or [])[:8],
-        "allergens_text": (enrichment.allergens_text or "")[:120] or None,
-        "labels": list(enrichment.labels or [])[:8],
-        "dietary_tags": list(enrichment.dietary_tags or [])[:8],
-        "nutrition_summary_text": enrichment.nutrition_summary_text,
+        "ingredient_tags": ingredient_tags,
+        "ingredients_text": ((enrichment.ingredients_text or "")[:120] or None) if not ingredient_tags else None,
+        "allergen_tags": allergen_tags,
+        "allergens_text": ((enrichment.allergens_text or "")[:80] or None) if not allergen_tags else None,
+        "labels": list(enrichment.labels or [])[:5],
+        "dietary_tags": list(enrichment.dietary_tags or [])[:6],
     }
+
+
+def _serialize_intelligence(intelligence) -> dict[str, object]:
+    return {
+        "food_category": intelligence.food_category,
+        "primary_ingredient_type": intelligence.primary_ingredient_type,
+        "ingredient_families": list(intelligence.ingredient_families or [])[:5],
+        "dietary_tags": list(intelligence.dietary_tags or [])[:6],
+        "allergen_tags": list(intelligence.allergen_tags or [])[:6],
+        "recipe_role_tags": list(intelligence.recipe_role_tags or [])[:6],
+        "pantry_use_tags": list(intelligence.pantry_use_tags or [])[:6],
+        "structured_metadata": {
+            "product_format": intelligence.structured_metadata.product_format,
+            "storage_profile": intelligence.structured_metadata.storage_profile,
+            "preparation_tags": list(intelligence.structured_metadata.preparation_tags or [])[:4],
+        },
+        "is_stale": intelligence.is_stale,
+    }
+
+
+def _focused_product_sort_key(product) -> tuple[object, ...]:
+    return (
+        0 if product.near_expiry_lot_count > 0 else 1,
+        product.nearest_expiry_on or date.max,
+        0 if product.intelligence is not None else 1,
+        0 if product.enrichment is not None else 1,
+        0 if product.manual_ingredient_tags else 1,
+        product.product_name.casefold(),
+    )
+
+
+def _select_focused_products(products: list) -> list:
+    ranked = sorted(products, key=_focused_product_sort_key)
+    return ranked[:AI_MEAL_CONTEXT_MAX_PRODUCTS]
+
+
+def _serialize_pantry_product(product) -> dict[str, object]:
+    manual_tags = product.manual_ingredient_tags[:6]
+    enrichment_payload = _serialize_enrichment(product.enrichment)
+    payload: dict[str, object] = {
+        "product_external_id": product.product_external_id,
+        "name": product.product_name,
+        "unit": product.unit,
+        "total_quantity": str(product.total_quantity),
+        "aliases": product.aliases[:3],
+        "near_expiry_lot_count": product.near_expiry_lot_count,
+        "nearest_expiry_on": product.nearest_expiry_on.isoformat()
+        if product.nearest_expiry_on is not None
+        else None,
+    }
+    if product.intelligence is not None:
+        payload["intelligence"] = _serialize_intelligence(product.intelligence)
+        return payload
+    if manual_tags:
+        payload["manual_ingredient_tags"] = manual_tags
+    if product.notes and not manual_tags and enrichment_payload is None:
+        payload["notes"] = product.notes[:120]
+    if enrichment_payload is not None:
+        payload["enrichment"] = enrichment_payload
+    return payload
 
 
 def _load_household_members(db: Session, *, access: HouseholdAccess) -> list[AIHouseholdMemberSummary]:
@@ -120,6 +188,7 @@ class AIMealContextBundle:
     snapshot: AIMealSuggestionContextSnapshot
     selected_members: list[AIHouseholdMemberSummary]
     effective_preferences: list[str]
+    diagnostics: dict[str, object]
 
 
 def build_meal_planner_response(
@@ -133,7 +202,7 @@ def build_meal_planner_response(
         access=access,
         filters=PantryFilterOptions(),
         page=1,
-        page_size=50,
+        page_size=AI_MEAL_CONTEXT_PRODUCT_POOL_SIZE,
     )
     recipe_list = build_recipe_list_response(db, access=access)
     members = _load_household_members(db, access=access)
@@ -180,7 +249,12 @@ def build_ai_meal_context(
         selected_members=selected_members,
         request=request,
     )
-    candidate_recipes = list_recipe_suggestion_candidates(db, access=access, limit=8)
+    focused_products = _select_focused_products(pantry_overview.products)
+    candidate_recipes = list_recipe_suggestion_candidates(
+        db,
+        access=access,
+        limit=AI_MEAL_CONTEXT_MAX_RECIPE_CANDIDATES,
+    )
 
     payload = {
         "household": {
@@ -203,31 +277,7 @@ def build_ai_meal_context(
         "dietary_preferences": preference_sets,
         "pantry": {
             "counts": pantry_overview.counts.model_dump(),
-            "products": [
-                {
-                    "product_external_id": product.product_external_id,
-                    "name": product.product_name,
-                    "unit": product.unit,
-                    "total_quantity": str(product.total_quantity),
-                    "aliases": product.aliases[:6],
-                    "manual_ingredient_tags": product.manual_ingredient_tags[:8],
-                    "notes": product.notes,
-                    "near_expiry_lot_count": product.near_expiry_lot_count,
-                    "nearest_expiry_on": product.nearest_expiry_on.isoformat()
-                    if product.nearest_expiry_on is not None
-                    else None,
-                    "locations": [
-                        {
-                            "location_name": location.location_name,
-                            "location_group_name": location.location_group_name,
-                            "total_quantity": str(location.total_quantity),
-                        }
-                        for location in product.locations[:4]
-                    ],
-                    "enrichment": _serialize_enrichment(product.enrichment),
-                }
-                for product in pantry_overview.products
-            ],
+            "products": [_serialize_pantry_product(product) for product in focused_products],
             "near_expiry_lots": [
                 {
                     "product_name": lot.product_name,
@@ -237,7 +287,7 @@ def build_ai_meal_context(
                     "location_name": lot.location_name,
                     "location_group_name": lot.location_group_name,
                 }
-                for lot in near_expiry.lots[:16]
+                for lot in near_expiry.lots[:AI_MEAL_CONTEXT_MAX_NEAR_EXPIRY_LOTS]
             ],
         },
         "recipe_candidates": [
@@ -246,8 +296,6 @@ def build_ai_meal_context(
                 "source_kind": candidate.source_kind,
                 "recipe_external_id": candidate.recipe_external_id,
                 "title": candidate.title,
-                "notes": candidate.notes,
-                "source_url": candidate.source_url,
                 "pantry_coverage_status": candidate.pantry_coverage_status,
                 "shopping_gap_count": candidate.shopping_gap_count,
                 "ingredient_count": candidate.ingredient_count,
@@ -260,7 +308,7 @@ def build_ai_meal_context(
                         "coverage_status": ingredient.coverage.status,
                         "missing_quantity": str(ingredient.coverage.missing_quantity),
                     }
-                    for ingredient in candidate.detail.ingredients[:12]
+                    for ingredient in candidate.detail.ingredients[:AI_MEAL_CONTEXT_MAX_RECIPE_INGREDIENTS]
                 ],
             }
             for candidate in candidate_recipes
@@ -280,4 +328,15 @@ def build_ai_meal_context(
         ),
         selected_members=selected_members,
         effective_preferences=preference_sets["active_preferences"],
+        diagnostics={
+            "applied_optimizations": [
+                "focused_pantry_products",
+                "structured_product_intelligence",
+                "compact_recipe_candidates",
+                "compact_enrichment_fallback",
+            ],
+            "approx_context_tokens": estimate_ai_payload_tokens(payload),
+            "pantry_product_count_sent": len(focused_products),
+            "recipe_candidate_count_sent": len(candidate_recipes),
+        },
     )

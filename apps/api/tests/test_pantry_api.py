@@ -19,7 +19,7 @@ from app.models.product_intelligence import ProductIntelligence
 from app.models.product_intelligence_run import ProductIntelligenceRun
 from app.schemas.pantry import ProductEnrichmentAttribution, ProductEnrichmentCandidate, ProductNutritionSummaryItem
 from app.models.stock_lot import StockLot
-from app.services.ai_config import upsert_instance_provider_config
+from app.services.ai_config import RuntimeHealthCheckResult, upsert_instance_provider_config
 from app.services.ai_providers import AIProviderHealth, StructuredCompletionResult
 from app.services.ai_providers.errors import AIProviderError
 from app.services.auth import create_household, create_membership, create_platform_admin, create_user
@@ -293,13 +293,16 @@ def install_stub_product_intelligence_provider(
         is_enabled=True,
     )
     monkeypatch.setattr(
-        "app.services.product_intelligence_runs.refresh_provider_health",
-        lambda db, config: AIProviderHealth(
-            is_healthy=True,
-            status="healthy",
-            message=None,
-            models=["llama3.2"],
-            capabilities={"supports_structured_output": True},
+        "app.services.product_intelligence_runs.get_runtime_provider_health",
+        lambda db, config: RuntimeHealthCheckResult(
+            health=AIProviderHealth(
+                is_healthy=True,
+                status="healthy",
+                message=None,
+                models=["llama3.2"],
+                capabilities={"supports_structured_output": True},
+            ),
+            source="fresh",
         ),
     )
     monkeypatch.setattr(
@@ -511,7 +514,7 @@ def test_product_intelligence_run_supports_product_and_unclassified_modes(client
     assert unclassified_run.status_code == 200
     unclassified_payload = unclassified_run.json()
     assert unclassified_payload["status"] == "queued"
-    assert unclassified_payload["total_candidates"] == 2
+    assert unclassified_payload["total_candidates"] == 1
 
     assert process_next_product_intelligence_run() is True
     assert stub_adapter.batches[-1] == [pasta["external_id"]]
@@ -522,10 +525,10 @@ def test_product_intelligence_run_supports_product_and_unclassified_modes(client
     assert unclassified_detail.status_code == 200
     unclassified_detail_payload = unclassified_detail.json()
     assert unclassified_detail_payload["status"] == "completed"
-    assert unclassified_detail_payload["processed_count"] == 2
+    assert unclassified_detail_payload["processed_count"] == 1
     assert unclassified_detail_payload["classified_count"] == 1
-    assert unclassified_detail_payload["skipped_count"] == 1
-    assert {item["status"] for item in unclassified_detail_payload["items"]} == {"classified", "skipped"}
+    assert unclassified_detail_payload["skipped_count"] == 0
+    assert {item["status"] for item in unclassified_detail_payload["items"]} == {"classified"}
 
     overview = client.get(f"/api/households/{household.external_id}/pantry/overview")
     assert overview.status_code == 200
@@ -585,6 +588,77 @@ def test_product_intelligence_marks_stale_after_material_product_update(client, 
     intelligence = overview.json()["catalog_products"][0]["intelligence"]
     assert intelligence["is_stale"] is True
     assert "source_product_data_changed" in intelligence["stale_reasons"]
+
+
+def test_product_intelligence_stale_mode_targets_only_stale_products(client, db_session, monkeypatch):
+    _, household = create_household_with_role(
+        db_session,
+        email="classification-stale-mode@example.com",
+        household_name="Classification Stale Mode Household",
+        role_code=HOUSEHOLD_ADMIN_ROLE,
+    )
+    stub_adapter = install_stub_product_intelligence_provider(db_session, monkeypatch)
+    login(client, email="classification-stale-mode@example.com")
+
+    sauce = create_product(
+        client,
+        household.external_id,
+        name="Brown sauce",
+        default_unit="bottle",
+        aliases=[],
+        barcodes=["5000111046244"],
+        manual_ingredient_tags=["Tomatoes"],
+    )
+    pasta = create_product(
+        client,
+        household.external_id,
+        name="Pasta",
+        default_unit="pack",
+        aliases=[],
+        barcodes=[],
+        manual_ingredient_tags=["Wheat"],
+    )
+
+    initial_run = client.post(
+        f"/api/households/{household.external_id}/product-intelligence/classify",
+        json={"mode": "all"},
+    )
+    assert initial_run.status_code == 200
+    assert process_next_product_intelligence_run() is True
+
+    update_product(
+        client,
+        household.external_id,
+        sauce["external_id"],
+        name="Brown sauce",
+        default_unit="bottle",
+        aliases=["Breakfast sauce"],
+        barcodes=["5000111046244"],
+        notes="Use on bacon rolls.",
+        manual_ingredient_tags=["Tomatoes", "Vinegar"],
+    )
+
+    queued = client.post(
+        f"/api/households/{household.external_id}/product-intelligence/classify",
+        json={"mode": "stale"},
+    )
+    assert queued.status_code == 200
+    assert queued.json()["total_candidates"] == 1
+
+    assert process_next_product_intelligence_run() is True
+    assert stub_adapter.batches[-1] == [sauce["external_id"]]
+    assert pasta["external_id"] not in stub_adapter.batches[-1]
+
+    run_detail = client.get(
+        f"/api/households/{household.external_id}/product-intelligence/runs/{queued.json()['external_id']}"
+    )
+    assert run_detail.status_code == 200
+    payload = run_detail.json()
+    assert payload["status"] == "completed"
+    assert payload["processed_count"] == 1
+    assert payload["classified_count"] == 1
+    assert payload["skipped_count"] == 0
+    assert payload["items"][0]["product_external_id"] == sauce["external_id"]
 
 
 def test_product_intelligence_run_derives_high_confidence_off_staples_without_ai(
@@ -1391,13 +1465,16 @@ def test_product_intelligence_run_surfaces_friendly_openai_errors(client, db_ses
         is_enabled=True,
     )
     monkeypatch.setattr(
-        "app.services.product_intelligence_runs.refresh_provider_health",
-        lambda db, config: AIProviderHealth(
-            is_healthy=True,
-            status="healthy",
-            message=None,
-            models=["gpt-5.4-mini"],
-            capabilities={"supports_structured_output": True},
+        "app.services.product_intelligence_runs.get_runtime_provider_health",
+        lambda db, config: RuntimeHealthCheckResult(
+            health=AIProviderHealth(
+                is_healthy=True,
+                status="healthy",
+                message=None,
+                models=["gpt-5.4-mini"],
+                capabilities={"supports_structured_output": True},
+            ),
+            source="fresh",
         ),
     )
 
@@ -1477,13 +1554,16 @@ def test_product_intelligence_run_supports_recommended_openai_models(
         is_enabled=True,
     )
     monkeypatch.setattr(
-        "app.services.product_intelligence_runs.refresh_provider_health",
-        lambda db, config: AIProviderHealth(
-            is_healthy=True,
-            status="healthy",
-            message=None,
-            models=["gpt-4.1-mini", "gpt-5.4-mini", "gpt-5.4"],
-            capabilities={"supports_structured_output": True},
+        "app.services.product_intelligence_runs.get_runtime_provider_health",
+        lambda db, config: RuntimeHealthCheckResult(
+            health=AIProviderHealth(
+                is_healthy=True,
+                status="healthy",
+                message=None,
+                models=["gpt-4.1-mini", "gpt-5.4-mini", "gpt-5.4"],
+                capabilities={"supports_structured_output": True},
+            ),
+            source="fresh",
         ),
     )
 
@@ -1550,13 +1630,16 @@ def test_product_intelligence_run_does_not_call_supported_openai_model_unsupport
         is_enabled=True,
     )
     monkeypatch.setattr(
-        "app.services.product_intelligence_runs.refresh_provider_health",
-        lambda db, config: AIProviderHealth(
-            is_healthy=True,
-            status="healthy",
-            message=None,
-            models=["gpt-4.1-mini", "gpt-5.4-mini", "gpt-5.4"],
-            capabilities={"supports_structured_output": True},
+        "app.services.product_intelligence_runs.get_runtime_provider_health",
+        lambda db, config: RuntimeHealthCheckResult(
+            health=AIProviderHealth(
+                is_healthy=True,
+                status="healthy",
+                message=None,
+                models=["gpt-4.1-mini", "gpt-5.4-mini", "gpt-5.4"],
+                capabilities={"supports_structured_output": True},
+            ),
+            source="fresh",
         ),
     )
 
