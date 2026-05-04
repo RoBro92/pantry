@@ -112,7 +112,7 @@ prepare_install_layout() {
 
   log_step "Preparing ${INSTALL_DIR}"
   mkdir -p "${INSTALL_DIR}"
-  mkdir -p "${DATA_ROOT}/postgres" "${DATA_ROOT}/redis" "${DATA_ROOT}/imports"
+  mkdir -p "${DATA_ROOT}/postgres" "${DATA_ROOT}/redis" "${DATA_ROOT}/imports" "${DATA_ROOT}/backups"
 
   if [[ -f "${INSTALL_DIR}/.env" ]]; then
     die "${INSTALL_DIR}/.env already exists. Use update-pantro.sh for existing installs."
@@ -187,9 +187,12 @@ configure_env_file() {
   env_set "${env_file}" "PANTRO_POSTGRES_DATA_DIR" "${DATA_ROOT}/postgres"
   env_set "${env_file}" "PANTRO_REDIS_DATA_DIR" "${DATA_ROOT}/redis"
   env_set "${env_file}" "PANTRO_IMPORTS_DATA_DIR" "${DATA_ROOT}/imports"
+  env_set "${env_file}" "PANTRO_BACKUPS_DATA_DIR" "${DATA_ROOT}/backups"
   env_set "${env_file}" "PANTRY_POSTGRES_DATA_DIR" "${DATA_ROOT}/postgres"
   env_set "${env_file}" "PANTRY_REDIS_DATA_DIR" "${DATA_ROOT}/redis"
   env_set "${env_file}" "PANTRY_IMPORTS_DATA_DIR" "${DATA_ROOT}/imports"
+  env_set "${env_file}" "PANTRY_BACKUPS_DATA_DIR" "${DATA_ROOT}/backups"
+  env_set "${env_file}" "BACKUP_STORAGE_ROOT" "/var/lib/pantro/backups"
   env_set "${env_file}" "SETTINGS_ENCRYPTION_KEY" "${settings_key}"
   env_set "${env_file}" "SESSION_SECRET_KEY" "${session_key}"
   env_set "${env_file}" "SESSION_HTTPS_ONLY" "$([[ "${scheme}" == "https" ]] && printf 'true' || printf 'false')"

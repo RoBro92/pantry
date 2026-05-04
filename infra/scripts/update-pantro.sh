@@ -138,7 +138,7 @@ refresh_release_assets() {
 
 main() {
   local env_file compose_file current_version target_version image_namespace
-  local postgres_data_dir redis_data_dir imports_data_dir
+  local postgres_data_dir redis_data_dir imports_data_dir backups_data_dir
   local web_url api_url
 
   require_command curl
@@ -207,6 +207,7 @@ main() {
   postgres_data_dir="$(env_get_any "${env_file}" "$(default_data_root)/postgres" "PANTRO_POSTGRES_DATA_DIR" "PANTRY_POSTGRES_DATA_DIR")"
   redis_data_dir="$(env_get_any "${env_file}" "$(default_data_root)/redis" "PANTRO_REDIS_DATA_DIR" "PANTRY_REDIS_DATA_DIR")"
   imports_data_dir="$(env_get_any "${env_file}" "$(default_data_root)/imports" "PANTRO_IMPORTS_DATA_DIR" "PANTRY_IMPORTS_DATA_DIR")"
+  backups_data_dir="$(env_get_any "${env_file}" "$(default_data_root)/backups" "PANTRO_BACKUPS_DATA_DIR" "PANTRY_BACKUPS_DATA_DIR")"
 
   log_step "Updating .env"
   env_set "${env_file}" "PANTRO_VERSION" "${target_version}"
@@ -216,9 +217,12 @@ main() {
   env_set "${env_file}" "PANTRO_POSTGRES_DATA_DIR" "${postgres_data_dir}"
   env_set "${env_file}" "PANTRO_REDIS_DATA_DIR" "${redis_data_dir}"
   env_set "${env_file}" "PANTRO_IMPORTS_DATA_DIR" "${imports_data_dir}"
+  env_set "${env_file}" "PANTRO_BACKUPS_DATA_DIR" "${backups_data_dir}"
   env_set "${env_file}" "PANTRY_POSTGRES_DATA_DIR" "${postgres_data_dir}"
   env_set "${env_file}" "PANTRY_REDIS_DATA_DIR" "${redis_data_dir}"
   env_set "${env_file}" "PANTRY_IMPORTS_DATA_DIR" "${imports_data_dir}"
+  env_set "${env_file}" "PANTRY_BACKUPS_DATA_DIR" "${backups_data_dir}"
+  env_set "${env_file}" "BACKUP_STORAGE_ROOT" "$(env_get "${env_file}" "BACKUP_STORAGE_ROOT" "/var/lib/pantro/backups")"
   env_set "${env_file}" "RELEASE_CHECK_REPOSITORY" "$(env_get "${env_file}" "RELEASE_CHECK_REPOSITORY" "${REPOSITORY}")"
 
   log_step "Pulling Pantro images"
