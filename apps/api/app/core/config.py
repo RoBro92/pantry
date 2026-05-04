@@ -8,6 +8,15 @@ from urllib.parse import urlsplit, urlunsplit
 from app.core.version import read_repo_version
 
 SUPPORTED_DEPLOYMENT_MODES = {"self_hosted", "demo", "saas"}
+PLACEHOLDER_SECRET_VALUES = {
+    "",
+    "change-me",
+    "change-me-for-development",
+    "change-me-for-production",
+    "replace-me",
+    "replace-with-random-secret",
+}
+MIN_PRODUCTION_SECRET_LENGTH = 32
 
 
 def _parse_bool(value: str | None, default: bool) -> bool:
@@ -50,6 +59,33 @@ def _parse_deployment_mode(value: str | None) -> str:
             "DEPLOYMENT_MODE must be one of self_hosted, demo, or saas."
         )
     return mode
+
+
+def _is_weak_secret(value: str | None) -> bool:
+    if value is None:
+        return True
+    normalized = value.strip()
+    if len(normalized) < MIN_PRODUCTION_SECRET_LENGTH:
+        return True
+    return normalized.lower() in PLACEHOLDER_SECRET_VALUES
+
+
+def validate_production_settings(settings: "AppSettings") -> None:
+    if settings.environment.strip().lower() != "production":
+        return
+
+    if _is_weak_secret(settings.session_secret_key):
+        raise ValueError(
+            "SESSION_SECRET_KEY must be set to a non-placeholder secret of at least "
+            f"{MIN_PRODUCTION_SECRET_LENGTH} characters in production."
+        )
+    if _is_weak_secret(settings.settings_encryption_key):
+        raise ValueError(
+            "SETTINGS_ENCRYPTION_KEY must be set to a non-placeholder secret of at least "
+            f"{MIN_PRODUCTION_SECRET_LENGTH} characters in production."
+        )
+    if settings.settings_encryption_key == settings.session_secret_key:
+        raise ValueError("SETTINGS_ENCRYPTION_KEY must be different from SESSION_SECRET_KEY in production.")
 
 
 def _resolve_app_version() -> str:

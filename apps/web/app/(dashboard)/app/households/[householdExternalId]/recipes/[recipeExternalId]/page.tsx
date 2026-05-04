@@ -2,7 +2,7 @@ import Link from "next/link";
 import { CoverageBadge } from "../../../../../../../components/coverage-badge";
 import { RecipeShoppingGapActions } from "../../../../../../../components/recipe-shopping-gap-actions";
 import { StatusCard } from "../../../../../../../components/status-card";
-import { getRecipeDetail, requireSession } from "../../../../../../../lib/server-auth";
+import { getRecipeDetail, requireHouseholdAccess } from "../../../../../../../lib/server-auth";
 
 type RecipeDetailPageProps = {
   params: Promise<{
@@ -12,8 +12,8 @@ type RecipeDetailPageProps = {
 };
 
 export default async function RecipeDetailPage({ params }: RecipeDetailPageProps) {
-  await requireSession();
   const { householdExternalId, recipeExternalId } = await params;
+  await requireHouseholdAccess(householdExternalId);
   const response = await getRecipeDetail(householdExternalId, recipeExternalId);
   const recipe = response.recipe;
 

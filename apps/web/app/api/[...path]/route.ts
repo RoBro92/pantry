@@ -1,22 +1,17 @@
 import type { NextRequest } from "next/server";
 import { appConfig } from "../../../lib/app-config";
+import {
+  copyAllowedForwardHeaders,
+  copyAllowedResponseHeaders,
+  isAllowedProxyPath,
+  isCrossOriginMutation
+} from "../../../lib/proxy-policy";
 
 type RouteContext = {
   params: Promise<{
     path: string[];
   }>;
 };
-
-const hopByHopHeaders = new Set([
-  "connection",
-  "keep-alive",
-  "proxy-authenticate",
-  "proxy-authorization",
-  "te",
-  "trailer",
-  "transfer-encoding",
-  "upgrade"
-]);
 
 async function resolvePathSegments(context: RouteContext): Promise<string[]> {
   const params = await context.params;
@@ -32,33 +27,34 @@ function buildUpstreamUrl(request: NextRequest, pathSegments: string[]): URL {
   return upstreamUrl;
 }
 
-function copyForwardHeaders(headers: Headers): Headers {
-  const forwardedHeaders = new Headers(headers);
-
-  hopByHopHeaders.forEach((header) => {
-    forwardedHeaders.delete(header);
-  });
-  forwardedHeaders.delete("host");
-
-  return forwardedHeaders;
-}
-
-function copyResponseHeaders(headers: Headers): Headers {
-  const responseHeaders = new Headers(headers);
-
-  hopByHopHeaders.forEach((header) => {
-    responseHeaders.delete(header);
-  });
-
-  return responseHeaders;
-}
-
 async function proxyRequest(request: NextRequest, context: RouteContext): Promise<Response> {
   const pathSegments = await resolvePathSegments(context);
+  if (!isAllowedProxyPath(pathSegments)) {
+    return Response.json({ detail: "API path is not available through this proxy." }, { status: 404 });
+  }
+
+  const originMethod =
+    request.method === "OPTIONS"
+      ? request.headers.get("access-control-request-method") ?? request.method
+      : request.method;
+  if (
+    isCrossOriginMutation(
+      originMethod,
+      request.nextUrl.origin,
+      request.headers.get("origin"),
+      request.headers.get("referer")
+    )
+  ) {
+    return Response.json(
+      { detail: "Cross-origin mutating API requests are not allowed." },
+      { status: 403 }
+    );
+  }
+
   const upstreamUrl = buildUpstreamUrl(request, pathSegments);
   const upstreamResponse = await fetch(upstreamUrl, {
     method: request.method,
-    headers: copyForwardHeaders(request.headers),
+    headers: copyAllowedForwardHeaders(request.headers),
     body:
       request.method === "GET" || request.method === "HEAD"
         ? undefined
@@ -76,7 +72,7 @@ async function proxyRequest(request: NextRequest, context: RouteContext): Promis
   return new Response(responseBody, {
     status: upstreamResponse.status,
     statusText: upstreamResponse.statusText,
-    headers: copyResponseHeaders(upstreamResponse.headers)
+    headers: copyAllowedResponseHeaders(upstreamResponse.headers)
   });
 }
 

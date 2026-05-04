@@ -24,6 +24,7 @@ from app.services.setup import (
     finalize_setup,
     get_setup_status,
     get_setup_wizard_state,
+    is_setup_complete,
     stage_setup_restore_upload,
     update_setup_ai,
     update_setup_dietary,
@@ -43,6 +44,14 @@ def _handle_setup_error(exc: ValueError) -> HTTPException:
     return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
 
+def _ensure_setup_is_open(db: Session) -> None:
+    if is_setup_complete(db):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Initial setup has already been completed.",
+        )
+
+
 @router.get("/status", response_model=SetupStatusResponse)
 def get_status(db: Session = Depends(get_db_session)):
     return get_setup_status(db)
@@ -55,11 +64,13 @@ def get_wizard_state(db: Session = Depends(get_db_session)):
 
 @router.put("/wizard/welcome", response_model=SetupWizardStateResponse)
 def put_welcome(payload: SetupWelcomeUpdateRequest, db: Session = Depends(get_db_session)):
+    _ensure_setup_is_open(db)
     return update_setup_welcome(db, payload)
 
 
 @router.put("/wizard/mode", response_model=SetupWizardStateResponse)
 def put_mode(payload: SetupModeUpdateRequest, db: Session = Depends(get_db_session)):
+    _ensure_setup_is_open(db)
     return update_setup_mode(db, payload)
 
 
@@ -68,6 +79,7 @@ async def post_restore_upload(
     file: UploadFile = File(...),
     db: Session = Depends(get_db_session),
 ):
+    _ensure_setup_is_open(db)
     try:
         return await stage_setup_restore_upload(db, file)
     except ValueError as exc:
@@ -76,6 +88,7 @@ async def post_restore_upload(
 
 @router.put("/wizard/users", response_model=SetupWizardStateResponse)
 def put_users(payload: SetupUsersUpdateRequest, db: Session = Depends(get_db_session)):
+    _ensure_setup_is_open(db)
     try:
         return update_setup_users(db, payload)
     except ValueError as exc:
@@ -84,11 +97,13 @@ def put_users(payload: SetupUsersUpdateRequest, db: Session = Depends(get_db_ses
 
 @router.put("/wizard/household", response_model=SetupWizardStateResponse)
 def put_household(payload: SetupHouseholdUpdateRequest, db: Session = Depends(get_db_session)):
+    _ensure_setup_is_open(db)
     return update_setup_household(db, payload)
 
 
 @router.put("/wizard/public-url", response_model=SetupWizardStateResponse)
 def put_public_url(payload: SetupPublicURLUpdateRequest, db: Session = Depends(get_db_session)):
+    _ensure_setup_is_open(db)
     try:
         return update_setup_public_url(db, payload)
     except ValueError as exc:
@@ -97,11 +112,13 @@ def put_public_url(payload: SetupPublicURLUpdateRequest, db: Session = Depends(g
 
 @router.put("/wizard/dietary", response_model=SetupWizardStateResponse)
 def put_dietary(payload: SetupDietaryUpdateRequest, db: Session = Depends(get_db_session)):
+    _ensure_setup_is_open(db)
     return update_setup_dietary(db, payload)
 
 
 @router.put("/wizard/ai", response_model=SetupWizardStateResponse)
 def put_ai(payload: SetupAIConfigUpdateRequest, db: Session = Depends(get_db_session)):
+    _ensure_setup_is_open(db)
     try:
         return update_setup_ai(db, payload)
     except ValueError as exc:
@@ -110,6 +127,7 @@ def put_ai(payload: SetupAIConfigUpdateRequest, db: Session = Depends(get_db_ses
 
 @router.put("/wizard/smtp", response_model=SetupWizardStateResponse)
 def put_smtp(payload: SetupSMTPConfigUpdateRequest, db: Session = Depends(get_db_session)):
+    _ensure_setup_is_open(db)
     try:
         return update_setup_smtp(db, payload)
     except ValueError as exc:
@@ -118,6 +136,7 @@ def put_smtp(payload: SetupSMTPConfigUpdateRequest, db: Session = Depends(get_db
 
 @router.post("/wizard/smtp/test", response_model=SetupSMTPTestResponse)
 def post_smtp_test(payload: SetupSMTPTestRequest, db: Session = Depends(get_db_session)):
+    _ensure_setup_is_open(db)
     try:
         return test_setup_smtp(db, payload)
     except ValueError as exc:
@@ -126,6 +145,7 @@ def post_smtp_test(payload: SetupSMTPTestRequest, db: Session = Depends(get_db_s
 
 @router.post("/wizard/finalize", response_model=SessionResponse)
 def post_finalize_setup(request: Request, db: Session = Depends(get_db_session)):
+    _ensure_setup_is_open(db)
     try:
         user = finalize_setup(db)
     except ValueError as exc:

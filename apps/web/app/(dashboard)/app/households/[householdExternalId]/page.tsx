@@ -2,7 +2,7 @@ import { LocationQRCodeCard } from "../../../../../components/location-qr-card";
 import { PantryActivityFeed } from "../../../../../components/pantry-activity-feed";
 import { PantryControls } from "../../../../../components/pantry-controls";
 import { PantryProductBrowser } from "../../../../../components/pantry-product-browser";
-import { getPantryOverview, requireSession } from "../../../../../lib/server-auth";
+import { getPantryOverview, requireHouseholdAccess } from "../../../../../lib/server-auth";
 
 type PantryPageProps = {
   params: Promise<{
@@ -22,8 +22,8 @@ export default async function HouseholdPantryPage({
   params,
   searchParams,
 }: PantryPageProps) {
-  await requireSession();
   const { householdExternalId } = await params;
+  await requireHouseholdAccess(householdExternalId);
   const filters = await searchParams;
   const overview = await getPantryOverview(householdExternalId, {
     q: filters.q ?? null,

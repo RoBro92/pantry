@@ -1,5 +1,5 @@
 import { ShoppingHistoryPanel } from "../../../../../../../components/shopping-history-panel";
-import { getShoppingList, requireSession } from "../../../../../../../lib/server-auth";
+import { getShoppingList, requireHouseholdAccess } from "../../../../../../../lib/server-auth";
 
 type ShoppingHistoryPageProps = {
   params: Promise<{
@@ -10,8 +10,8 @@ type ShoppingHistoryPageProps = {
 export default async function HouseholdShoppingHistoryPage({
   params,
 }: ShoppingHistoryPageProps) {
-  await requireSession();
   const { householdExternalId } = await params;
+  await requireHouseholdAccess(householdExternalId);
   const shoppingList = await getShoppingList(householdExternalId, { history_limit: 100 });
 
   return (

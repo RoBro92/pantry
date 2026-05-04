@@ -4,7 +4,7 @@ import hashlib
 import json
 import secrets
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING
 
 from app.core.config import AppSettings
@@ -45,8 +45,25 @@ def sanitize_upload_filename(filename: str | None) -> str:
     return sanitized or "upload.bin"
 
 
+def validate_relative_storage_path(relative_storage_path: str) -> str:
+    normalized = relative_storage_path.replace("\\", "/").strip()
+    path = PurePosixPath(normalized)
+    if (
+        not normalized
+        or path.is_absolute()
+        or any(part in {"", ".", ".."} for part in path.parts)
+    ):
+        raise ValueError("Import source storage path must be a safe relative path.")
+    return normalized
+
+
 def resolve_storage_path(settings: AppSettings, relative_storage_path: str) -> Path:
-    return Path(settings.import_storage_root).joinpath(relative_storage_path)
+    safe_relative_path = validate_relative_storage_path(relative_storage_path)
+    root = Path(settings.import_storage_root).resolve()
+    candidate = root.joinpath(safe_relative_path).resolve()
+    if candidate != root and root not in candidate.parents:
+        raise ValueError("Import source storage path must stay inside the import storage root.")
+    return candidate
 
 
 def _is_text_like(data: bytes) -> bool:

@@ -1,7 +1,7 @@
 import { HouseholdAIMealPlanner } from "../../../../../../components/household-ai-meal-planner";
 import {
   getAIMealPlanner,
-  requireSession
+  requireHouseholdAccess
 } from "../../../../../../lib/server-auth";
 
 type HouseholdAIPageProps = {
@@ -11,8 +11,8 @@ type HouseholdAIPageProps = {
 };
 
 export default async function HouseholdAIPage({ params }: HouseholdAIPageProps) {
-  const session = await requireSession();
   const { householdExternalId } = await params;
+  const session = await requireHouseholdAccess(householdExternalId);
   const planner = await getAIMealPlanner(householdExternalId);
 
   return (

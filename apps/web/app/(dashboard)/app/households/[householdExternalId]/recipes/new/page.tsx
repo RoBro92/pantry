@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { RecipeForm } from "../../../../../../../components/recipe-form";
-import { getPantryOverview, requireSession } from "../../../../../../../lib/server-auth";
+import { getPantryOverview, requireHouseholdAccess } from "../../../../../../../lib/server-auth";
 
 type RecipeCreatePageProps = {
   params: Promise<{
@@ -9,8 +9,8 @@ type RecipeCreatePageProps = {
 };
 
 export default async function RecipeCreatePage({ params }: RecipeCreatePageProps) {
-  await requireSession();
   const { householdExternalId } = await params;
+  await requireHouseholdAccess(householdExternalId);
   const pantry = await getPantryOverview(householdExternalId);
 
   return (

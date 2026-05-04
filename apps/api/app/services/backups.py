@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import secrets
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
@@ -22,7 +23,7 @@ from app.models.role import Role
 from app.models.user import User
 from app.models.identifiers import generate_external_id
 from app.services.audit import record_audit_event
-from app.services.import_storage import sanitize_upload_filename
+from app.services.import_storage import sanitize_upload_filename, validate_relative_storage_path
 
 if TYPE_CHECKING:
     from fastapi import UploadFile
@@ -30,6 +31,7 @@ if TYPE_CHECKING:
 BACKUP_FORMAT = "pantry.backup.bundle"
 BACKUP_FORMAT_VERSION = 1
 ALLOWED_BACKUP_EXTENSIONS = {".json"}
+STAGED_BACKUP_ID_PATTERN = re.compile(r"^[0-9a-f]{32}$")
 RESTORE_CONFIRMATION_PHRASE = "RESTORE PANTRY INSTANCE"
 HOUSEHOLD_RESTORE_CONFIRMATION_PHRASE = "RESTORE PANTRY HOUSEHOLD"
 HOUSEHOLD_EXPORT_TABLES = {
@@ -871,6 +873,12 @@ def _validate_bundle_payload(payload: dict[str, Any]) -> dict[str, Any]:
             raise ValueError(f"Backup bundle references unsupported table {table_name}.")
         if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
             raise ValueError(f"Backup bundle table {table_name} has invalid row data.")
+        if table_name == "import_source_files":
+            for row in rows:
+                try:
+                    validate_relative_storage_path(str(row.get("storage_path") or ""))
+                except ValueError as exc:
+                    raise ValueError("Backup bundle contains an unsafe import source storage path.") from exc
 
     return payload
 
@@ -1017,8 +1025,20 @@ def _quarantine_dir(settings: AppSettings) -> Path:
     return path
 
 
+def _validate_stage_id(stage_id: str) -> str:
+    normalized = stage_id.strip()
+    if STAGED_BACKUP_ID_PATTERN.fullmatch(normalized) is None:
+        raise ValueError("Invalid staged backup identifier.")
+    return normalized
+
+
 def _staged_backup_path(settings: AppSettings, stage_id: str) -> Path:
-    return _quarantine_dir(settings) / f"{stage_id}.json"
+    safe_stage_id = _validate_stage_id(stage_id)
+    quarantine_root = _quarantine_dir(settings).resolve()
+    staged_path = quarantine_root.joinpath(f"{safe_stage_id}.json").resolve()
+    if staged_path.parent != quarantine_root:
+        raise ValueError("Invalid staged backup path.")
+    return staged_path
 
 
 async def stage_backup_upload(
@@ -1089,7 +1109,7 @@ async def stage_backup_upload(
         original_filename=original_filename,
         size_bytes=len(data),
         uploaded_at=uploaded_at,
-        quarantine_path=str(staged_path.relative_to(Path(settings.backup_storage_root))),
+        quarantine_path=str(staged_path.relative_to(Path(settings.backup_storage_root).resolve())),
         bundle=bundle,
         supported_for_restore=supported_for_restore,
         warnings=tuple(warnings),

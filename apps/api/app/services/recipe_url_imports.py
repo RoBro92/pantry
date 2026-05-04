@@ -2,19 +2,23 @@ from __future__ import annotations
 
 import json
 import re
+from datetime import timedelta
 from fractions import Fraction
 from html import unescape
 from typing import Any
+from urllib.parse import urljoin
 
 import httpx
-from sqlalchemy import select
+from sqlalchemy import and_, case, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.db import SessionLocal
+from app.models.base import utc_now
 from app.models.recipe import Recipe
 from app.models.recipe_url_import import RecipeURLImport
 from app.schemas.recipes import RecipeIngredientInput
 from app.services.audit import record_audit_event
+from app.services.network_policy import validate_public_http_url
 from app.services.recipe_catalog import create_recipe_record
 
 JSON_LD_RE = re.compile(
@@ -23,13 +27,26 @@ JSON_LD_RE = re.compile(
 )
 TITLE_RE = re.compile(r"<title[^>]*>(.*?)</title>", re.IGNORECASE | re.DOTALL)
 WHITESPACE_RE = re.compile(r"\s+")
+MAX_RECIPE_IMPORT_REDIRECTS = 3
+MAX_RECIPE_IMPORT_BYTES = 1_048_576
+RECIPE_URL_IMPORT_RESUME_TIMEOUT = timedelta(minutes=15)
 
 
 def _claim_next_recipe_url_import(db: Session) -> RecipeURLImport | None:
+    resume_before = utc_now() - RECIPE_URL_IMPORT_RESUME_TIMEOUT
     record = db.scalar(
         select(RecipeURLImport)
-        .where(RecipeURLImport.status == "queued")
-        .order_by(RecipeURLImport.created_at.asc())
+        .where(
+            or_(
+                RecipeURLImport.status == "queued",
+                and_(
+                    RecipeURLImport.status == "processing",
+                    RecipeURLImport.updated_at < resume_before,
+                ),
+            )
+        )
+        .order_by(case((RecipeURLImport.status == "queued", 0), else_=1), RecipeURLImport.created_at.asc())
+        .with_for_update(skip_locked=True)
     )
     if record is None:
         return None
@@ -46,10 +63,32 @@ def _load_record_by_id(db: Session, *, record_id) -> RecipeURLImport | None:
 
 
 def _fetch_recipe_html(url: str) -> str:
-    with httpx.Client(follow_redirects=True, timeout=10.0) as client:
-        response = client.get(url, headers={"user-agent": "PantryRecipeImporter/0.1"})
-        response.raise_for_status()
-    return response.text
+    current_url = validate_public_http_url(url, field_name="Recipe URL", resolve_host=True)
+    with httpx.Client(follow_redirects=False, timeout=10.0) as client:
+        for _ in range(MAX_RECIPE_IMPORT_REDIRECTS + 1):
+            response = client.get(current_url, headers={"user-agent": "PantroRecipeImporter/0.2"})
+            validate_public_http_url(str(response.url), field_name="Recipe URL", resolve_host=True)
+
+            if response.is_redirect:
+                location = response.headers.get("location")
+                if not location:
+                    raise ValueError("Recipe URL returned a redirect without a location.")
+                current_url = validate_public_http_url(
+                    urljoin(str(response.url), location),
+                    field_name="Recipe URL redirect",
+                    resolve_host=True,
+                )
+                continue
+
+            response.raise_for_status()
+            content_type = response.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+            if content_type and content_type not in {"text/html", "application/xhtml+xml"}:
+                raise ValueError("Recipe URL must return HTML content.")
+            if len(response.content) > MAX_RECIPE_IMPORT_BYTES:
+                raise ValueError("Recipe URL response is too large to import safely.")
+            return response.text
+
+    raise ValueError("Recipe URL redirected too many times.")
 
 
 def _iter_json_ld_candidates(payload: Any) -> list[dict[str, Any]]:

@@ -4,11 +4,11 @@ import csv
 import io
 import json
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy import and_, case, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import get_settings
@@ -23,6 +23,7 @@ from app.services.import_workflow import fail_import_job, refresh_import_job_cou
 from app.services.pantry_normalization import normalize_barcode, normalize_lookup_name, normalize_unit, require_text
 
 logger = structlog.get_logger(__name__)
+IMPORT_JOB_RESUME_TIMEOUT = timedelta(minutes=15)
 
 
 @dataclass(frozen=True)
@@ -238,15 +239,28 @@ def _extract_parsed_lines(import_job: ImportJob) -> tuple[list[ParsedImportLine]
 
 
 def _claim_next_import_job(db: Session) -> ImportJob | None:
+    resume_before = utc_now() - IMPORT_JOB_RESUME_TIMEOUT
     import_job = db.scalar(
         select(ImportJob)
-        .where(ImportJob.status == "queued")
+        .where(
+            or_(
+                ImportJob.status == "queued",
+                and_(
+                    ImportJob.status == "processing",
+                    or_(
+                        ImportJob.processing_started_at.is_(None),
+                        ImportJob.processing_started_at < resume_before,
+                    ),
+                ),
+            )
+        )
         .options(
             selectinload(ImportJob.household),
             selectinload(ImportJob.source_files),
             selectinload(ImportJob.lines),
         )
-        .order_by(ImportJob.created_at.asc())
+        .order_by(case((ImportJob.status == "queued", 0), else_=1), ImportJob.created_at.asc())
+        .with_for_update(skip_locked=True)
     )
     if import_job is None:
         return None

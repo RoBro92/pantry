@@ -24,8 +24,8 @@ from app.api.routes.settings_admin import router as settings_admin_router
 from app.api.routes.shopping_lists import router as shopping_lists_router
 from app.api.routes.setup import router as setup_router
 from app.api.routes.smtp_admin import router as smtp_admin_router
-from app.core.config import get_settings
-from app.core.db import SessionLocal
+from app.core.config import get_settings, validate_production_settings
+from app.core.db import SessionLocal, engine
 from app.core.logging import configure_logging
 from app.services.platform_features import FLAG_USAGE_METERING, get_effective_feature_flag
 from app.services.usage_counters import increment_usage_counter
@@ -75,6 +75,7 @@ def _record_request_usage(request: Request, *, status_code: int) -> None:
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    validate_production_settings(settings)
     logger.info(
         "api.starting",
         environment=settings.environment,
@@ -84,6 +85,7 @@ async def lifespan(_: FastAPI):
     )
     yield
     logger.info("api.stopping")
+    engine.dispose()
 
 
 app = FastAPI(

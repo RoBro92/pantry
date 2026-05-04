@@ -69,6 +69,23 @@ export async function requirePlatformAdminSession(): Promise<SessionResponse> {
   return session;
 }
 
+export async function requireHouseholdAccess(householdExternalId: string): Promise<SessionResponse> {
+  const session = await requireSession();
+  if (session.user.platform_role === "platform_admin") {
+    return session;
+  }
+
+  const hasActiveMembership = session.memberships.some(
+    (membership) =>
+      membership.is_active && membership.household_external_id === householdExternalId
+  );
+  if (!hasActiveMembership) {
+    redirect("/app");
+  }
+
+  return session;
+}
+
 export async function getAdminOverview(): Promise<AdminOverview> {
   return apiGet<AdminOverview>("/api/platform-admin/overview");
 }

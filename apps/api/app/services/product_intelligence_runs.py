@@ -1126,6 +1126,7 @@ def _claim_next_product_intelligence_run(db: Session) -> ProductIntelligenceRun 
             selectinload(ProductIntelligenceRun.requested_by_user),
         )
         .order_by(ProductIntelligenceRun.created_at)
+        .with_for_update(skip_locked=True)
     )
     resumed = False
     if run is None:
@@ -1144,6 +1145,7 @@ def _claim_next_product_intelligence_run(db: Session) -> ProductIntelligenceRun 
                 selectinload(ProductIntelligenceRun.requested_by_user),
             )
             .order_by(ProductIntelligenceRun.last_progress_at, ProductIntelligenceRun.created_at)
+            .with_for_update(skip_locked=True)
         )
         resumed = run is not None
 
