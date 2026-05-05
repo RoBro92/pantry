@@ -22,6 +22,7 @@ const FOCUSABLE_SELECTOR = [
   "[tabindex]:not([tabindex='-1'])",
   "[contenteditable='true']",
 ].join(", ");
+const AUTOFOCUS_SELECTOR = "[data-autofocus='true'], [autofocus]";
 
 function isFocusableElement(element: HTMLElement) {
   if (element.hasAttribute("disabled") || element.getAttribute("aria-hidden") === "true") {
@@ -66,7 +67,7 @@ export function ModalShell({
   }, []);
 
   useEffect(() => {
-    if (typeof document === "undefined") {
+    if (typeof document === "undefined" || !portalTarget) {
       return;
     }
 
@@ -90,6 +91,7 @@ export function ModalShell({
       }
 
       const initialFocusTarget =
+        contentRef.current?.querySelector<HTMLElement>(AUTOFOCUS_SELECTOR) ??
         getFocusableElements(contentRef.current)[0] ??
         getFocusableElements(panelElement)[0] ??
         panelElement;
@@ -105,7 +107,7 @@ export function ModalShell({
         returnFocusTarget.focus();
       }
     };
-  }, []);
+  }, [portalTarget]);
 
   function handleFocusTrap(event: KeyboardEvent<HTMLElement>) {
     if (event.key === "Escape") {

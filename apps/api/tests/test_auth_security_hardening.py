@@ -53,6 +53,10 @@ class FakeRedis:
             return -1
         return int(expires_at - self.now())
 
+    def get(self, key: str):
+        self._expire(key)
+        return self.values.get(key)
+
     def delete(self, *keys: str) -> int:
         deleted = 0
         for key in keys:
@@ -166,6 +170,56 @@ def test_login_rate_limit_blocks_and_resets_without_account_enumeration(client, 
         json={"email": "limited-admin@example.com", "password": "wrong password"},
     )
     assert allowed_again.status_code == 401
+
+
+def test_successful_logins_do_not_consume_failed_login_rate_limits(client, db_session, rate_limit_env):
+    create_platform_admin(
+        db_session,
+        email="successful-limited-admin@example.com",
+        password=PASSWORD,
+        display_name="Successful Limited Admin",
+    )
+
+    for _ in range(5):
+        response = client.post(
+            "/api/auth/login",
+            json={"email": "successful-limited-admin@example.com", "password": PASSWORD},
+        )
+        assert response.status_code == 200
+
+
+def test_successful_login_does_not_clear_shared_ip_failure_limit(client, db_session, rate_limit_env):
+    create_platform_admin(
+        db_session,
+        email="ip-limited-admin@example.com",
+        password=PASSWORD,
+        display_name="IP Limited Admin",
+    )
+
+    first_failure = client.post(
+        "/api/auth/login",
+        json={"email": "missing-one@example.com", "password": "wrong password"},
+    )
+    assert first_failure.status_code == 401
+
+    valid_login = client.post(
+        "/api/auth/login",
+        json={"email": "ip-limited-admin@example.com", "password": PASSWORD},
+    )
+    assert valid_login.status_code == 200
+
+    second_failure = client.post(
+        "/api/auth/login",
+        json={"email": "missing-two@example.com", "password": "wrong password"},
+    )
+    assert second_failure.status_code == 401
+
+    blocked = client.post(
+        "/api/auth/login",
+        json={"email": "missing-three@example.com", "password": "wrong password"},
+    )
+    assert blocked.status_code == 429
+    assert blocked.json()["detail"] == "Too many authentication attempts. Please wait before trying again."
 
 
 def test_password_reset_request_rate_limit_blocks_and_resets_generically(

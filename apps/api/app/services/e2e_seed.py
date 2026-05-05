@@ -15,6 +15,7 @@ from app.models import Base, Role
 from app.services.auth import create_household, create_membership, create_platform_admin, create_user
 from app.services.pantry_catalog import create_location, create_location_group, create_product
 from app.services.pantry_stock import add_stock_lot
+from app.services.rate_limits import clear_all_rate_limits
 from app.services.setup import mark_setup_completed
 
 E2E_PASSWORD = "correct horse battery"
@@ -55,6 +56,8 @@ class E2ESeedManifest:
 
 
 def reset_application_data(db: Session) -> None:
+    clear_all_rate_limits()
+
     for table in reversed(Base.metadata.sorted_tables):
         if table.name == Role.__tablename__:
             continue

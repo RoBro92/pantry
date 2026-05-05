@@ -639,6 +639,7 @@ export function PantryQuickAddDialog({
                 <span>Barcode capture</span>
                 <input
                   ref={captureInputRef}
+                  data-autofocus="true"
                   value={captureValue}
                   onChange={(event) => {
                     setCaptureValue(event.target.value);

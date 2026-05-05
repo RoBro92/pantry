@@ -53,6 +53,22 @@ def _hit_local_limit(key: str, *, limit: int, window_seconds: int) -> RateLimitR
     )
 
 
+def _check_local_limit(key: str, *, limit: int, window_seconds: int) -> RateLimitResult:
+    now = time.time()
+    attempts, expires_at = _LOCAL_BUCKETS.get(key, (0, now + window_seconds))
+    if expires_at <= now:
+        _LOCAL_BUCKETS.pop(key, None)
+        attempts = 0
+        expires_at = now + window_seconds
+    retry_after = max(1, int(expires_at - now))
+    return RateLimitResult(
+        allowed=attempts < limit,
+        attempts=attempts,
+        limit=limit,
+        retry_after_seconds=retry_after,
+    )
+
+
 def _get_redis_client_or_none() -> Redis | None:
     try:
         return get_redis_client()
@@ -96,6 +112,41 @@ def hit_rate_limit(
         client.close()
 
 
+def check_rate_limit(
+    scope: str,
+    *parts: str,
+    limit: int,
+    window_seconds: int,
+) -> RateLimitResult:
+    key = _build_key(scope, *parts)
+    if limit <= 0:
+        return RateLimitResult(allowed=False, attempts=0, limit=limit, retry_after_seconds=window_seconds)
+
+    settings = get_settings()
+    if not settings.rate_limit_redis_enabled:
+        return _check_local_limit(key, limit=limit, window_seconds=window_seconds)
+
+    client = _get_redis_client_or_none()
+    if client is None:
+        return _check_local_limit(key, limit=limit, window_seconds=window_seconds)
+
+    try:
+        raw_attempts = client.get(key)
+        attempts = int(raw_attempts) if raw_attempts is not None else 0
+        redis_ttl = client.ttl(key)
+        retry_after = redis_ttl if redis_ttl and redis_ttl > 0 else window_seconds
+        return RateLimitResult(
+            allowed=attempts < limit,
+            attempts=attempts,
+            limit=limit,
+            retry_after_seconds=retry_after,
+        )
+    except (RedisError, OSError, TimeoutError, ValueError):
+        return _check_local_limit(key, limit=limit, window_seconds=window_seconds)
+    finally:
+        client.close()
+
+
 def clear_rate_limit(scope: str, *parts: str) -> None:
     key = _build_key(scope, *parts)
     _LOCAL_BUCKETS.pop(key, None)
@@ -109,6 +160,26 @@ def clear_rate_limit(scope: str, *parts: str) -> None:
 
     try:
         client.delete(key)
+    except (RedisError, OSError, TimeoutError, ValueError):
+        return
+    finally:
+        client.close()
+
+
+def clear_all_rate_limits() -> None:
+    _LOCAL_BUCKETS.clear()
+
+    if not get_settings().rate_limit_redis_enabled:
+        return
+
+    client = _get_redis_client_or_none()
+    if client is None:
+        return
+
+    try:
+        keys = list(client.scan_iter(f"{RATE_LIMIT_PREFIX}:*"))
+        if keys:
+            client.delete(*keys)
     except (RedisError, OSError, TimeoutError, ValueError):
         return
     finally:

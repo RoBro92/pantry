@@ -27,6 +27,22 @@ function buildUpstreamUrl(request: NextRequest, pathSegments: string[]): URL {
   return upstreamUrl;
 }
 
+function firstForwardedValue(value: string | null): string | null {
+  return value?.split(",")[0]?.trim() || null;
+}
+
+function publicRequestOrigin(request: NextRequest): string {
+  const forwardedProto = firstForwardedValue(request.headers.get("x-forwarded-proto"));
+  const forwardedHost = firstForwardedValue(request.headers.get("x-forwarded-host"));
+  const proto = forwardedProto || request.nextUrl.protocol.replace(/:$/, "") || "http";
+  const host = forwardedHost || request.headers.get("host");
+  if (host) {
+    return `${proto}://${host}`;
+  }
+
+  return request.nextUrl.origin;
+}
+
 async function proxyRequest(request: NextRequest, context: RouteContext): Promise<Response> {
   const pathSegments = await resolvePathSegments(context);
   if (!isAllowedProxyPath(pathSegments)) {
@@ -37,10 +53,11 @@ async function proxyRequest(request: NextRequest, context: RouteContext): Promis
     request.method === "OPTIONS"
       ? request.headers.get("access-control-request-method") ?? request.method
       : request.method;
+  const requestOrigin = publicRequestOrigin(request);
   if (
     isCrossOriginMutation(
       originMethod,
-      request.nextUrl.origin,
+      requestOrigin,
       request.headers.get("origin"),
       request.headers.get("referer")
     )
@@ -53,7 +70,7 @@ async function proxyRequest(request: NextRequest, context: RouteContext): Promis
 
   const upstreamUrl = buildUpstreamUrl(request, pathSegments);
   const upstreamHeaders = copyAllowedForwardHeaders(request.headers);
-  upstreamHeaders.set("origin", request.nextUrl.origin);
+  upstreamHeaders.set("origin", requestOrigin);
   const upstreamResponse = await fetch(upstreamUrl, {
     method: request.method,
     headers: upstreamHeaders,

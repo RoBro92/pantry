@@ -208,6 +208,7 @@ export function BarcodeScannerDialog({
           <span>{mode === "continuous" ? "Type or scan barcodes" : "Type or scan barcode"}</span>
           <input
             ref={manualInputRef}
+            data-autofocus="true"
             value={manualValue}
             onChange={(event) => {
               setManualValue(event.target.value);

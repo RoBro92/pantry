@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 from uuid import uuid4
@@ -120,10 +121,15 @@ def _seed_import_jobs(session_factory, *, count: int) -> list:
 
 
 def _claim_import_job_after_barrier(session_factory, barrier: threading.Barrier):
-    with session_factory() as db:
-        barrier.wait(timeout=10)
-        claimed = _claim_next_import_job(db)
-        return claimed.id if claimed is not None else None
+    barrier.wait(timeout=10)
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        with session_factory() as db:
+            claimed = _claim_next_import_job(db)
+            if claimed is not None:
+                return claimed.id
+        time.sleep(0.01)
+    return None
 
 
 def test_postgresql_import_claims_are_unique_under_multi_worker_contention(postgres_session_factory):
@@ -245,10 +251,15 @@ def _seed_product_intelligence_runs(session_factory, *, count: int) -> list:
 
 
 def _claim_product_intelligence_run_after_barrier(session_factory, barrier: threading.Barrier):
-    with session_factory() as db:
-        barrier.wait(timeout=10)
-        claimed = _claim_next_product_intelligence_run(db)
-        return claimed.id if claimed is not None else None
+    barrier.wait(timeout=10)
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        with session_factory() as db:
+            claimed = _claim_next_product_intelligence_run(db)
+            if claimed is not None:
+                return claimed.id
+        time.sleep(0.01)
+    return None
 
 
 def test_postgresql_product_intelligence_claims_are_unique_under_multi_worker_contention(postgres_session_factory):

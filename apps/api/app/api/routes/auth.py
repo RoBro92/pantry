@@ -28,7 +28,7 @@ from app.services.password_resets import (
     request_password_reset,
 )
 from app.services.setup import is_setup_complete
-from app.services.rate_limits import clear_rate_limit, hit_rate_limit
+from app.services.rate_limits import check_rate_limit, clear_rate_limit, hit_rate_limit
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 LOGIN_LIMIT_MESSAGE = "Too many authentication attempts. Please wait before trying again."
@@ -65,13 +65,13 @@ def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db_
     identifier = payload.identifier or payload.email or ""
     settings = get_settings()
     client_scope = _client_scope(request)
-    ip_limit = hit_rate_limit(
+    ip_limit = check_rate_limit(
         "login:ip",
         client_scope,
         limit=settings.login_rate_limit_attempts,
         window_seconds=settings.login_rate_limit_window_seconds,
     )
-    identifier_limit = hit_rate_limit(
+    identifier_limit = check_rate_limit(
         "login:identifier",
         identifier,
         limit=settings.login_rate_limit_attempts,
@@ -82,6 +82,20 @@ def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db_
 
     user = authenticate_user(db, identifier, payload.password)
     if user is None:
+        ip_limit = hit_rate_limit(
+            "login:ip",
+            client_scope,
+            limit=settings.login_rate_limit_attempts,
+            window_seconds=settings.login_rate_limit_window_seconds,
+        )
+        identifier_limit = hit_rate_limit(
+            "login:identifier",
+            identifier,
+            limit=settings.login_rate_limit_attempts,
+            window_seconds=settings.login_rate_limit_window_seconds,
+        )
+        if not ip_limit.allowed or not identifier_limit.allowed:
+            _reject_limited(LOGIN_LIMIT_MESSAGE)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid username or password.")
 
     clear_rate_limit("login:identifier", identifier)
