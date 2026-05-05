@@ -657,12 +657,19 @@ _SCHEMA_COMPATIBILITY: dict[tuple[str | None, str | None], RestoreCompatibility]
 # Revisions listed here keep the same backup table layout and restore compatibility
 # behaviour as the mapped baseline revision.
 _SCHEMA_COMPATIBILITY_ALIASES: dict[str, str] = {
+    "20260505_000022": "20260412_000019",
     "20260419_000021": "20260412_000019",
     "20260416_000020": "20260412_000019",
     "20260409_000017": "20260409_000016",
 }
 
 _ADDITIVE_SCHEMA_TABLES: dict[str, tuple[frozenset[str], tuple[str, ...]]] = {
+    "20260505_000022": (
+        frozenset({"canonical_items", "canonical_aliases", "product_canonical_links"}),
+        (
+            "This backup predates canonical knowledge-base groundwork. Canonical items, aliases, and product links will restore as empty.",
+        ),
+    ),
     "20260419_000021": (
         frozenset({"canonical_items", "canonical_aliases", "product_canonical_links"}),
         (

@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app.api.deps.auth import get_current_user
+from app.core.config import get_settings
 from app.core.db import get_db_session
 from app.models.user import User
 from app.schemas.auth import (
@@ -27,8 +28,30 @@ from app.services.password_resets import (
     request_password_reset,
 )
 from app.services.setup import is_setup_complete
+from app.services.rate_limits import clear_rate_limit, hit_rate_limit
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+LOGIN_LIMIT_MESSAGE = "Too many authentication attempts. Please wait before trying again."
+PASSWORD_RESET_LIMIT_MESSAGE = "Too many password reset requests. Please wait before trying again."
+
+
+def _client_scope(request: Request) -> str:
+    if request.client is None or not request.client.host:
+        return "unknown"
+    return request.client.host
+
+
+def _store_user_session(request: Request, user: User) -> None:
+    request.session.clear()
+    request.session["user_external_id"] = user.external_id
+    request.session["session_version"] = user.session_version
+
+
+def _reject_limited(message: str) -> None:
+    raise HTTPException(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        detail=message,
+    )
 
 
 @router.post("/login", response_model=SessionResponse)
@@ -40,12 +63,29 @@ def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db_
         )
 
     identifier = payload.identifier or payload.email or ""
+    settings = get_settings()
+    client_scope = _client_scope(request)
+    ip_limit = hit_rate_limit(
+        "login:ip",
+        client_scope,
+        limit=settings.login_rate_limit_attempts,
+        window_seconds=settings.login_rate_limit_window_seconds,
+    )
+    identifier_limit = hit_rate_limit(
+        "login:identifier",
+        identifier,
+        limit=settings.login_rate_limit_attempts,
+        window_seconds=settings.login_rate_limit_window_seconds,
+    )
+    if not ip_limit.allowed or not identifier_limit.allowed:
+        _reject_limited(LOGIN_LIMIT_MESSAGE)
+
     user = authenticate_user(db, identifier, payload.password)
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid username or password.")
 
-    request.session.clear()
-    request.session["user_external_id"] = user.external_id
+    clear_rate_limit("login:identifier", identifier)
+    _store_user_session(request, user)
     return build_session_response(user)
 
 
@@ -70,6 +110,7 @@ def current_session(
         )
     response.headers["cache-control"] = "no-store"
     request.session["user_external_id"] = current_user.external_id
+    request.session["session_version"] = current_user.session_version
     return build_session_response(current_user)
 
 
@@ -99,6 +140,7 @@ def get_password_reset_token_status_route(
 @router.post("/password-reset/request", response_model=PasswordActionResponse)
 def post_password_reset_request(
     payload: PasswordResetRequest,
+    request: Request,
     db: Session = Depends(get_db_session),
 ):
     if not is_setup_complete(db):
@@ -106,6 +148,22 @@ def post_password_reset_request(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Password reset is unavailable until setup is complete.",
         )
+    settings = get_settings()
+    ip_limit = hit_rate_limit(
+        "password-reset:ip",
+        _client_scope(request),
+        limit=settings.password_reset_rate_limit_attempts,
+        window_seconds=settings.password_reset_rate_limit_window_seconds,
+    )
+    identifier_limit = hit_rate_limit(
+        "password-reset:identifier",
+        payload.email,
+        limit=settings.password_reset_rate_limit_attempts,
+        window_seconds=settings.password_reset_rate_limit_window_seconds,
+    )
+    if not ip_limit.allowed or not identifier_limit.allowed:
+        _reject_limited(PASSWORD_RESET_LIMIT_MESSAGE)
+
     try:
         request_password_reset(db, email=payload.email)
     except ValueError as exc:
@@ -145,11 +203,12 @@ def post_password_reset_confirm(
 @router.post("/password/change", response_model=PasswordActionResponse)
 def post_change_password(
     payload: PasswordChangeRequest,
+    request: Request,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(get_current_user),
 ):
     try:
-        change_password(
+        updated_user = change_password(
             db,
             user=current_user,
             current_password=payload.current_password,
@@ -159,12 +218,14 @@ def post_change_password(
         db.rollback()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
+    _store_user_session(request, updated_user)
     return PasswordActionResponse(ok=True, message="Password updated.")
 
 
 @router.patch("/profile", response_model=SessionResponse)
 def patch_profile(
     payload: ProfileUpdateRequest,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ):
@@ -179,4 +240,5 @@ def patch_profile(
         db.rollback()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
+    _store_user_session(request, updated_user)
     return build_session_response(updated_user)

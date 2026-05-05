@@ -58,6 +58,10 @@ def authenticate_user(db: Session, email: str, password: str) -> User | None:
     return get_user_by_external_id(db, user.external_id)
 
 
+def rotate_user_session_version(user: User) -> None:
+    user.session_version = (user.session_version or 0) + 1
+
+
 def create_user(
     db: Session,
     *,
@@ -99,6 +103,8 @@ def update_user_profile(
     if existing is not None and existing.id != user.id:
         raise ValueError("A user with that username or email already exists.")
 
+    if user.email != normalized_email:
+        rotate_user_session_version(user)
     user.email = normalized_email
     user.display_name = display_name.strip() if display_name and display_name.strip() else None
     db.add(user)

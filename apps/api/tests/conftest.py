@@ -29,10 +29,12 @@ command.upgrade(alembic_config, "head")
 from app.core.db import SessionLocal  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models import Base, Role  # noqa: E402
+from app.services.rate_limits import clear_local_rate_limits  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
 def clean_database():
+    clear_local_rate_limits()
     with SessionLocal() as session:
         for table in reversed(Base.metadata.sorted_tables):
             if table.name == Role.__tablename__:
@@ -46,6 +48,7 @@ def clean_database():
 
     yield
 
+    clear_local_rate_limits()
     with SessionLocal() as session:
         for table in reversed(Base.metadata.sorted_tables):
             if table.name == Role.__tablename__:
@@ -66,5 +69,5 @@ def db_session():
 
 @pytest.fixture
 def client():
-    with TestClient(app) as test_client:
+    with TestClient(app, headers={"origin": "http://testserver"}) as test_client:
         yield test_client

@@ -65,6 +65,13 @@ cp pantro.env.example .env
 
 Browser-side web requests use the web container's same-origin `/api/*` proxy in self-hosted releases. Operators only need `INTERNAL_API_BASE_URL=http://api:8000` so the web container can reach the API container internally.
 
+Unsafe direct API requests are protected by Origin/Referer checks. `WEB_APP_URL` and
+`API_BASE_URL` are allowed automatically; add comma-separated extra browser origins
+to `CSRF_TRUSTED_ORIGINS` only when a reverse proxy or alternate hostname is meant
+to make credentialed API calls. Keep `CSRF_PROTECTION_ENABLED=true` for normal
+self-hosted deployments. Login, password reset, and first-run setup mutation rate
+limits use Redis by default; tune the `*_RATE_LIMIT_*` values in `.env` if needed.
+
 3. Validate and start the stack.
 
 ```bash

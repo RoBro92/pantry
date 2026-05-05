@@ -37,6 +37,29 @@ def _parse_optional_int(value: str | None) -> int | None:
     return int(value)
 
 
+def _parse_origin_list(value: str | None) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    origins: list[str] = []
+    for item in value.split(","):
+        normalized = _normalize_origin(item)
+        if normalized is not None:
+            origins.append(normalized)
+    return tuple(dict.fromkeys(origins))
+
+
+def _normalize_origin(value: str | None) -> str | None:
+    normalized = (value or "").strip().rstrip("/")
+    if not normalized:
+        return None
+    parsed = urlsplit(normalized)
+    if parsed.scheme.lower() not in {"http", "https"} or not parsed.netloc:
+        return None
+    host = parsed.hostname or ""
+    port = f":{parsed.port}" if parsed.port is not None else ""
+    return f"{parsed.scheme.lower()}://{host.lower()}{port}"
+
+
 def _sanitize_url(value: str) -> str:
     if not value:
         return value
@@ -174,6 +197,15 @@ class AppSettings:
     database_url: str
     redis_url: str
     settings_encryption_key: str | None
+    csrf_protection_enabled: bool
+    csrf_trusted_origins: tuple[str, ...]
+    rate_limit_redis_enabled: bool
+    login_rate_limit_attempts: int
+    login_rate_limit_window_seconds: int
+    password_reset_rate_limit_attempts: int
+    password_reset_rate_limit_window_seconds: int
+    setup_mutation_rate_limit_attempts: int
+    setup_mutation_rate_limit_window_seconds: int
     import_storage_root: str
     import_max_upload_bytes: int
     backup_storage_root: str
@@ -199,7 +231,20 @@ class AppSettings:
 
     @property
     def cors_origins(self) -> list[str]:
-        return [self.web_app_url]
+        origins = [
+            _normalize_origin(self.web_app_url),
+            *self.csrf_trusted_origins,
+        ]
+        return [origin for origin in dict.fromkeys(origins) if origin is not None]
+
+    @property
+    def csrf_allowed_origins(self) -> set[str]:
+        origins = {
+            _normalize_origin(self.web_app_url),
+            _normalize_origin(self.api_base_url),
+            *self.csrf_trusted_origins,
+        }
+        return {origin for origin in origins if origin is not None}
 
     @property
     def safe_database_url(self) -> str:
@@ -238,6 +283,15 @@ def get_settings() -> AppSettings:
         ),
         redis_url=os.getenv("REDIS_URL", "redis://redis:6379/0"),
         settings_encryption_key=os.getenv("SETTINGS_ENCRYPTION_KEY") or None,
+        csrf_protection_enabled=_parse_bool(os.getenv("CSRF_PROTECTION_ENABLED"), True),
+        csrf_trusted_origins=_parse_origin_list(os.getenv("CSRF_TRUSTED_ORIGINS")),
+        rate_limit_redis_enabled=_parse_bool(os.getenv("RATE_LIMIT_REDIS_ENABLED"), True),
+        login_rate_limit_attempts=int(os.getenv("LOGIN_RATE_LIMIT_ATTEMPTS", "10")),
+        login_rate_limit_window_seconds=int(os.getenv("LOGIN_RATE_LIMIT_WINDOW_SECONDS", "300")),
+        password_reset_rate_limit_attempts=int(os.getenv("PASSWORD_RESET_RATE_LIMIT_ATTEMPTS", "5")),
+        password_reset_rate_limit_window_seconds=int(os.getenv("PASSWORD_RESET_RATE_LIMIT_WINDOW_SECONDS", "3600")),
+        setup_mutation_rate_limit_attempts=int(os.getenv("SETUP_MUTATION_RATE_LIMIT_ATTEMPTS", "30")),
+        setup_mutation_rate_limit_window_seconds=int(os.getenv("SETUP_MUTATION_RATE_LIMIT_WINDOW_SECONDS", "300")),
         import_storage_root=os.getenv("IMPORT_STORAGE_ROOT", "/workspace/.local/imports"),
         import_max_upload_bytes=int(os.getenv("IMPORT_MAX_UPLOAD_BYTES", "10485760")),
         backup_storage_root=os.getenv("BACKUP_STORAGE_ROOT", "/workspace/.local/backups"),

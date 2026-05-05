@@ -52,9 +52,11 @@ async function proxyRequest(request: NextRequest, context: RouteContext): Promis
   }
 
   const upstreamUrl = buildUpstreamUrl(request, pathSegments);
+  const upstreamHeaders = copyAllowedForwardHeaders(request.headers);
+  upstreamHeaders.set("origin", request.nextUrl.origin);
   const upstreamResponse = await fetch(upstreamUrl, {
     method: request.method,
-    headers: copyAllowedForwardHeaders(request.headers),
+    headers: upstreamHeaders,
     body:
       request.method === "GET" || request.method === "HEAD"
         ? undefined

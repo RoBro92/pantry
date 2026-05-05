@@ -8,7 +8,7 @@ Scope: Pantro v0.2.x Next.js web app, FastAPI API, Python worker, PostgreSQL, Re
 
 Pantro is in a workable v0.2.x state, but the audit found several security and production-readiness issues that should be closed before broader distribution. No confirmed critical issue was found. The highest-risk confirmed issues were SSRF in recipe URL imports, unsafe backup/import path trust during restore, broad web API proxying, open redirect handling on login, weak production secret defaults, and health checks that did not prove database or Redis readiness.
 
-The first hardening pass fixed the confirmed high-risk issues that were practical to address without changing product direction. It also improved readiness checks, backup storage persistence, queue behavior, Redis client lifecycle, frontend auth guards, and production Docker install behavior. Remaining risks are mostly operational controls and hosted-readiness items: login/reset rate limiting, session revocation after password changes, centralized authorization policy, deeper worker concurrency tests, observability, and abuse/egress controls.
+The first hardening pass fixed the confirmed high-risk issues that were practical to address without changing product direction. The follow-up pass added Redis-backed rate limiting with a local fallback, session-version revocation, direct API Origin/Referer protection, deterministic queue-claim tests, stronger smoke/e2e script preflights, and modal focus/Escape behavior. Remaining risks are now mostly live-environment validation and hosted-readiness items: full Docker smoke/e2e execution, live PostgreSQL queue contention execution, centralized authorization policy, observability, and abuse/egress controls.
 
 ## Current Repo Condition
 
@@ -49,11 +49,12 @@ The first hardening pass fixed the confirmed high-risk issues that were practica
 - [x] Fixed: health check was only liveness. `apps/api/app/api/routes/health.py` now adds `/api/ready` with database, migration, and Redis checks while leaving `/api/health` as liveness.
 - [x] Fixed: DB engine lifecycle. `apps/api/app/main.py` now disposes the SQLAlchemy engine during FastAPI shutdown.
 - [x] Fixed: import jobs could stay stuck after a worker crash. `_claim_next_import_job` can reclaim stale processing jobs and uses PostgreSQL row locking where supported.
-- [x] Partially fixed: queue double-claim risk. Import, recipe URL import, and product intelligence claim queries now use `FOR UPDATE SKIP LOCKED` on PostgreSQL. Remaining gap: no load/concurrency test was run against a live PostgreSQL stack.
+- [x] Partially fixed: queue double-claim risk. Import, recipe URL import, and product intelligence claim queries now use `FOR UPDATE SKIP LOCKED` on PostgreSQL, with static SQL tests and gated live PostgreSQL contention tests. Remaining gap: live contention tests were skipped because no `PANTRY_TEST_POSTGRES_URL` was available.
 - [x] Fixed: Redis clients were not closed after heartbeat/health calls. `apps/api/app/services/runtime_status.py` now closes clients in `finally` blocks.
-- [ ] Not fixed: login/password reset rate limiting. Needs a durable limiter strategy for self-hosted and future hosted deployments.
-- [ ] Not fixed: password reset/change does not revoke existing signed-cookie sessions. Requires a server-side session version or revocation model.
-- [ ] Not fixed: CSRF is mitigated at the web proxy origin check, but API-wide CSRF policy is not centralized for all possible direct API deployments.
+- [x] Fixed: login/password reset rate limiting. `apps/api/app/services/rate_limits.py` uses Redis when available and falls back to an in-process window when Redis is unavailable.
+- [x] Fixed: setup mutation rate limiting. First-run setup mutation routes now share a Redis-backed limiter.
+- [x] Fixed: password reset/change did not revoke existing signed-cookie sessions. Users now have `session_version`, stored sessions carry the version, and credential/security-sensitive changes rotate it.
+- [x] Fixed: direct API CSRF/origin protection. Unsafe API methods now require an allowed `Origin` or `Referer`, using `WEB_APP_URL`, `API_BASE_URL`, and `CSRF_TRUSTED_ORIGINS`.
 
 ### Low
 
@@ -61,7 +62,7 @@ The first hardening pass fixed the confirmed high-risk issues that were practica
 - [x] Fixed: production web image used `npm install`. It now uses `npm ci`.
 - [x] Fixed: frontend household pages lacked route-level prechecks. Household routes now call `requireHouseholdAccess` before loading household data.
 - [x] Fixed: no app-level error boundary. A minimal `apps/web/app/error.tsx` was added.
-- [ ] Not fixed: modal focus trapping and Escape-key behavior should be reviewed across dialogs.
+- [x] Fixed: modal focus trapping and Escape-key behavior. `ModalShell` now moves focus into dialogs, traps Tab, closes on Escape, and restores focus.
 - [ ] Not fixed: Docker images still run as image defaults. Compose adds `no-new-privileges` and drops capabilities, but explicit non-root runtime users should be evaluated per image.
 
 ## Maintainability Findings By Priority
@@ -81,7 +82,8 @@ The first hardening pass fixed the confirmed high-risk issues that were practica
 - [x] Fixed: migration service now mounts the same storage roots used by API restore flows.
 - [x] Fixed: install/update healthcheck scripts understand readiness checks.
 - [x] Fixed: Redis heartbeat helpers close clients.
-- [x] Partially fixed: worker queue claims are safer, but live multi-worker PostgreSQL contention was not exercised because Docker was unavailable.
+- [x] Partially fixed: worker queue claims are safer and have deterministic static/gated PostgreSQL tests, but live multi-worker PostgreSQL contention was not exercised because no PostgreSQL test URL was available.
+- [x] Fixed: smoke/e2e scripts now have clearer preflight, timeout, readiness, migration-head, Redis, Postgres, and worker checks where practical.
 - [ ] Not fixed: API startup still does not run migrations automatically. This is acceptable for self-hosting if the migrate step remains explicit and documented.
 - [ ] Not fixed: e2e/smoke validation against a running local stack could not be performed because the Docker daemon was not available.
 
@@ -94,15 +96,14 @@ Do not add hosted-only logic or billing in this repo now. SaaS readiness should 
 - Add abuse controls for outbound URL fetches, AI provider usage, SMTP, and restore uploads.
 - Add operator/support views for job state, tenant activity, and provider health before hosted support.
 - Add observability around request IDs, job IDs, provider request IDs, and sanitized error classes.
-- Add secret rotation/session revocation strategy before multi-tenant hosting.
+- Add secret rotation strategy before multi-tenant hosting.
 
 ## Test Coverage Gaps
 
-- No live PostgreSQL concurrency test for `SKIP LOCKED` queue claims.
-- No browser e2e/smoke run in this pass because Docker was unavailable.
-- No rate-limit tests because rate limiting is not implemented yet.
-- No session revocation tests because signed-cookie revocation is not implemented yet.
-- Limited frontend interaction tests for dialogs, focus management, mobile layout, and API error states.
+- Live PostgreSQL concurrency tests for `SKIP LOCKED` queue claims exist, but are skipped unless `PANTRY_TEST_POSTGRES_URL` is provided.
+- No completed browser e2e/smoke run because Docker was unavailable.
+- Browser modal focus/accessibility specs were added, but they could not execute to assertions because Docker-backed e2e seeding was unavailable.
+- Broader frontend interaction tests for mobile layout and API error states remain limited.
 - Backup restore tests cover API behavior, but not a full production-volume restore with API/worker containers sharing mounted storage.
 
 ## Recommended Target Architecture/State
@@ -125,11 +126,13 @@ Do not add hosted-only logic or billing in this repo now. SaaS readiness should 
 - [x] Improve worker queue claim safety and Redis lifecycle.
 - [x] Add focused backend and frontend tests for the hardening fixes.
 - [x] Run backend tests, frontend tests/typecheck/build, migration checks, and Compose config validation.
-- [ ] Add rate limiting for auth/password reset flows.
-- [ ] Add session revocation/session-versioning for password changes and resets.
+- [x] Add rate limiting for auth/password reset flows.
+- [x] Add setup mutation rate limiting.
+- [x] Add session revocation/session-versioning for password changes, resets, and email changes.
+- [x] Add direct API CSRF/origin protection.
+- [x] Add PostgreSQL multi-worker queue contention tests, gated on `PANTRY_TEST_POSTGRES_URL`.
+- [x] Add dialog/accessibility regression tests for modal focus, focus restoration, and Escape behavior.
 - [ ] Add live Docker smoke/e2e validation once Docker is available.
-- [ ] Add PostgreSQL multi-worker queue contention tests.
-- [ ] Add dialog/accessibility and mobile regression tests for key frontend flows.
 
 ## Fix Now
 
@@ -143,15 +146,18 @@ Do not add hosted-only logic or billing in this repo now. SaaS readiness should 
 - Readiness checks and production healthcheck wiring.
 - Persistent backup storage mounts.
 - Queue stale-job reclaiming and Redis client closure.
+- Redis-backed auth/setup rate limiting.
+- Session-version revocation.
+- Direct API CSRF/origin checks.
+- Smoke/e2e readiness script preflight improvements.
+- Modal focus/Escape behavior.
 
 ## Fix Later
 
-- Login/password reset rate limiting.
-- Server-side session versioning/revocation.
 - Central authorization policy matrix and tests for every household route.
-- Live PostgreSQL queue contention tests.
+- Live PostgreSQL queue contention test execution against `PANTRY_TEST_POSTGRES_URL`.
 - Broader structured observability and support tooling.
-- Dialog focus management and frontend interaction regression coverage.
+- Broader frontend interaction regression coverage beyond modal focus.
 - Explicit non-root image/runtime hardening once tested against the base images.
 
 ## Do Not Do Yet
@@ -165,13 +171,15 @@ Do not add hosted-only logic or billing in this repo now. SaaS readiness should 
 ## Files And Areas Affected
 
 - Backend security/runtime: `apps/api/app/core/config.py`, `apps/api/app/main.py`, `apps/api/app/api/routes/health.py`, `apps/api/app/api/routes/setup.py`
+- Auth hardening: `apps/api/app/api/deps/auth.py`, `apps/api/app/api/routes/auth.py`, `apps/api/app/models/user.py`, `apps/api/app/services/auth.py`, `apps/api/app/services/password_resets.py`, `apps/api/app/services/rate_limits.py`, `apps/api/app/services/csrf.py`, `apps/api/alembic/versions/20260505_000022_user_session_version.py`
 - Backup/import safety: `apps/api/app/services/backups.py`, `apps/api/app/services/import_storage.py`
 - URL import safety: `apps/api/app/services/network_policy.py`, `apps/api/app/services/recipe_catalog.py`, `apps/api/app/services/recipe_url_imports.py`
 - Queue/runtime stability: `apps/api/app/services/import_processing.py`, `apps/api/app/services/product_intelligence_runs.py`, `apps/api/app/services/runtime_status.py`
-- Backend tests: `apps/api/tests/test_security_hardening.py`
+- Backend tests: `apps/api/tests/test_security_hardening.py`, `apps/api/tests/test_auth_security_hardening.py`, `apps/api/tests/test_queue_concurrency.py`
 - Frontend security: `apps/web/app/api/[...path]/route.ts`, `apps/web/lib/proxy-policy.ts`, `apps/web/lib/redirect-path.ts`, `apps/web/lib/server-auth.ts`, `apps/web/lib/security-helpers.test.mjs`
 - Frontend routes: `apps/web/app/(auth)/login/page.tsx`, household pages under `apps/web/app/(dashboard)/app/households/[householdExternalId]`, `apps/web/app/error.tsx`
-- Ops/deployment: `infra/compose/pantro.yml`, `infra/compose/pantry.yml`, `infra/env/*.env.example`, `infra/scripts/healthcheck-pantro.sh`, `infra/scripts/install-pantro.sh`, `infra/scripts/update-pantro.sh`, `infra/docker/web.production.Dockerfile`
+- Frontend accessibility: `apps/web/components/modal-shell.tsx`, `tests/e2e/dialog-accessibility.spec.ts`
+- Ops/deployment: `infra/compose/pantro.yml`, `infra/compose/pantry.yml`, `infra/env/*.env.example`, `infra/scripts/healthcheck-pantro.sh`, `infra/scripts/install-pantro.sh`, `infra/scripts/update-pantro.sh`, `infra/scripts/smoke-check.sh`, `infra/scripts/e2e-seed.sh`, `infra/scripts/e2e-reset-uninitialized.sh`, `infra/scripts/worker-once.sh`, `infra/docker/web.production.Dockerfile`, `docs/TEST_STRATEGY.md`, `docs/DEPLOYMENT.md`
 
 ## Investigated But Not Confirmed
 
@@ -180,7 +188,7 @@ Do not add hosted-only logic or billing in this repo now. SaaS readiness should 
 - No confirmed command injection in reviewed scripts or app routes.
 - No confirmed unsafe prompt/provider response logging of API keys; provider logging should still stay sanitized as observability grows.
 - QR-code SVG/XSS risk was not confirmed in this pass.
-- Direct public API CSRF risk depends on deployment topology; the web proxy now blocks cross-origin mutations, but API-wide policy remains a future hardening item.
+- Direct public API CSRF/origin protection was implemented. Further review is still warranted for non-browser API automation that intentionally omits `Origin`/`Referer`.
 
 ## Risky Changes To Avoid
 
@@ -204,40 +212,55 @@ Do not add hosted-only logic or billing in this repo now. SaaS readiness should 
 - Added a minimal frontend error boundary.
 - Hardened production Compose/env/script/Dockerfile behavior through PR branch changes.
 
+## Follow-Up Changes Completed
+
+- Added Redis-backed rate limiting for login, password reset requests, and setup mutation routes, with in-process fallback when Redis is unavailable.
+- Added non-enumerating `429` responses for login and password reset throttling.
+- Added `users.session_version`, session-version storage in signed sessions, and rotation after password reset, password change, and email changes.
+- Added direct API Origin/Referer protection for unsafe API methods, plus `CSRF_TRUSTED_ORIGINS` and rate-limit environment settings.
+- Updated Next.js API proxy and Playwright helpers so normal web/API usage sends an allowed Origin.
+- Added PostgreSQL queue contention tests gated by `PANTRY_TEST_POSTGRES_URL`, plus static PostgreSQL SQL compilation checks for `FOR UPDATE SKIP LOCKED`.
+- Improved smoke/e2e helper scripts and documented local smoke/e2e prerequisites and commands.
+- Improved modal focus handling, Tab trapping, Escape close behavior, and focus restoration; added Playwright regression specs.
+
 ## Test Evidence
 
-- Passed: `pytest -q` in `apps/api` (`209 passed in 48.26s`).
+- Passed: `pytest -q` in `apps/api` (`220 passed, 6 skipped in 52.53s`).
 - Passed: `pytest tests/test_security_hardening.py -q` in `apps/api` (`15 passed`).
+- Passed: `pytest tests/test_auth_security_hardening.py -q` in `apps/api` (`8 passed`).
+- Passed: `pytest tests/test_auth_api.py tests/test_auth_security_hardening.py tests/test_security_hardening.py -q` (`31 passed`).
+- Passed: `pytest tests/test_queue_concurrency.py -q -rs` (`3 passed, 6 skipped`; live PostgreSQL tests require `PANTRY_TEST_POSTGRES_URL`).
 - Passed: targeted restore regression tests in `apps/api` (`5 passed`).
 - Passed: `node --test apps/web/lib/security-helpers.test.mjs` (`5 passed`).
 - Passed: `npm run typecheck:web`.
 - Passed: `npm run build:web`.
-- Passed: `alembic heads` (`20260419_000021 (head)`).
-- Passed: `DATABASE_URL=sqlite:////tmp/pantry-audit-migration-check.db alembic upgrade head`.
+- Passed: `npx playwright test tests/e2e/dialog-accessibility.spec.ts --list` (`2 tests` discovered).
+- Passed: `alembic heads` (`20260505_000022 (head)`).
+- Passed: `DATABASE_URL=sqlite:////tmp/pantry-followup-migration-check.db alembic upgrade head`.
 - Passed: `docker compose --profile manual --env-file infra/env/pantro.env.example -f infra/compose/pantro.yml config --quiet`.
 - Passed: `docker compose --profile manual --env-file infra/env/pantry.env.example -f infra/compose/pantry.yml config --quiet`.
-- Passed: `bash -n infra/scripts/healthcheck-pantro.sh infra/scripts/install-pantro.sh infra/scripts/update-pantro.sh`.
+- Passed: `bash -n infra/scripts/*.sh infra/scripts/lib/*.sh`.
 - Passed: `git diff --check`.
-- Not run: live Docker stack health check, smoke check, demo seed, and Playwright e2e. Docker daemon was unavailable at `unix:///Users/robinbrown/.docker/run/docker.sock`.
+
+## What Could Not Be Tested
+
+- Not completed: live Docker stack health check, smoke check, demo seed, and Playwright e2e. Docker daemon was unavailable at `unix:///Users/robinbrown/.docker/run/docker.sock`.
+- Not completed: Playwright dialog accessibility spec assertions. The spec exists, but Docker-backed e2e seeding could not run without the Docker daemon.
 
 ## Issues Not Fixed
 
-- Auth/password reset rate limiting.
-- Session revocation after password reset/change.
-- API-wide CSRF policy for direct API deployments.
-- Full PostgreSQL concurrency tests for DB queues.
 - Full local-stack smoke/e2e validation.
-- Broader frontend dialog accessibility tests.
+- Live PostgreSQL concurrency execution for DB queues.
+- Broader frontend interaction/accessibility tests beyond the shared modal regressions.
 - Full observability/support tooling for hosted-style operations.
 
 ## Manual Follow-Up Required
 
-- Decide the rate-limit storage strategy: Redis-backed limits are preferable for multi-process deployments.
-- Decide whether to introduce server-side session versioning in the user table to revoke signed-cookie sessions.
-- Run `npm run dev:stack:demo`, `infra/scripts/smoke-check.sh`, and `npm run test:e2e` once Docker is available.
+- Run `./pantro start --demo`, `./infra/scripts/smoke-check.sh`, and `CI=1 npm run test:e2e` once Docker is available.
+- Run `PANTRY_TEST_POSTGRES_URL=<postgres-url> pytest tests/test_queue_concurrency.py -q -rs` against a live PostgreSQL test database.
 - Review whether production containers should run as explicit non-root users in the published images.
 - Review whether `/api/ready` should become the documented operator readiness endpoint for all install paths.
 
 ## Suggested Next Codex Prompt
 
-Continue from `docs/FULL_REPO_AUDIT_AND_HARDENING_PLAN.md`. Implement the remaining auth hardening items in priority order: Redis-backed login/password-reset rate limiting, session-version revocation after password reset/change, and API-wide CSRF/origin policy for direct API deployments. Keep self-hosted support, add focused tests first, and run backend/frontend validation plus Docker smoke/e2e if Docker is available.
+Continue from `docs/FULL_REPO_AUDIT_AND_HARDENING_PLAN.md`. With Docker available, run the demo stack, `./infra/scripts/smoke-check.sh`, `CI=1 npm run test:e2e`, and live PostgreSQL queue contention tests via `PANTRY_TEST_POSTGRES_URL`. Fix only failures found by those validation runs; otherwise proceed to observability/support-tooling hardening without adding SaaS billing or hosted-only assumptions.

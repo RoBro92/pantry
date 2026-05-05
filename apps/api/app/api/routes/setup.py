@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.core.db import get_db_session
 from app.schemas.auth import SessionResponse
 from app.schemas.setup import (
@@ -19,6 +20,7 @@ from app.schemas.setup import (
     SetupWelcomeUpdateRequest,
     SetupWizardStateResponse,
 )
+from app.services.rate_limits import hit_rate_limit
 from app.services.auth import build_session_response
 from app.services.setup import (
     finalize_setup,
@@ -52,6 +54,27 @@ def _ensure_setup_is_open(db: Session) -> None:
         )
 
 
+def _client_scope(request: Request) -> str:
+    if request.client is None or not request.client.host:
+        return "unknown"
+    return request.client.host
+
+
+def _limit_setup_mutation(request: Request) -> None:
+    settings = get_settings()
+    limit = hit_rate_limit(
+        "setup:mutation",
+        _client_scope(request),
+        limit=settings.setup_mutation_rate_limit_attempts,
+        window_seconds=settings.setup_mutation_rate_limit_window_seconds,
+    )
+    if not limit.allowed:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many setup attempts. Please wait before trying again.",
+        )
+
+
 @router.get("/status", response_model=SetupStatusResponse)
 def get_status(db: Session = Depends(get_db_session)):
     return get_setup_status(db)
@@ -63,23 +86,27 @@ def get_wizard_state(db: Session = Depends(get_db_session)):
 
 
 @router.put("/wizard/welcome", response_model=SetupWizardStateResponse)
-def put_welcome(payload: SetupWelcomeUpdateRequest, db: Session = Depends(get_db_session)):
+def put_welcome(payload: SetupWelcomeUpdateRequest, request: Request, db: Session = Depends(get_db_session)):
     _ensure_setup_is_open(db)
+    _limit_setup_mutation(request)
     return update_setup_welcome(db, payload)
 
 
 @router.put("/wizard/mode", response_model=SetupWizardStateResponse)
-def put_mode(payload: SetupModeUpdateRequest, db: Session = Depends(get_db_session)):
+def put_mode(payload: SetupModeUpdateRequest, request: Request, db: Session = Depends(get_db_session)):
     _ensure_setup_is_open(db)
+    _limit_setup_mutation(request)
     return update_setup_mode(db, payload)
 
 
 @router.post("/wizard/restore-upload", response_model=SetupWizardStateResponse)
 async def post_restore_upload(
+    request: Request,
     file: UploadFile = File(...),
     db: Session = Depends(get_db_session),
 ):
     _ensure_setup_is_open(db)
+    _limit_setup_mutation(request)
     try:
         return await stage_setup_restore_upload(db, file)
     except ValueError as exc:
@@ -87,8 +114,9 @@ async def post_restore_upload(
 
 
 @router.put("/wizard/users", response_model=SetupWizardStateResponse)
-def put_users(payload: SetupUsersUpdateRequest, db: Session = Depends(get_db_session)):
+def put_users(payload: SetupUsersUpdateRequest, request: Request, db: Session = Depends(get_db_session)):
     _ensure_setup_is_open(db)
+    _limit_setup_mutation(request)
     try:
         return update_setup_users(db, payload)
     except ValueError as exc:
@@ -96,14 +124,16 @@ def put_users(payload: SetupUsersUpdateRequest, db: Session = Depends(get_db_ses
 
 
 @router.put("/wizard/household", response_model=SetupWizardStateResponse)
-def put_household(payload: SetupHouseholdUpdateRequest, db: Session = Depends(get_db_session)):
+def put_household(payload: SetupHouseholdUpdateRequest, request: Request, db: Session = Depends(get_db_session)):
     _ensure_setup_is_open(db)
+    _limit_setup_mutation(request)
     return update_setup_household(db, payload)
 
 
 @router.put("/wizard/public-url", response_model=SetupWizardStateResponse)
-def put_public_url(payload: SetupPublicURLUpdateRequest, db: Session = Depends(get_db_session)):
+def put_public_url(payload: SetupPublicURLUpdateRequest, request: Request, db: Session = Depends(get_db_session)):
     _ensure_setup_is_open(db)
+    _limit_setup_mutation(request)
     try:
         return update_setup_public_url(db, payload)
     except ValueError as exc:
@@ -111,14 +141,16 @@ def put_public_url(payload: SetupPublicURLUpdateRequest, db: Session = Depends(g
 
 
 @router.put("/wizard/dietary", response_model=SetupWizardStateResponse)
-def put_dietary(payload: SetupDietaryUpdateRequest, db: Session = Depends(get_db_session)):
+def put_dietary(payload: SetupDietaryUpdateRequest, request: Request, db: Session = Depends(get_db_session)):
     _ensure_setup_is_open(db)
+    _limit_setup_mutation(request)
     return update_setup_dietary(db, payload)
 
 
 @router.put("/wizard/ai", response_model=SetupWizardStateResponse)
-def put_ai(payload: SetupAIConfigUpdateRequest, db: Session = Depends(get_db_session)):
+def put_ai(payload: SetupAIConfigUpdateRequest, request: Request, db: Session = Depends(get_db_session)):
     _ensure_setup_is_open(db)
+    _limit_setup_mutation(request)
     try:
         return update_setup_ai(db, payload)
     except ValueError as exc:
@@ -126,8 +158,9 @@ def put_ai(payload: SetupAIConfigUpdateRequest, db: Session = Depends(get_db_ses
 
 
 @router.put("/wizard/smtp", response_model=SetupWizardStateResponse)
-def put_smtp(payload: SetupSMTPConfigUpdateRequest, db: Session = Depends(get_db_session)):
+def put_smtp(payload: SetupSMTPConfigUpdateRequest, request: Request, db: Session = Depends(get_db_session)):
     _ensure_setup_is_open(db)
+    _limit_setup_mutation(request)
     try:
         return update_setup_smtp(db, payload)
     except ValueError as exc:
@@ -135,8 +168,9 @@ def put_smtp(payload: SetupSMTPConfigUpdateRequest, db: Session = Depends(get_db
 
 
 @router.post("/wizard/smtp/test", response_model=SetupSMTPTestResponse)
-def post_smtp_test(payload: SetupSMTPTestRequest, db: Session = Depends(get_db_session)):
+def post_smtp_test(payload: SetupSMTPTestRequest, request: Request, db: Session = Depends(get_db_session)):
     _ensure_setup_is_open(db)
+    _limit_setup_mutation(request)
     try:
         return test_setup_smtp(db, payload)
     except ValueError as exc:
@@ -146,6 +180,7 @@ def post_smtp_test(payload: SetupSMTPTestRequest, db: Session = Depends(get_db_s
 @router.post("/wizard/finalize", response_model=SessionResponse)
 def post_finalize_setup(request: Request, db: Session = Depends(get_db_session)):
     _ensure_setup_is_open(db)
+    _limit_setup_mutation(request)
     try:
         user = finalize_setup(db)
     except ValueError as exc:
@@ -153,4 +188,5 @@ def post_finalize_setup(request: Request, db: Session = Depends(get_db_session))
 
     request.session.clear()
     request.session["user_external_id"] = user.external_id
+    request.session["session_version"] = user.session_version
     return build_session_response(user)

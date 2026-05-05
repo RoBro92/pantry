@@ -14,7 +14,7 @@ from app.models.base import utc_now
 from app.models.password_reset_token import PasswordResetToken
 from app.models.user import User
 from app.services.audit import record_audit_event
-from app.services.auth import get_user_by_email, get_user_by_external_id
+from app.services.auth import get_user_by_email, get_user_by_external_id, rotate_user_session_version
 from app.services.instance_settings import (
     PASSWORD_RESET_LINK_PLACEHOLDER,
     resolve_password_reset_email_settings,
@@ -171,6 +171,7 @@ def confirm_password_reset(
 
     user = token_record.user
     user.password_hash = hash_password(password)
+    rotate_user_session_version(user)
     token_record.used_at = utc_now()
     db.add(user)
     db.add(token_record)
@@ -203,6 +204,7 @@ def change_password(
         raise ValueError("Choose a new password that is different from your current one.")
 
     user.password_hash = hash_password(new_password)
+    rotate_user_session_version(user)
     db.add(user)
     _mask_reset_tokens(db, user=user)
     record_audit_event(

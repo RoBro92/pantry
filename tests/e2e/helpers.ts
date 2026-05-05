@@ -64,7 +64,10 @@ export async function loginThroughApi(
   credentials: { email: string; password: string }
 ): Promise<void> {
   const response = await page.request.post("http://localhost:8000/api/auth/login", {
-    data: credentials
+    data: credentials,
+    headers: {
+      origin: "http://localhost:3000"
+    }
   });
   expect(response.ok()).toBeTruthy();
 }

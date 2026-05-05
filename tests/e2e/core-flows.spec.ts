@@ -10,6 +10,7 @@ import {
 } from "./helpers";
 
 let manifest: E2ESeedManifest;
+const DIRECT_API_HEADERS = { origin: "http://localhost:3000" };
 
 test.beforeEach(() => {
   manifest = reseedE2E();
@@ -52,7 +53,8 @@ async function dismissAdminWhatsNewIfVisible(page: Page) {
   const response = await page.request.post(
     "http://localhost:8000/api/platform-admin/release-status/mark-seen",
     {
-      data: {}
+      data: {},
+      headers: DIRECT_API_HEADERS
     }
   );
   expect(response.ok()).toBeTruthy();
@@ -322,7 +324,8 @@ test("setup can restore from a staged Pantro backup bundle", async ({ page }) =>
   await expect(page.getByRole("heading", { name: "Review and complete" })).toBeVisible();
 
   const finalizeResponse = await page.request.post("http://localhost:8000/api/setup/wizard/finalize", {
-    data: {}
+    data: {},
+    headers: DIRECT_API_HEADERS
   });
   expect(finalizeResponse.ok()).toBeTruthy();
 
