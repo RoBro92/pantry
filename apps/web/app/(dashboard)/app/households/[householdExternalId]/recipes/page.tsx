@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { CoverageBadge } from "../../../../../../components/coverage-badge";
 import { StatusCard } from "../../../../../../components/status-card";
-import { getRecipeList, requireSession } from "../../../../../../lib/server-auth";
+import { getRecipeList, requireHouseholdAccess } from "../../../../../../lib/server-auth";
 
 type RecipeListPageProps = {
   params: Promise<{
@@ -10,8 +10,8 @@ type RecipeListPageProps = {
 };
 
 export default async function HouseholdRecipeListPage({ params }: RecipeListPageProps) {
-  await requireSession();
   const { householdExternalId } = await params;
+  await requireHouseholdAccess(householdExternalId);
   const response = await getRecipeList(householdExternalId);
 
   return (

@@ -4,6 +4,7 @@ from uuid import uuid4
 
 import structlog
 from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -24,10 +25,11 @@ from app.api.routes.settings_admin import router as settings_admin_router
 from app.api.routes.shopping_lists import router as shopping_lists_router
 from app.api.routes.setup import router as setup_router
 from app.api.routes.smtp_admin import router as smtp_admin_router
-from app.core.config import get_settings
-from app.core.db import SessionLocal
+from app.core.config import get_settings, validate_production_settings
+from app.core.db import SessionLocal, engine
 from app.core.logging import configure_logging
 from app.services.platform_features import FLAG_USAGE_METERING, get_effective_feature_flag
+from app.services.csrf import request_passes_csrf_origin_check
 from app.services.usage_counters import increment_usage_counter
 
 settings = get_settings()
@@ -75,6 +77,7 @@ def _record_request_usage(request: Request, *, status_code: int) -> None:
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    validate_production_settings(settings)
     logger.info(
         "api.starting",
         environment=settings.environment,
@@ -84,6 +87,7 @@ async def lifespan(_: FastAPI):
     )
     yield
     logger.info("api.stopping")
+    engine.dispose()
 
 
 app = FastAPI(
@@ -142,6 +146,16 @@ async def add_request_context(request: Request, call_next):
         return response
     finally:
         structlog.contextvars.clear_contextvars()
+
+
+@app.middleware("http")
+async def enforce_csrf_origin(request: Request, call_next):
+    if not request_passes_csrf_origin_check(request, get_settings()):
+        return JSONResponse(
+            status_code=403,
+            content={"detail": "Cross-origin mutating API requests are not allowed."},
+        )
+    return await call_next(request)
 
 
 app.include_router(health_router, prefix="/api")

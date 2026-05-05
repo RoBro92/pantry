@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { LoginForm } from "../../../components/login-form";
+import { getSafeInternalPath } from "../../../lib/redirect-path";
 import { getPasswordResetAvailability, getSession, getSetupStatus } from "../../../lib/server-auth";
 
 type LoginPageProps = {
@@ -16,7 +17,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
     getPasswordResetAvailability()
   ]);
   const params = await searchParams;
-  const nextPath = params.next && params.next.startsWith("/") ? params.next : "/app";
+  const nextPath = getSafeInternalPath(params.next);
   const statusMessage =
     params.reset === "success" ? "Password reset complete. Sign in with your new password." : null;
   if (session) {

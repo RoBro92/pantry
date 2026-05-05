@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ImportUploadForm } from "../../../../../../components/import-upload-form";
 import { StatusCard } from "../../../../../../components/status-card";
-import { getImportList, requireSession } from "../../../../../../lib/server-auth";
+import { getImportList, requireHouseholdAccess } from "../../../../../../lib/server-auth";
 
 type ImportListPageProps = {
   params: Promise<{
@@ -10,8 +10,8 @@ type ImportListPageProps = {
 };
 
 export default async function HouseholdImportListPage({ params }: ImportListPageProps) {
-  await requireSession();
   const { householdExternalId } = await params;
+  await requireHouseholdAccess(householdExternalId);
   const response = await getImportList(householdExternalId);
 
   return (

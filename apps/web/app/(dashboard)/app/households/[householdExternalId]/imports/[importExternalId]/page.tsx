@@ -4,7 +4,7 @@ import { StatusCard } from "../../../../../../../components/status-card";
 import {
   getImportDetail,
   getPantryOverview,
-  requireSession
+  requireHouseholdAccess
 } from "../../../../../../../lib/server-auth";
 
 type ImportDetailPageProps = {
@@ -15,8 +15,8 @@ type ImportDetailPageProps = {
 };
 
 export default async function ImportDetailPage({ params }: ImportDetailPageProps) {
-  await requireSession();
   const { householdExternalId, importExternalId } = await params;
+  await requireHouseholdAccess(householdExternalId);
   const response = await getImportDetail(householdExternalId, importExternalId);
   const overview = await getPantryOverview(householdExternalId);
   const importJob = response.import_job;

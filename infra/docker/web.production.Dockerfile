@@ -6,7 +6,7 @@ COPY package.json package-lock.json /app/
 COPY apps/web/package.json /app/apps/web/package.json
 COPY packages/shared-types/package.json /app/packages/shared-types/package.json
 
-RUN npm install
+RUN npm ci
 
 FROM deps AS builder
 

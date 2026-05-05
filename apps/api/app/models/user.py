@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, String
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
@@ -23,6 +23,7 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     platform_role_id: Mapped[UUID | None] = mapped_column(ForeignKey("roles.id"), nullable=True)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     dietary_preferences: Mapped[list[str] | None] = mapped_column(JSON(), nullable=True)
+    session_version: Mapped[int] = mapped_column(Integer(), nullable=False, default=0, server_default="0")
 
     platform_role = relationship("Role")
     memberships = relationship("Membership", back_populates="user")

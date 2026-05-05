@@ -1,22 +1,17 @@
 import type { NextRequest } from "next/server";
 import { appConfig } from "../../../lib/app-config";
+import {
+  copyAllowedForwardHeaders,
+  copyAllowedResponseHeaders,
+  isAllowedProxyPath,
+  isCrossOriginMutation
+} from "../../../lib/proxy-policy";
 
 type RouteContext = {
   params: Promise<{
     path: string[];
   }>;
 };
-
-const hopByHopHeaders = new Set([
-  "connection",
-  "keep-alive",
-  "proxy-authenticate",
-  "proxy-authorization",
-  "te",
-  "trailer",
-  "transfer-encoding",
-  "upgrade"
-]);
 
 async function resolvePathSegments(context: RouteContext): Promise<string[]> {
   const params = await context.params;
@@ -32,33 +27,65 @@ function buildUpstreamUrl(request: NextRequest, pathSegments: string[]): URL {
   return upstreamUrl;
 }
 
-function copyForwardHeaders(headers: Headers): Headers {
-  const forwardedHeaders = new Headers(headers);
-
-  hopByHopHeaders.forEach((header) => {
-    forwardedHeaders.delete(header);
-  });
-  forwardedHeaders.delete("host");
-
-  return forwardedHeaders;
+function firstForwardedValue(value: string | null): string | null {
+  return value?.split(",")[0]?.trim() || null;
 }
 
-function copyResponseHeaders(headers: Headers): Headers {
-  const responseHeaders = new Headers(headers);
+function publicRequestOrigin(request: NextRequest): string {
+  const forwardedProto = firstForwardedValue(request.headers.get("x-forwarded-proto"));
+  const forwardedHost = firstForwardedValue(request.headers.get("x-forwarded-host"));
+  const proto = forwardedProto || request.nextUrl.protocol.replace(/:$/, "") || "http";
+  const host = forwardedHost || request.headers.get("host");
+  if (host) {
+    return `${proto}://${host}`;
+  }
 
-  hopByHopHeaders.forEach((header) => {
-    responseHeaders.delete(header);
-  });
+  return request.nextUrl.origin;
+}
 
-  return responseHeaders;
+function clientScopeForRateLimit(request: NextRequest): string {
+  return (
+    firstForwardedValue(request.headers.get("x-forwarded-for")) ??
+    firstForwardedValue(request.headers.get("x-real-ip")) ??
+    "web-proxy"
+  );
 }
 
 async function proxyRequest(request: NextRequest, context: RouteContext): Promise<Response> {
   const pathSegments = await resolvePathSegments(context);
+  if (!isAllowedProxyPath(pathSegments)) {
+    return Response.json({ detail: "API path is not available through this proxy." }, { status: 404 });
+  }
+
+  const originMethod =
+    request.method === "OPTIONS"
+      ? request.headers.get("access-control-request-method") ?? request.method
+      : request.method;
+  const requestOrigin = publicRequestOrigin(request);
+  if (
+    isCrossOriginMutation(
+      originMethod,
+      requestOrigin,
+      request.headers.get("origin"),
+      request.headers.get("referer")
+    )
+  ) {
+    return Response.json(
+      { detail: "Cross-origin mutating API requests are not allowed." },
+      { status: 403 }
+    );
+  }
+
   const upstreamUrl = buildUpstreamUrl(request, pathSegments);
+  const upstreamHeaders = copyAllowedForwardHeaders(request.headers);
+  upstreamHeaders.set("origin", requestOrigin);
+  if (appConfig.internalApiProxyToken) {
+    upstreamHeaders.set("x-pantro-proxy-token", appConfig.internalApiProxyToken);
+    upstreamHeaders.set("x-pantro-client-scope", clientScopeForRateLimit(request));
+  }
   const upstreamResponse = await fetch(upstreamUrl, {
     method: request.method,
-    headers: copyForwardHeaders(request.headers),
+    headers: upstreamHeaders,
     body:
       request.method === "GET" || request.method === "HEAD"
         ? undefined
@@ -76,7 +103,7 @@ async function proxyRequest(request: NextRequest, context: RouteContext): Promis
   return new Response(responseBody, {
     status: upstreamResponse.status,
     statusText: upstreamResponse.statusText,
-    headers: copyResponseHeaders(upstreamResponse.headers)
+    headers: copyAllowedResponseHeaders(upstreamResponse.headers)
   });
 }
 

@@ -3,7 +3,7 @@ import { RecipeForm } from "../../../../../../../../components/recipe-form";
 import {
   getPantryOverview,
   getRecipeDetail,
-  requireSession
+  requireHouseholdAccess
 } from "../../../../../../../../lib/server-auth";
 
 type RecipeEditPageProps = {
@@ -14,8 +14,8 @@ type RecipeEditPageProps = {
 };
 
 export default async function RecipeEditPage({ params }: RecipeEditPageProps) {
-  await requireSession();
   const { householdExternalId, recipeExternalId } = await params;
+  await requireHouseholdAccess(householdExternalId);
   const [pantry, recipeResponse] = await Promise.all([
     getPantryOverview(householdExternalId),
     getRecipeDetail(householdExternalId, recipeExternalId)

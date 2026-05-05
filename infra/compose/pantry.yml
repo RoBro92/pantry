@@ -6,10 +6,15 @@ services:
   web:
     image: ${PANTRY_IMAGE_NAMESPACE:-ghcr.io/robro92}/pantry-web:${PANTRY_VERSION:-0.2.1}
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     environment:
       NODE_ENV: production
       NEXT_PUBLIC_APP_VERSION: ${PANTRY_VERSION:-0.2.1}
       INTERNAL_API_BASE_URL: ${INTERNAL_API_BASE_URL:-http://api:8000}
+      INTERNAL_API_PROXY_TOKEN: ${INTERNAL_API_PROXY_TOKEN:-}
     ports:
       - "${WEB_BIND_ADDRESS:-0.0.0.0}:${WEB_PORT:-3000}:3000"
     depends_on:
@@ -24,6 +29,10 @@ services:
   api:
     image: ${PANTRY_IMAGE_NAMESPACE:-ghcr.io/robro92}/pantry-api:${PANTRY_VERSION:-0.2.1}
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     environment:
       API_SERVICE_NAME: pantry-api
       APP_VERSION: ${PANTRY_VERSION:-0.2.1}
@@ -37,6 +46,7 @@ services:
       DATABASE_URL: ${DATABASE_URL}
       REDIS_URL: ${REDIS_URL}
       IMPORT_STORAGE_ROOT: ${IMPORT_STORAGE_ROOT:-/var/lib/pantry/imports}
+      BACKUP_STORAGE_ROOT: ${BACKUP_STORAGE_ROOT:-/var/lib/pantry/backups}
       IMPORT_MAX_UPLOAD_BYTES: ${IMPORT_MAX_UPLOAD_BYTES:-10485760}
       SETTINGS_ENCRYPTION_KEY: ${SETTINGS_ENCRYPTION_KEY}
       SESSION_SECRET_KEY: ${SESSION_SECRET_KEY}
@@ -44,6 +54,16 @@ services:
       SESSION_MAX_AGE_SECONDS: ${SESSION_MAX_AGE_SECONDS:-604800}
       SESSION_HTTPS_ONLY: ${SESSION_HTTPS_ONLY:-false}
       SESSION_SAME_SITE: ${SESSION_SAME_SITE:-lax}
+      CSRF_PROTECTION_ENABLED: ${CSRF_PROTECTION_ENABLED:-true}
+      CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-}
+      INTERNAL_API_PROXY_TOKEN: ${INTERNAL_API_PROXY_TOKEN:-}
+      RATE_LIMIT_REDIS_ENABLED: ${RATE_LIMIT_REDIS_ENABLED:-true}
+      LOGIN_RATE_LIMIT_ATTEMPTS: ${LOGIN_RATE_LIMIT_ATTEMPTS:-10}
+      LOGIN_RATE_LIMIT_WINDOW_SECONDS: ${LOGIN_RATE_LIMIT_WINDOW_SECONDS:-300}
+      PASSWORD_RESET_RATE_LIMIT_ATTEMPTS: ${PASSWORD_RESET_RATE_LIMIT_ATTEMPTS:-5}
+      PASSWORD_RESET_RATE_LIMIT_WINDOW_SECONDS: ${PASSWORD_RESET_RATE_LIMIT_WINDOW_SECONDS:-3600}
+      SETUP_MUTATION_RATE_LIMIT_ATTEMPTS: ${SETUP_MUTATION_RATE_LIMIT_ATTEMPTS:-30}
+      SETUP_MUTATION_RATE_LIMIT_WINDOW_SECONDS: ${SETUP_MUTATION_RATE_LIMIT_WINDOW_SECONDS:-300}
       PUBLIC_BROWSER_BASE_URL: ${PUBLIC_BROWSER_BASE_URL:-}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-}
       OPENAI_COMPAT_BASE_URL: ${OPENAI_COMPAT_BASE_URL:-}
@@ -64,13 +84,28 @@ services:
       - "${API_BIND_ADDRESS:-0.0.0.0}:${API_PORT:-8000}:8000"
     volumes:
       - ${PANTRY_IMPORTS_DATA_DIR:-/srv/pantry/imports}:${IMPORT_STORAGE_ROOT:-/var/lib/pantry/imports}
+      - ${PANTRY_BACKUPS_DATA_DIR:-/srv/pantry/backups}:${BACKUP_STORAGE_ROOT:-/var/lib/pantry/backups}
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')\""]
+      test:
+        - CMD-SHELL
+        - |
+          python - <<'PY'
+          import urllib.error
+          import urllib.request
+
+          base_url = "http://127.0.0.1:8000"
+          try:
+              urllib.request.urlopen(f"{base_url}/api/ready", timeout=5).close()
+          except urllib.error.HTTPError as exc:
+              if exc.code not in (404, 405):
+                  raise
+              urllib.request.urlopen(f"{base_url}/api/health", timeout=5).close()
+          PY
       interval: 30s
       timeout: 5s
       retries: 5
@@ -78,6 +113,10 @@ services:
   worker:
     image: ${PANTRY_IMAGE_NAMESPACE:-ghcr.io/robro92}/pantry-worker:${PANTRY_VERSION:-0.2.1}
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     environment:
       WORKER_SERVICE_NAME: pantry-worker
       APP_VERSION: ${PANTRY_VERSION:-0.2.1}
@@ -106,6 +145,10 @@ services:
     image: ${PANTRY_IMAGE_NAMESPACE:-ghcr.io/robro92}/pantry-api:${PANTRY_VERSION:-0.2.1}
     profiles: ["manual"]
     restart: "no"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     environment:
       APP_VERSION: ${PANTRY_VERSION:-0.2.1}
       ENVIRONMENT: ${ENVIRONMENT:-production}
@@ -116,10 +159,15 @@ services:
       DATABASE_URL: ${DATABASE_URL}
       REDIS_URL: ${REDIS_URL}
       IMPORT_STORAGE_ROOT: ${IMPORT_STORAGE_ROOT:-/var/lib/pantry/imports}
+      BACKUP_STORAGE_ROOT: ${BACKUP_STORAGE_ROOT:-/var/lib/pantry/backups}
       SETTINGS_ENCRYPTION_KEY: ${SETTINGS_ENCRYPTION_KEY}
       SESSION_SECRET_KEY: ${SESSION_SECRET_KEY}
+      CSRF_PROTECTION_ENABLED: ${CSRF_PROTECTION_ENABLED:-true}
+      CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-}
+      RATE_LIMIT_REDIS_ENABLED: ${RATE_LIMIT_REDIS_ENABLED:-true}
     volumes:
       - ${PANTRY_IMPORTS_DATA_DIR:-/srv/pantry/imports}:${IMPORT_STORAGE_ROOT:-/var/lib/pantry/imports}
+      - ${PANTRY_BACKUPS_DATA_DIR:-/srv/pantry/backups}:${BACKUP_STORAGE_ROOT:-/var/lib/pantry/backups}
     command: ["alembic", "upgrade", "head"]
     depends_on:
       postgres:

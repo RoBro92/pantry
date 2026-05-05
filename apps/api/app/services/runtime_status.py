@@ -64,8 +64,9 @@ def publish_worker_heartbeat(
         last_seen_at=utc_now(),
     )
     ttl_seconds = max(poll_interval_seconds * 3, 90)
+    client = get_redis_client()
     try:
-        get_redis_client().setex(
+        client.setex(
             WORKER_HEARTBEAT_KEY,
             ttl_seconds,
             json.dumps(
@@ -78,13 +79,18 @@ def publish_worker_heartbeat(
         )
     except RedisError:
         return
+    finally:
+        client.close()
 
 
 def read_worker_heartbeat() -> dict[str, object] | None:
+    client = get_redis_client()
     try:
-        payload = get_redis_client().get(WORKER_HEARTBEAT_KEY)
+        payload = client.get(WORKER_HEARTBEAT_KEY)
     except RedisError:
         return None
+    finally:
+        client.close()
     if not payload:
         return None
 
@@ -102,10 +108,13 @@ def read_worker_heartbeat() -> dict[str, object] | None:
 
 def check_redis_health() -> RedisHealthSnapshot:
     started = perf_counter()
+    client = get_redis_client()
     try:
-        get_redis_client().ping()
+        client.ping()
     except RedisError as exc:
         return RedisHealthSnapshot(status="unavailable", latency_ms=None, message=str(exc))
+    finally:
+        client.close()
 
     latency_ms = round((perf_counter() - started) * 1000, 2)
     return RedisHealthSnapshot(status="ok", latency_ms=latency_ms, message=None)

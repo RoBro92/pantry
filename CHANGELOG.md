@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Hardened v0.2.x self-hosted security posture with Redis-backed failed-login, password-reset, and setup mutation rate limiting.
+- Added session-version revocation for credential changes and direct API Origin/Referer protection for unsafe methods.
+- Tightened backup restore staging, web API proxy allowlists, Docker smoke readiness checks, and PostgreSQL queue contention coverage.
+- Validated the local Docker demo stack with backend, frontend, smoke, live PostgreSQL queue, and Playwright e2e checks.
+
 ## 0.2.1 - 2026-04-16
 
 Pantro 0.2.1 finalises the Pantry-to-Pantro migration with hardened AI support, faster scan-heavy workflows, and release-readiness follow-through.

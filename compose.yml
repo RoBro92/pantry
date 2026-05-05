@@ -9,6 +9,7 @@ services:
       ENVIRONMENT: development
       NODE_ENV: development
       INTERNAL_API_BASE_URL: ${INTERNAL_API_BASE_URL:-http://api:8000}
+      INTERNAL_API_PROXY_TOKEN: ${INTERNAL_API_PROXY_TOKEN:-}
       NODE_OPTIONS: ${NODE_OPTIONS:---max_old_space_size=2048}
     working_dir: /workspace
     command: >
@@ -52,6 +53,7 @@ services:
       SESSION_MAX_AGE_SECONDS: ${SESSION_MAX_AGE_SECONDS:-604800}
       SESSION_HTTPS_ONLY: ${SESSION_HTTPS_ONLY:-false}
       SESSION_SAME_SITE: ${SESSION_SAME_SITE:-lax}
+      INTERNAL_API_PROXY_TOKEN: ${INTERNAL_API_PROXY_TOKEN:-}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       OPENAI_COMPAT_BASE_URL: ${OPENAI_COMPAT_BASE_URL:-}
       OPENAI_COMPAT_API_KEY: ${OPENAI_COMPAT_API_KEY:-}

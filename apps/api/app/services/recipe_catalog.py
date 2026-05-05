@@ -14,6 +14,7 @@ from app.models.recipe_url_import import RecipeURLImport
 from app.models.user import User
 from app.schemas.recipes import RecipeIngredientInput
 from app.services.audit import record_audit_event
+from app.services.network_policy import validate_public_http_url
 from app.services.pantry_normalization import normalize_lookup_name, normalize_unit, require_text
 from app.services.recipe_matching import resolve_ingredient_product_match
 
@@ -36,14 +37,15 @@ def normalize_recipe_source_url(url: str) -> str:
         raise ValueError("Recipe URL must not include embedded credentials.")
 
     hostname = parsed.hostname.lower() if parsed.hostname else ""
+    netloc_host = f"[{hostname}]" if ":" in hostname else hostname
     port = parsed.port
     if port and not (
         (parsed.scheme.lower() == "http" and port == 80)
         or (parsed.scheme.lower() == "https" and port == 443)
     ):
-        netloc = f"{hostname}:{port}"
+        netloc = f"{netloc_host}:{port}"
     else:
-        netloc = hostname
+        netloc = netloc_host
 
     normalized = SplitResult(
         scheme=parsed.scheme.lower(),
@@ -52,7 +54,8 @@ def normalize_recipe_source_url(url: str) -> str:
         query=parsed.query,
         fragment="",
     )
-    return urlunsplit(normalized)
+    normalized_url = urlunsplit(normalized)
+    return validate_public_http_url(normalized_url, field_name="Recipe URL", resolve_host=False)
 
 
 def get_recipe_by_external_id(

@@ -22,6 +22,7 @@ export const appConfig = {
     normalizeBaseUrl(process.env.INTERNAL_API_BASE_URL) ??
     normalizeBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL) ??
     "http://localhost:8000",
+  internalApiProxyToken: process.env.INTERNAL_API_PROXY_TOKEN ?? "",
   deploymentModes,
   pantryRoles,
   domainEntities

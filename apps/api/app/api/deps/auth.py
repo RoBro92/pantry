@@ -13,9 +13,13 @@ def get_current_user(request: Request, db: Session = Depends(get_db_session)) ->
     user_external_id = request.session.get("user_external_id")
     if not user_external_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated.")
+    session_version = request.session.get("session_version")
 
     user = get_user_by_external_id(db, user_external_id)
     if user is None or not user.is_active:
+        request.session.clear()
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session is invalid.")
+    if session_version != user.session_version:
         request.session.clear()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session is invalid.")
 
@@ -27,4 +31,3 @@ def require_platform_admin(current_user: User = Depends(get_current_user)) -> Us
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Platform admin access required.")
 
     return current_user
-
