@@ -62,8 +62,9 @@ cp pantro.env.example .env
 - `POSTGRES_PASSWORD`
 - `SETTINGS_ENCRYPTION_KEY`
 - `SESSION_SECRET_KEY`
+- `INTERNAL_API_PROXY_TOKEN`
 
-Browser-side web requests use the web container's same-origin `/api/*` proxy in self-hosted releases. Operators only need `INTERNAL_API_BASE_URL=http://api:8000` so the web container can reach the API container internally.
+Browser-side web requests use the web container's same-origin `/api/*` proxy in self-hosted releases. Operators need `INTERNAL_API_BASE_URL=http://api:8000` so the web container can reach the API container internally, and a random `INTERNAL_API_PROXY_TOKEN` shared by the web and API containers so API rate limits can trust the client scope forwarded by the web proxy.
 
 Unsafe direct API requests are protected by Origin/Referer checks. `WEB_APP_URL` and
 `API_BASE_URL` are allowed automatically; add comma-separated extra browser origins

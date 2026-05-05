@@ -224,16 +224,17 @@ Do not add hosted-only logic or billing in this repo now. SaaS readiness should 
 - Started Docker Desktop locally, brought up `./pantro start --demo`, fixed live e2e blockers found by the full suite, and reran smoke/e2e successfully.
 - Updated e2e reset behavior to clear Redis rate-limit keys so auth/setup throttles do not leak between deterministic test reseeds.
 - Updated login rate limiting so successful logins do not consume failed-attempt budget and do not clear the shared IP failure bucket.
+- Added authenticated web-proxy client-scope forwarding with `INTERNAL_API_PROXY_TOKEN` so rate-limit buckets do not collapse to the web container peer address.
+- Allowed the setup SMTP connectivity-test route through the web API proxy.
 - Updated the web API proxy to compare CSRF origins against the public request host/proto instead of the internal Next dev bind address.
 - Updated modal autofocus handling so dialogs can mark their expected initial focus target.
 - Marked the long shopping reconciliation e2e scenario as slow after Docker/Next dev memory restart timing exhausted the default 60-second test budget while the target page had already rendered.
 
 ## Test Evidence
 
-- Passed: `pytest -q` in `apps/api` (`222 passed, 6 skipped in 60.33s`).
+- Passed: `pytest -q` in `apps/api` (`225 passed, 6 skipped in 55.69s`).
 - Passed: `pytest tests/test_security_hardening.py -q` in `apps/api` (`15 passed`).
-- Passed: `pytest tests/test_auth_security_hardening.py -q` in `apps/api` (`10 passed`).
-- Passed: `pytest tests/test_auth_api.py tests/test_auth_security_hardening.py tests/test_security_hardening.py -q` (`33 passed`).
+- Passed: targeted review-comment regression tests for auth/setup proxy scope, setup SMTP proxy access, and staged-backup path validation (`15 passed`).
 - Passed: `pytest tests/test_queue_concurrency.py -q -rs` (`3 passed, 6 skipped`; static SQL checks without live PostgreSQL).
 - Passed: `PANTRY_TEST_POSTGRES_URL='postgresql+psycopg://pantro:change-me@localhost:5432/pantro' pytest tests/test_queue_concurrency.py -q -rs` (`9 passed`) against the Docker Postgres service.
 - Passed: targeted restore regression tests in `apps/api` (`5 passed`).
@@ -242,7 +243,7 @@ Do not add hosted-only logic or billing in this repo now. SaaS readiness should 
 - Passed: `npm run build:web`.
 - Passed: `CI=1 npx playwright test tests/e2e/dialog-accessibility.spec.ts` (`2 passed`).
 - Passed: `CI=1 npx playwright test tests/e2e/core-flows.spec.ts -g "shopping reconciliation uses dense rows"` (`1 passed`).
-- Passed: `CI=1 npm run test:e2e` (`29 passed, 1 skipped in 2.7m`) against the local Docker demo stack.
+- Passed: `CI=1 npm run test:e2e` (`29 passed, 1 skipped in 3.3m`) against the local Docker demo stack.
 - Passed: `alembic heads` (`20260505_000022 (head)`).
 - Passed: `DATABASE_URL=sqlite:////tmp/pantry-followup-migration-check.db alembic upgrade head`.
 - Passed: `docker compose --profile manual --env-file infra/env/pantro.env.example -f infra/compose/pantro.yml config --quiet`.

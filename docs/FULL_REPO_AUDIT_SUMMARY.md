@@ -19,6 +19,8 @@ The follow-up review focused on the remaining security and production-readiness 
 - Docker Desktop was started locally, the demo stack was rebuilt with `./pantro start --demo`, smoke checks passed, full Playwright e2e passed, and live PostgreSQL queue contention tests passed against the Docker Postgres service.
 - E2E reset now clears Redis rate-limit keys so auth/setup throttles do not leak between deterministic reseeds.
 - Login rate limiting now avoids consuming failure budget on successful logins and avoids clearing the shared IP failure bucket after a valid login.
+- The web proxy now forwards an authenticated client scope with `INTERNAL_API_PROXY_TOKEN`, preventing auth/setup rate-limit buckets from collapsing to the web container peer address.
+- The setup SMTP connectivity-test route is explicitly allowed through the web API proxy.
 - The web API proxy now compares CSRF origins against the public request host/proto instead of the internal Next dev bind address.
 - Dialog autofocus targets are explicit for scanner-heavy modal flows.
 - The long shopping reconciliation e2e scenario is marked slow to account for Docker/Next dev memory restart timing without relaxing its assertions.
@@ -40,14 +42,14 @@ Redis-backed rate limiting falls back to per-process in-memory limits if Redis i
 
 ## Tests Run
 
-- `pytest -q` in `apps/api` (`222 passed, 6 skipped`).
-- Targeted backend auth/security tests, including rate limits, session revocation, and CSRF: `33 passed`.
+- `pytest -q` in `apps/api` (`225 passed, 6 skipped`).
+- Targeted review-comment regression tests for auth/setup proxy scope, setup SMTP proxy access, and staged-backup path validation: `15 passed`.
 - Live PostgreSQL queue contention tests against Docker Postgres: `9 passed`.
 - `node --test apps/web/lib/security-helpers.test.mjs`.
 - `npm run typecheck:web` and `npm run build:web`.
 - `CI=1 npx playwright test tests/e2e/dialog-accessibility.spec.ts` (`2 passed`).
 - Targeted shopping reconciliation e2e regression: `1 passed`.
-- `CI=1 npm run test:e2e` (`29 passed, 1 skipped in 2.7m`) against the local Docker demo stack.
+- `CI=1 npm run test:e2e` (`29 passed, 1 skipped in 3.3m`) against the local Docker demo stack.
 - `./pantro start --demo` and `./infra/scripts/smoke-check.sh`.
 - Alembic head and SQLite migration upgrade checks.
 - Docker Compose config validation for Pantro and Pantry compose files.

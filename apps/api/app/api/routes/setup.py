@@ -20,6 +20,7 @@ from app.schemas.setup import (
     SetupWelcomeUpdateRequest,
     SetupWizardStateResponse,
 )
+from app.services.client_scope import client_scope_from_request
 from app.services.rate_limits import hit_rate_limit
 from app.services.auth import build_session_response
 from app.services.setup import (
@@ -55,9 +56,7 @@ def _ensure_setup_is_open(db: Session) -> None:
 
 
 def _client_scope(request: Request) -> str:
-    if request.client is None or not request.client.host:
-        return "unknown"
-    return request.client.host
+    return client_scope_from_request(request)
 
 
 def _limit_setup_mutation(request: Request) -> None:

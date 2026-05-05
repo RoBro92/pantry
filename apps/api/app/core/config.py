@@ -199,6 +199,7 @@ class AppSettings:
     settings_encryption_key: str | None
     csrf_protection_enabled: bool
     csrf_trusted_origins: tuple[str, ...]
+    internal_api_proxy_token: str | None
     rate_limit_redis_enabled: bool
     login_rate_limit_attempts: int
     login_rate_limit_window_seconds: int
@@ -285,6 +286,7 @@ def get_settings() -> AppSettings:
         settings_encryption_key=os.getenv("SETTINGS_ENCRYPTION_KEY") or None,
         csrf_protection_enabled=_parse_bool(os.getenv("CSRF_PROTECTION_ENABLED"), True),
         csrf_trusted_origins=_parse_origin_list(os.getenv("CSRF_TRUSTED_ORIGINS")),
+        internal_api_proxy_token=os.getenv("INTERNAL_API_PROXY_TOKEN") or None,
         rate_limit_redis_enabled=_parse_bool(os.getenv("RATE_LIMIT_REDIS_ENABLED"), True),
         login_rate_limit_attempts=int(os.getenv("LOGIN_RATE_LIMIT_ATTEMPTS", "10")),
         login_rate_limit_window_seconds=int(os.getenv("LOGIN_RATE_LIMIT_WINDOW_SECONDS", "300")),

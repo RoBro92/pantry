@@ -17,6 +17,14 @@ from app.services.instance_settings import (
 from app.services.rate_limits import clear_local_rate_limits
 
 PASSWORD = "correct horse battery"
+PROXY_TOKEN = "test-proxy-token"
+
+
+def _proxy_headers(scope: str, token: str = PROXY_TOKEN) -> dict[str, str]:
+    return {
+        "x-pantro-proxy-token": token,
+        "x-pantro-client-scope": scope,
+    }
 
 
 class FakeRedis:
@@ -222,6 +230,70 @@ def test_successful_login_does_not_clear_shared_ip_failure_limit(client, db_sess
     assert blocked.json()["detail"] == "Too many authentication attempts. Please wait before trying again."
 
 
+def test_login_rate_limit_uses_authenticated_proxy_client_scope(
+    client, db_session, monkeypatch, rate_limit_env
+):
+    monkeypatch.setenv("INTERNAL_API_PROXY_TOKEN", PROXY_TOKEN)
+    get_settings.cache_clear()
+    create_platform_admin(
+        db_session,
+        email="proxy-limited-admin@example.com",
+        password=PASSWORD,
+        display_name="Proxy Limited Admin",
+    )
+
+    for _ in range(2):
+        attempted_email = f"missing-proxy-{_}@example.com"
+        response = client.post(
+            "/api/auth/login",
+            json={"email": attempted_email, "password": "wrong password"},
+            headers=_proxy_headers("198.51.100.10"),
+        )
+        assert response.status_code == 401
+
+    blocked_same_scope = client.post(
+        "/api/auth/login",
+        json={"email": "missing-proxy-blocked@example.com", "password": "wrong password"},
+        headers=_proxy_headers("198.51.100.10"),
+    )
+    allowed_other_scope = client.post(
+        "/api/auth/login",
+        json={"email": "missing-proxy-other@example.com", "password": "wrong password"},
+        headers=_proxy_headers("198.51.100.11"),
+    )
+
+    assert blocked_same_scope.status_code == 429
+    assert allowed_other_scope.status_code == 401
+
+
+def test_login_rate_limit_ignores_unauthenticated_proxy_client_scope(
+    client, db_session, monkeypatch, rate_limit_env
+):
+    monkeypatch.setenv("INTERNAL_API_PROXY_TOKEN", PROXY_TOKEN)
+    get_settings.cache_clear()
+    create_platform_admin(
+        db_session,
+        email="spoofed-proxy-admin@example.com",
+        password=PASSWORD,
+        display_name="Spoofed Proxy Admin",
+    )
+
+    for scope in ("198.51.100.20", "198.51.100.21"):
+        response = client.post(
+            "/api/auth/login",
+            json={"email": f"spoofed-{scope}@example.com", "password": "wrong password"},
+            headers=_proxy_headers(scope, token="wrong-token"),
+        )
+        assert response.status_code == 401
+
+    blocked_same_peer = client.post(
+        "/api/auth/login",
+        json={"email": "spoofed-blocked@example.com", "password": "wrong password"},
+        headers=_proxy_headers("198.51.100.22", token="wrong-token"),
+    )
+    assert blocked_same_peer.status_code == 429
+
+
 def test_password_reset_request_rate_limit_blocks_and_resets_generically(
     client, db_session, monkeypatch, rate_limit_env
 ):
@@ -269,6 +341,33 @@ def test_setup_mutation_rate_limit_blocks_repeated_unauthenticated_setup_writes(
     assert first.status_code == 200
     assert second.status_code == 429
     assert "too many" in second.json()["detail"].lower()
+
+
+def test_setup_mutation_rate_limit_uses_authenticated_proxy_client_scope(
+    client, monkeypatch, rate_limit_env
+):
+    monkeypatch.setenv("INTERNAL_API_PROXY_TOKEN", PROXY_TOKEN)
+    get_settings.cache_clear()
+
+    first_scope = client.put(
+        "/api/setup/wizard/welcome",
+        json={"acknowledged": True},
+        headers=_proxy_headers("198.51.100.30"),
+    )
+    blocked_same_scope = client.put(
+        "/api/setup/wizard/welcome",
+        json={"acknowledged": True},
+        headers=_proxy_headers("198.51.100.30"),
+    )
+    allowed_other_scope = client.put(
+        "/api/setup/wizard/welcome",
+        json={"acknowledged": True},
+        headers=_proxy_headers("198.51.100.31"),
+    )
+
+    assert first_scope.status_code == 200
+    assert blocked_same_scope.status_code == 429
+    assert allowed_other_scope.status_code == 200
 
 
 def test_password_change_revokes_other_existing_sessions(client, db_session):

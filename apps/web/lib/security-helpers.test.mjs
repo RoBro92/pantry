@@ -54,6 +54,7 @@ test("isAllowedProxyPath permits current frontend API namespaces only", () => {
   assert.equal(proxyPolicy.isAllowedProxyPath(["auth", "login"]), true);
   assert.equal(proxyPolicy.isAllowedProxyPath(["auth", "password-reset", "confirm"]), true);
   assert.equal(proxyPolicy.isAllowedProxyPath(["setup", "wizard", "restore-upload"]), true);
+  assert.equal(proxyPolicy.isAllowedProxyPath(["setup", "wizard", "smtp", "test"]), true);
   assert.equal(proxyPolicy.isAllowedProxyPath(["platform-admin", "backups", "export", "instance"]), true);
   assert.equal(proxyPolicy.isAllowedProxyPath(["households", "hh_123", "pantry", "entries"]), true);
   assert.equal(proxyPolicy.isAllowedProxyPath(["households", "hh_123", "product-intelligence", "status"]), true);

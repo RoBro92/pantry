@@ -81,7 +81,7 @@ function isAllowedAuthPath(pathSegments: readonly string[]): boolean {
 }
 
 function isAllowedSetupPath(pathSegments: readonly string[]): boolean {
-  const [, second, third] = pathSegments;
+  const [, second, third, fourth] = pathSegments;
 
   if (pathSegments.length === 2 && second === "status") {
     return true;
@@ -89,6 +89,10 @@ function isAllowedSetupPath(pathSegments: readonly string[]): boolean {
 
   if (second !== "wizard") {
     return false;
+  }
+
+  if (pathSegments.length === 4 && third === "smtp" && fourth === "test") {
+    return true;
   }
 
   return pathSegments.length === 2 || (pathSegments.length === 3 && setupWizardPaths.has(third));

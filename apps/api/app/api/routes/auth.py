@@ -20,6 +20,7 @@ from app.schemas.auth import (
     SessionResponse,
 )
 from app.services.auth import authenticate_user, build_session_response, update_user_profile
+from app.services.client_scope import client_scope_from_request
 from app.services.instance_settings import resolve_password_reset_email_settings
 from app.services.password_resets import (
     change_password,
@@ -36,9 +37,7 @@ PASSWORD_RESET_LIMIT_MESSAGE = "Too many password reset requests. Please wait be
 
 
 def _client_scope(request: Request) -> str:
-    if request.client is None or not request.client.host:
-        return "unknown"
-    return request.client.host
+    return client_scope_from_request(request)
 
 
 def _store_user_session(request: Request, user: User) -> None:

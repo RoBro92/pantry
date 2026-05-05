@@ -43,6 +43,14 @@ function publicRequestOrigin(request: NextRequest): string {
   return request.nextUrl.origin;
 }
 
+function clientScopeForRateLimit(request: NextRequest): string {
+  return (
+    firstForwardedValue(request.headers.get("x-forwarded-for")) ??
+    firstForwardedValue(request.headers.get("x-real-ip")) ??
+    "web-proxy"
+  );
+}
+
 async function proxyRequest(request: NextRequest, context: RouteContext): Promise<Response> {
   const pathSegments = await resolvePathSegments(context);
   if (!isAllowedProxyPath(pathSegments)) {
@@ -71,6 +79,10 @@ async function proxyRequest(request: NextRequest, context: RouteContext): Promis
   const upstreamUrl = buildUpstreamUrl(request, pathSegments);
   const upstreamHeaders = copyAllowedForwardHeaders(request.headers);
   upstreamHeaders.set("origin", requestOrigin);
+  if (appConfig.internalApiProxyToken) {
+    upstreamHeaders.set("x-pantro-proxy-token", appConfig.internalApiProxyToken);
+    upstreamHeaders.set("x-pantro-client-scope", clientScopeForRateLimit(request));
+  }
   const upstreamResponse = await fetch(upstreamUrl, {
     method: request.method,
     headers: upstreamHeaders,
