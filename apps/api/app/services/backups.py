@@ -1042,7 +1042,7 @@ def _validate_stage_id(stage_id: str) -> str:
 def _staged_backup_path(settings: AppSettings, stage_id: str) -> Path:
     safe_stage_id = _validate_stage_id(stage_id)
     quarantine_root = _quarantine_dir(settings).resolve()
-    # codeql[py/path-injection] safe_stage_id is restricted to the server-generated hex stage-id format.
+    # lgtm[py/path-injection] safe_stage_id is restricted to the server-generated hex stage-id format.
     staged_path = quarantine_root.joinpath(f"{safe_stage_id}.json").resolve()
     if staged_path.parent != quarantine_root:
         raise ValueError("Invalid staged backup path.")
