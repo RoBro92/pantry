@@ -59,7 +59,7 @@ export function AdminAIModelPickerModal({
   return (
     <ModalShell
       title={`Choose ${getAIProviderLabel(providerType)} model`}
-      description="Pick one of Pantro’s supported models first, or choose another OpenAI model if you want to try an untested option."
+      description={`Pick a recommended ${getAIProviderLabel(providerType)} model first, or enter another compatible model name if needed.`}
       onClose={onClose}
       panelClassName="modal-panel modal-panel-wide"
       closeOnBackdropClick={false}
@@ -82,8 +82,8 @@ export function AdminAIModelPickerModal({
         {selectedModelValue ? (
           <p className="helper-text">
             {selectedModelIsRecommended
-              ? "Pantro-supported recommendation."
-              : "Selectable, but not one of Pantro’s officially recommended OpenAI models yet."}
+              ? "Recommended for this provider."
+              : "Selectable, but not one of Pantro’s recommended models for this provider yet."}
           </p>
         ) : null}
       </div>
@@ -92,7 +92,7 @@ export function AdminAIModelPickerModal({
         <div className="modal-form-section">
           <div className="stack compact-stack">
             <h3 className="modal-section-title">Recommended picks</h3>
-            <p className="helper-text">These three OpenAI models are the Pantro-supported choices right now.</p>
+            <p className="helper-text">These models are the recommended starting points for this provider.</p>
           </div>
           <div className="ai-model-recommendations">
             {recommendations.map((pick) => (
@@ -113,13 +113,13 @@ export function AdminAIModelPickerModal({
 
       <div className="modal-form-section">
         <div className="stack compact-stack">
-          <h3 className="modal-section-title">Other OpenAI models</h3>
+          <h3 className="modal-section-title">Other models</h3>
           <p className="helper-text">
             {availableModels.length > 0
               ? "These remain selectable, but Pantro treats them as untested rather than recommended."
               : providerSupportsManualModelEntry(providerType)
-                ? "No models were listed. You can still enter another OpenAI model manually if needed."
-                : "No models were listed. You can still try a manual OpenAI model name if your provider supports it."}
+                ? "No models were listed. You can still enter another compatible model manually if needed."
+                : "No models were listed. You can still try a manual model name if your provider supports it."}
           </p>
         </div>
         {filteredModels.length > 0 ? (

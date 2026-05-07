@@ -65,7 +65,7 @@ async function expectStockLotDialogVisible(
   triggerLabel: string,
   dialogName: string,
 ) {
-  await page.getByLabel(triggerLabel).first().click();
+  await page.getByLabel(triggerLabel).filter({ visible: true }).first().click();
 
   const dialog = page.getByRole("dialog", { name: dialogName });
   const panel = page.locator(".modal-panel-stock-lot");
@@ -676,6 +676,8 @@ test("mobile household pantry uses bottom navigation, card-first inventory, and 
   await page.goto(`/app/households/${manifest.household_external_id}`);
 
   await expect(page.locator(".mobile-shell-header")).toBeVisible();
+  await expect(page.locator(".mobile-shell-header")).not.toContainText(/Pantro\s+\d/);
+  await expect(page.locator(".mobile-shell-header")).not.toContainText("Welcome to Pantro!");
   await expect(page.locator(".mobile-bottom-nav")).toBeVisible();
   await page.getByRole("button", { name: "Menu" }).click();
   await expect(page.getByRole("link", { name: "Dashboard" })).toBeVisible();
@@ -708,7 +710,7 @@ test("mobile household pantry uses bottom navigation, card-first inventory, and 
   ).not.toHaveAttribute("aria-current", "page");
   await page.goto(`/app/households/${manifest.household_external_id}`);
 
-  const inventoryCards = page.locator(".inventory-mobile-list [data-testid^='product-card-']");
+  const inventoryCards = page.locator(".inventory-mobile-list [data-testid^='mobile-product-card-']");
   await expect(inventoryCards.first()).toBeVisible();
   await expect(page.getByRole("button", { name: "Bulk scan" })).toBeVisible();
 
@@ -720,7 +722,7 @@ test("mobile household pantry uses bottom navigation, card-first inventory, and 
   await page.getByRole("button", { name: "Close" }).click();
 
   const pastaCard = page
-    .locator(".inventory-mobile-list [data-testid^='product-card-']")
+    .locator(".inventory-mobile-list [data-testid^='mobile-product-card-']")
     .filter({ hasText: "Pasta" });
   await pastaCard.getByRole("button", { name: "Details" }).click();
   await expect(pastaCard).toContainText("Stock lots");
@@ -728,6 +730,33 @@ test("mobile household pantry uses bottom navigation, card-first inventory, and 
   await expectStockLotDialogVisible(page, "Edit stock lot", "Edit stock lot");
   await expectStockLotDialogVisible(page, "Move stock lot", "Move stock lot");
   await expectStockLotDialogVisible(page, "Delete stock lot", "Use up stock lot");
+});
+
+test("web app exposes installable PWA metadata", async ({ page }) => {
+  const manifestResponse = await page.request.get("/manifest.webmanifest");
+  expect(manifestResponse.ok()).toBeTruthy();
+  const manifest = await manifestResponse.json();
+
+  expect(manifest).toMatchObject({
+    name: "Pantro",
+    short_name: "Pantro",
+    display: "standalone",
+    start_url: "/app",
+    scope: "/",
+    theme_color: "#ad5b1f",
+    background_color: "#f4efe8"
+  });
+  expect(manifest.icons).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ src: "/icon.svg", sizes: "any", type: "image/svg+xml" }),
+      expect.objectContaining({ src: "/apple-icon.svg", sizes: "180x180", type: "image/svg+xml" })
+    ])
+  );
+
+  await page.goto("/login");
+  await expect(page.locator('link[rel="manifest"]')).toHaveAttribute("href", "/manifest.webmanifest");
+  await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute("content", "#ad5b1f");
+  await expect(page.locator('link[rel="apple-touch-icon"]')).toHaveAttribute("href", "/apple-icon.svg");
 });
 
 test("scanner dialog falls back cleanly to manual entry when camera access is blocked", async ({
@@ -1045,8 +1074,8 @@ test("ai flow covers unconfigured and configured-but-unavailable states", async 
   const defaultModelField = page.locator('[aria-label="Default model"]');
   const apiKeyField = page.getByLabel("API key");
   await expect(page.getByRole("button", { name: "Save configuration" })).toHaveCount(0);
-  await expect(providerType).toContainText("OpenAI");
-  await expect(baseUrlField).toContainText("https://api.openai.com/v1");
+  await expect(providerType).toHaveValue("openai");
+  await expect(baseUrlField).toHaveValue("https://api.openai.com/v1");
   await expect(defaultModelField).toContainText("gpt-5.4-mini");
 
   const providerBox = await providerType.boundingBox();
@@ -1082,8 +1111,8 @@ test("ai flow covers unconfigured and configured-but-unavailable states", async 
 
   await page.goto("/admin");
   await page.goto("/admin/ai");
-  await expect(providerType).toContainText("OpenAI");
-  await expect(baseUrlField).toContainText("https://api.openai.com/v1");
+  await expect(providerType).toHaveValue("openai");
+  await expect(baseUrlField).toHaveValue("https://api.openai.com/v1");
   await expect(page.getByRole("button", { name: "Save configuration" })).toHaveCount(0);
 
   await page.getByRole("button", { name: "Logout" }).click();
@@ -1119,7 +1148,7 @@ test("admin ai settings persist across navigation and keep stored-key state visi
   await dismissAdminWhatsNewIfVisible(page);
 
   await page.goto("/admin/ai");
-  await expect(page.locator('[aria-label="Provider type"]')).toContainText("OpenAI");
+  await expect(page.locator('[aria-label="Provider type"]')).toHaveValue("openai");
   await page.locator(".ai-provider-model-action button").click();
   await page.getByText("Fastest / cheapest").click();
   await page.getByRole("button", { name: "Save" }).click();
@@ -1131,8 +1160,8 @@ test("admin ai settings persist across navigation and keep stored-key state visi
   await page.goto("/admin");
   await page.goto("/admin/ai");
 
-  await expect(page.locator('[aria-label="Provider type"]')).toContainText("OpenAI");
-  await expect(page.locator('[aria-label="Base URL"]')).toContainText("https://api.openai.com/v1");
+  await expect(page.locator('[aria-label="Provider type"]')).toHaveValue("openai");
+  await expect(page.locator('[aria-label="Base URL"]')).toHaveValue("https://api.openai.com/v1");
   await expect(page.locator('[aria-label="Default model"]')).toContainText("gpt-4.1-mini");
   await expect(page.getByLabel("API key")).toHaveValue("");
 });
@@ -1360,6 +1389,7 @@ test("location route redirects to login and lands on the correct location page a
   });
 
   await page.goto(`/app/households/${manifest.household_external_id}`);
+  await page.getByText("Activity and storage QR links").click();
 
   const locationLink = page
     .locator('[data-testid^="location-link-card-"]')

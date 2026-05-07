@@ -8,7 +8,6 @@ import type {
   SessionMembership,
   SessionResponse,
 } from "../lib/api-types";
-import { appConfig } from "../lib/app-config";
 import { AdminReleaseNotesDialog } from "./admin-release-notes-dialog";
 import { LogoutButtonInner } from "./logout-button";
 
@@ -137,15 +136,15 @@ export function AppShell({ session, releaseStatus, children }: AppShellProps) {
       <div className="mobile-shell-header">
         <div className="mobile-shell-topbar">
           <div className="stack compact-stack">
-            <p className="eyebrow">Pantro {appConfig.version}</p>
+            <p className="eyebrow">{currentMembership ? "Household" : "Pantro"}</p>
             <h1 className="shell-title mobile-shell-title">{mobileShellTitle}</h1>
-            <p className="sidebar-copy">
-              {currentMembership
-                ? "Welcome to Pantro!"
-                : session.memberships.length > 0
+            {!currentMembership ? (
+              <p className="sidebar-copy">
+                {session.memberships.length > 0
                   ? `${session.memberships.length} household${session.memberships.length === 1 ? "" : "s"} available.`
                   : "Households appear here after a platform admin assigns memberships."}
-            </p>
+              </p>
+            ) : null}
           </div>
 
           <div className="mobile-account-menu">
@@ -221,7 +220,7 @@ export function AppShell({ session, releaseStatus, children }: AppShellProps) {
 
       <div className="shell-grid">
         <aside className="sidebar panel">
-          <p className="eyebrow">Pantro {appConfig.version}</p>
+          <p className="eyebrow">Pantro</p>
           <h1 className="shell-title">Navigation</h1>
           <p className="sidebar-copy">
             {session.memberships.length} household

@@ -93,21 +93,6 @@ export function ProductIntelligenceDetails({
           <dd>{formatDateTime(intelligence.classified_at)}</dd>
         </div>
         <div>
-          <dt>Provider</dt>
-          <dd>
-            {intelligence.source_provider}
-            {intelligence.source_model ? ` · ${intelligence.source_model}` : ""}
-          </dd>
-        </div>
-        <div>
-          <dt>Classification version</dt>
-          <dd>{intelligence.classification_version}</dd>
-        </div>
-        <div>
-          <dt>Schema version</dt>
-          <dd>{intelligence.schema_version}</dd>
-        </div>
-        <div>
           <dt>Product format</dt>
           <dd>{intelligence.structured_metadata.product_format ?? "Not set"}</dd>
         </div>

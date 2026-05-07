@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type {
   PantryCatalogProductSummary,
   PantryLocationGroupSummary,
@@ -59,6 +59,7 @@ export function PantryControls({
   const [roomExternalId, setRoomExternalId] = useState(filters.location_group_external_id ?? "");
   const [locationExternalId, setLocationExternalId] = useState(filters.location_external_id ?? "");
   const [nearExpiryOnly, setNearExpiryOnly] = useState(filters.near_expiry_only);
+  const canAddItems = locations.length > 0;
 
   const hasActiveFilters = Boolean(
     filters.q ||
@@ -66,6 +67,18 @@ export function PantryControls({
       filters.location_external_id ||
       filters.near_expiry_only,
   );
+
+  useEffect(() => {
+    setQuery(filters.q ?? "");
+    setRoomExternalId(filters.location_group_external_id ?? "");
+    setLocationExternalId(filters.location_external_id ?? "");
+    setNearExpiryOnly(filters.near_expiry_only);
+  }, [
+    filters.q,
+    filters.location_group_external_id,
+    filters.location_external_id,
+    filters.near_expiry_only,
+  ]);
 
   function pushFilters(
     nextQuery: string,
@@ -115,10 +128,22 @@ export function PantryControls({
             </p>
           </div>
           <div className="pantry-action-pills pantry-primary-actions">
-            <button type="button" className="primary-button" onClick={() => setIsScanAddOpen(true)}>
+            <button
+              type="button"
+              className="primary-button"
+              disabled={!canAddItems}
+              title={!canAddItems ? "Create a storage location before adding inventory." : undefined}
+              onClick={() => setIsScanAddOpen(true)}
+            >
               Scan item
             </button>
-            <button type="button" className="ghost-button" onClick={() => setIsManualAddOpen(true)}>
+            <button
+              type="button"
+              className="ghost-button"
+              disabled={!canAddItems}
+              title={!canAddItems ? "Create a storage location before adding inventory." : undefined}
+              onClick={() => setIsManualAddOpen(true)}
+            >
               Add manually
             </button>
             <button
@@ -184,13 +209,35 @@ export function PantryControls({
         <div className="pantry-mobile-add-note">
           <div className="inline-status-card">
             <div className="stack compact-stack">
-              <strong>Add a new product</strong>
+              <strong>{canAddItems ? "Add a new product" : "Create storage first"}</strong>
+              {!canAddItems ? (
+                <p className="helper-text">
+                  {canAdminister
+                    ? "Add a room or storage location before adding inventory."
+                    : "Ask a household admin to create a storage location before adding inventory."}
+                </p>
+              ) : null}
             </div>
             <div className="pantry-inline-action-row">
-              <button type="button" className="primary-button compact-button" onClick={() => setIsScanAddOpen(true)}>
+              {canAdminister && !canAddItems ? (
+                <button type="button" className="primary-button compact-button" onClick={() => setIsRoomOpen(true)}>
+                  Manage rooms
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="primary-button compact-button"
+                disabled={!canAddItems}
+                onClick={() => setIsScanAddOpen(true)}
+              >
                 Scan first
               </button>
-              <button type="button" className="ghost-button compact-button" onClick={() => setIsManualAddOpen(true)}>
+              <button
+                type="button"
+                className="ghost-button compact-button"
+                disabled={!canAddItems}
+                onClick={() => setIsManualAddOpen(true)}
+              >
                 Manual add
               </button>
               <button

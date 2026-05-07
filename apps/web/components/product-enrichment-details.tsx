@@ -76,7 +76,6 @@ export function ProductEnrichmentDetails({
         <div className="stack compact-stack">
           <div className="stack compact-stack">
             <strong>{enrichment.source_product_name ?? "Unnamed Open Food Facts product"}</strong>
-            {enrichment.source_barcode ? <span className="helper-text">Barcode: {enrichment.source_barcode}</span> : null}
           </div>
 
           {enrichment.ingredients_text ? (
@@ -128,15 +127,19 @@ export function ProductEnrichmentDetails({
             </p>
           ) : null}
 
-          <div className="tag-row">
-            {incompleteFields.map((field) => (
-              <span key={field} className="tag">
-                Missing {field}
-              </span>
-            ))}
-          </div>
-
-          {syncedAt ? <p className="helper-text">Last synced: {syncedAt}</p> : null}
+          {incompleteFields.length > 0 || syncedAt ? (
+            <details className="compact-disclosure">
+              <summary>Source data status</summary>
+              <div className="compact-disclosure-body stack">
+                {incompleteFields.length > 0 ? (
+                  <p className="helper-text">
+                    Missing fields: {incompleteFields.map((field) => field.replaceAll("_", " ")).join(", ")}
+                  </p>
+                ) : null}
+                {syncedAt ? <p className="helper-text">Last synced: {syncedAt}</p> : null}
+              </div>
+            </details>
+          ) : null}
           {children}
         </div>
       </div>

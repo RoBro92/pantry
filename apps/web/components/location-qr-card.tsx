@@ -35,7 +35,7 @@ export async function LocationQRCodeCard({ location }: LocationQRCodeCardProps) 
         className="qr-frame"
         dangerouslySetInnerHTML={{ __html: svg }}
       />
-      <p className="section-copy">{location.browser_url}</p>
+      <p className="section-copy">Opens the signed-in view for this storage location.</p>
       <div className="page-actions">
         <Link href={location.browser_path} className="secondary-link">
           Open link

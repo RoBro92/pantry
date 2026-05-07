@@ -13,6 +13,9 @@ import type {
 } from "../lib/api-types";
 import {
   AI_PROVIDER_API_KEY_REQUIRED,
+  AI_PROVIDER_LABELS,
+  VISIBLE_AI_PROVIDER_OPTIONS,
+  type AIProviderType,
   getAIProviderSupport,
   getDefaultBaseUrl,
   getDefaultModel,
@@ -88,9 +91,15 @@ function createStageId() {
   return `stage-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-function getSetupAIProviderType(providerType: string | null | undefined): "openai" {
+function getSetupAIProviderType(providerType: string | null | undefined): AIProviderType {
   const normalizedProviderType = normalizeAIProviderType(providerType);
-  return normalizedProviderType === "openai" ? "openai" : "openai";
+  if (
+    normalizedProviderType &&
+    VISIBLE_AI_PROVIDER_OPTIONS.some((option) => option.value === normalizedProviderType)
+  ) {
+    return normalizedProviderType;
+  }
+  return "openai";
 }
 
 function createEmptyRoom(stageId = createStageId()): SetupWizardRoomSummary {
@@ -210,12 +219,17 @@ function getPersistablePassword(draft: PasswordDraft | undefined) {
   return draft.password ? draft.password : null;
 }
 
-function ensureSetupOpenAIConfig(aiConfig: SetupWizardStateResponse["ai_config"]) {
+function ensureSetupAIConfig(
+  aiConfig: SetupWizardStateResponse["ai_config"],
+  providerType = getSetupAIProviderType(aiConfig.provider_type)
+) {
+  const isSameProvider = getSetupAIProviderType(aiConfig.provider_type) === providerType;
   return {
     ...aiConfig,
-    provider_type: "openai" as const,
-    base_url: aiConfig.base_url || getDefaultBaseUrl("openai"),
-    default_model: aiConfig.default_model || getDefaultModel("openai")
+    provider_type: providerType,
+    base_url: isSameProvider && aiConfig.base_url ? aiConfig.base_url : getDefaultBaseUrl(providerType),
+    default_model:
+      isSameProvider && aiConfig.default_model ? aiConfig.default_model : getDefaultModel(providerType)
   };
 }
 
@@ -1800,8 +1814,14 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                     (step) => step !== "ai"
                   ),
                   ai_config: event.target.checked
-                    ? { ...ensureSetupOpenAIConfig(current.ai_config), is_enabled: true }
-                    : { ...current.ai_config, is_enabled: false, provider_type: "openai" }
+                    ? { ...ensureSetupAIConfig(current.ai_config), is_enabled: true }
+                    : {
+                        ...current.ai_config,
+                        is_enabled: false,
+                        provider_type: null,
+                        base_url: "",
+                        default_model: ""
+                      }
                 }))
               }
             />
@@ -1810,9 +1830,30 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
           <div className="content-grid">
             <label className="field">
               <span>Provider</span>
-              <div className="ai-provider-readonly-value" aria-label="Provider type">
-                OpenAI
-              </div>
+              <select
+                aria-label="Provider type"
+                value={selectedProviderType}
+                onChange={(event) => {
+                  const nextProviderType = event.target.value as AIProviderType;
+                  setAiApiKey("");
+                  setWizard((current) => ({
+                    ...current,
+                    skipped_optional_steps: current.skipped_optional_steps.filter(
+                      (step) => step !== "ai"
+                    ),
+                    ai_config: {
+                      ...ensureSetupAIConfig(current.ai_config, nextProviderType),
+                      is_enabled: true
+                    }
+                  }));
+                }}
+              >
+                {VISIBLE_AI_PROVIDER_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
             </label>
             <label className="field">
               <span>Base URL</span>
@@ -1832,7 +1873,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                       (step) => step !== "ai"
                     ),
                     ai_config: {
-                      ...ensureSetupOpenAIConfig(current.ai_config),
+                      ...ensureSetupAIConfig(current.ai_config, selectedProviderType),
                       base_url: event.target.value
                     }
                   }))
@@ -1857,7 +1898,7 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                       (step) => step !== "ai"
                     ),
                     ai_config: {
-                      ...ensureSetupOpenAIConfig(current.ai_config),
+                      ...ensureSetupAIConfig(current.ai_config, selectedProviderType),
                       default_model: event.target.value
                     }
                   }))
@@ -1885,19 +1926,12 @@ export function SetupWizard({ initialState, initialStep }: SetupWizardProps) {
                   wizard.ai_config.has_api_key
                     ? "Saved. Enter a new key to replace it."
                     : AI_PROVIDER_API_KEY_REQUIRED[selectedProviderType]
-                      ? "Required for this provider"
+                      ? `${AI_PROVIDER_LABELS[selectedProviderType]} requires an API key`
                       : "Not required for this provider"
                 }
               />
             </label>
           </div>
-          {!providerSupport.isCurrentlySupported ? (
-            <p className="helper-text">
-              Finish setup with OpenAI if you want Pantro’s AI classification and guided meal
-              suggestions ready immediately. The other providers remain visible for future
-              validation work.
-            </p>
-          ) : null}
         </section>
       );
     }

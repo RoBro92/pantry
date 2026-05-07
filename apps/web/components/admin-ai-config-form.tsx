@@ -9,6 +9,7 @@ import type {
 import {
   AI_PROVIDER_API_KEY_REQUIRED,
   AI_PROVIDER_LABELS,
+  VISIBLE_AI_PROVIDER_OPTIONS,
   type AIProviderType,
   getAIProviderSupport,
   getDefaultBaseUrl,
@@ -31,7 +32,13 @@ type ProviderDraft = {
 };
 
 function getInitialProviderType(config: AIProviderConfigSummary | null): AIProviderType {
-  void config;
+  const normalizedProviderType = normalizeAIProviderType(config?.provider_type);
+  if (
+    normalizedProviderType &&
+    VISIBLE_AI_PROVIDER_OPTIONS.some((option) => option.value === normalizedProviderType)
+  ) {
+    return normalizedProviderType;
+  }
   return "openai";
 }
 
@@ -116,7 +123,10 @@ export function AdminAIConfigForm({
     if (!AI_PROVIDER_API_KEY_REQUIRED[draft.providerType]) {
       return true;
     }
-    return Boolean(resolveApiKeyForSave() || config?.has_api_key);
+    return Boolean(
+      resolveApiKeyForSave() ||
+        (normalizeAIProviderType(config?.provider_type) === draft.providerType && config?.has_api_key)
+    );
   }
 
   async function saveDraft(
@@ -208,6 +218,30 @@ export function AdminAIConfigForm({
     const nextDraft = buildCurrentDraft({ isEnabled: nextIsEnabled });
     setIsEnabled(nextIsEnabled);
     setStatusMessage(null);
+    setErrorMessage(null);
+
+    if (canPersistDraft(nextDraft)) {
+      await saveDraft(nextDraft, { syncLocalState: false });
+    }
+  }
+
+  async function handleProviderChange(nextProviderType: AIProviderType) {
+    const nextDraft = {
+      providerType: nextProviderType,
+      baseUrl: getDefaultBaseUrl(nextProviderType),
+      defaultModel: getDefaultModel(nextProviderType),
+      isEnabled
+    };
+    setProviderType(nextProviderType);
+    setBaseUrl(nextDraft.baseUrl);
+    setDefaultModel(nextDraft.defaultModel);
+    setApiKey("");
+    setHealth(null);
+    setStatusMessage(
+      AI_PROVIDER_API_KEY_REQUIRED[nextProviderType]
+        ? `Add a ${AI_PROVIDER_LABELS[nextProviderType]} API key to save this provider.`
+        : null
+    );
     setErrorMessage(null);
 
     if (canPersistDraft(nextDraft)) {
@@ -307,15 +341,33 @@ export function AdminAIConfigForm({
         <div className="content-grid ai-provider-top-grid">
           <label className="field ai-provider-top-field">
             <span>Provider</span>
-            <div className="ai-provider-readonly-value" aria-label="Provider type">
-              OpenAI
-            </div>
+            <select
+              className="ai-provider-field-control"
+              aria-label="Provider type"
+              value={providerType}
+              onChange={(event) => void handleProviderChange(event.target.value as AIProviderType)}
+            >
+              {VISIBLE_AI_PROVIDER_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
           </label>
           <label className="field ai-provider-top-field">
             <span>Base URL</span>
-            <div className="ai-provider-readonly-value" aria-label="Base URL">
-              {baseUrl}
-            </div>
+            <input
+              className="ai-provider-field-control"
+              aria-label="Base URL"
+              type="url"
+              value={baseUrl}
+              autoComplete="url"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              onChange={(event) => setBaseUrl(event.target.value)}
+              onBlur={() => void handleBaseUrlBlur()}
+            />
           </label>
           <label className="field ai-provider-top-field">
             <span>Default model</span>

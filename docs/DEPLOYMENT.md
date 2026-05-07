@@ -39,6 +39,8 @@ The installer:
 
 When the install completes, open `http://<your-ip>:3000/`.
 
+For day-to-day phone use, serve Pantro through HTTPS. Browser camera scanning and installable PWA behaviour require a secure context in production; localhost remains supported for development.
+
 ## Manual Install
 
 1. Download the release assets for the version you want to run.

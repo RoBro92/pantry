@@ -75,7 +75,7 @@ def _normalize_provider_quantity_fields(data: dict[str, Any]) -> dict[str, Any]:
 
 
 class AIProviderConfigUpsertRequest(BaseModel):
-    provider_type: Literal["openai", "claude", "gemini", "ollama"]
+    provider_type: Literal["openai", "openrouter", "litellm", "claude", "gemini", "ollama"]
     base_url: str
     default_model: str
     api_key: str | None = None
