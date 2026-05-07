@@ -1,4 +1,4 @@
-export type AIProviderType = "openai" | "claude" | "gemini" | "ollama";
+export type AIProviderType = "openai" | "openrouter" | "litellm" | "claude" | "gemini" | "ollama";
 
 type ProviderRecommendation = {
   model: string;
@@ -14,17 +14,23 @@ type ProviderSupportMetadata = {
 
 export const AI_PROVIDER_OPTIONS: Array<{ value: AIProviderType; label: string }> = [
   { value: "openai", label: "OpenAI" },
+  { value: "openrouter", label: "OpenRouter" },
+  { value: "litellm", label: "LiteLLM proxy" },
   { value: "claude", label: "Claude (not currently supported)" },
   { value: "gemini", label: "Gemini (not currently supported)" },
   { value: "ollama", label: "Ollama (not currently supported)" }
 ];
 
 export const VISIBLE_AI_PROVIDER_OPTIONS: Array<{ value: AIProviderType; label: string }> = [
-  { value: "openai", label: "OpenAI" }
+  { value: "openai", label: "OpenAI" },
+  { value: "openrouter", label: "OpenRouter" },
+  { value: "litellm", label: "LiteLLM proxy" }
 ];
 
 export const AI_PROVIDER_LABELS: Record<AIProviderType, string> = {
   openai: "OpenAI",
+  openrouter: "OpenRouter",
+  litellm: "LiteLLM proxy",
   claude: "Claude",
   gemini: "Gemini",
   ollama: "Ollama"
@@ -32,6 +38,8 @@ export const AI_PROVIDER_LABELS: Record<AIProviderType, string> = {
 
 export const AI_PROVIDER_DEFAULT_BASE_URLS: Record<AIProviderType, string> = {
   openai: "https://api.openai.com/v1",
+  openrouter: "https://openrouter.ai/api/v1",
+  litellm: "http://localhost:4000/v1",
   claude: "https://api.anthropic.com",
   gemini: "https://generativelanguage.googleapis.com",
   ollama: "http://localhost:11434"
@@ -39,6 +47,8 @@ export const AI_PROVIDER_DEFAULT_BASE_URLS: Record<AIProviderType, string> = {
 
 export const AI_PROVIDER_DEFAULT_MODELS: Record<AIProviderType, string> = {
   openai: "gpt-5.4-mini",
+  openrouter: "openai/gpt-4.1-mini",
+  litellm: "gpt-5",
   claude: "claude-sonnet-4-6",
   gemini: "gemini-2.5-flash",
   ollama: "qwen3:8b"
@@ -46,6 +56,8 @@ export const AI_PROVIDER_DEFAULT_MODELS: Record<AIProviderType, string> = {
 
 export const AI_PROVIDER_API_KEY_REQUIRED: Record<AIProviderType, boolean> = {
   openai: true,
+  openrouter: true,
+  litellm: false,
   claude: true,
   gemini: true,
   ollama: false
@@ -67,6 +79,40 @@ const AI_PROVIDER_RECOMMENDED_MODELS: Record<AIProviderType, ProviderRecommendat
       model: "gpt-5.4",
       label: "Best quality",
       description: "Stronger output quality, with more latency and cost."
+    }
+  ],
+  openrouter: [
+    {
+      model: "openai/gpt-4.1-mini",
+      label: "Fastest / cheapest",
+      description: "Lower-cost OpenAI-compatible option routed through OpenRouter."
+    },
+    {
+      model: "openai/gpt-5.4-mini",
+      label: "Balanced",
+      description: "Balanced OpenAI-compatible option routed through OpenRouter."
+    },
+    {
+      model: "openai/gpt-5.4",
+      label: "Best quality",
+      description: "Higher-quality OpenAI-compatible option routed through OpenRouter."
+    }
+  ],
+  litellm: [
+    {
+      model: "gpt-4.1-mini",
+      label: "Fastest / cheapest",
+      description: "Lower-cost model name to route through your LiteLLM proxy."
+    },
+    {
+      model: "gpt-5-mini",
+      label: "Balanced",
+      description: "Balanced model name to route through your LiteLLM proxy."
+    },
+    {
+      model: "gpt-5",
+      label: "Best quality",
+      description: "Higher-quality model name to route through your LiteLLM proxy."
     }
   ],
   claude: [
@@ -128,6 +174,18 @@ const AI_PROVIDER_SUPPORT: Record<AIProviderType, ProviderSupportMetadata> = {
     statusLabel: "Supported",
     description:
       "OpenAI is Pantro’s currently supported provider for product classification and guided meal suggestions."
+  },
+  openrouter: {
+    isCurrentlySupported: true,
+    statusLabel: "OpenAI-compatible",
+    description:
+      "OpenRouter can be configured as an operator-managed OpenAI-compatible endpoint. Run a health check before household AI uses it."
+  },
+  litellm: {
+    isCurrentlySupported: true,
+    statusLabel: "OpenAI-compatible",
+    description:
+      "LiteLLM can be configured as a self-hosted OpenAI-compatible proxy. Pantro does not manage the proxy or its upstream providers."
   },
   claude: {
     isCurrentlySupported: false,

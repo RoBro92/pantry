@@ -92,7 +92,6 @@ export function PantryProductBrowser({
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [isMobileViewport, setIsMobileViewport] = useState(false);
   const [expandedProductId, setExpandedProductId] = useState<string | null>(null);
   const [shoppingDialogProduct, setShoppingDialogProduct] = useState<PantryProductSummary | null>(null);
   const [stockLotEditorProduct, setStockLotEditorProduct] = useState<PantryProductSummary | null>(null);
@@ -100,19 +99,6 @@ export function PantryProductBrowser({
   const [productIntelligenceProduct, setProductIntelligenceProduct] = useState<PantryProductSummary | null>(null);
   const [productEditorProduct, setProductEditorProduct] = useState<PantryProductSummary | null>(null);
   const [deleteProduct, setDeleteProduct] = useState<PantryProductSummary | null>(null);
-
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    const mediaQuery = window.matchMedia("(max-width: 768px)");
-    const updateViewport = () => setIsMobileViewport(mediaQuery.matches);
-
-    updateViewport();
-    mediaQuery.addEventListener("change", updateViewport);
-    return () => mediaQuery.removeEventListener("change", updateViewport);
-  }, []);
 
   useEffect(() => {
     if (
@@ -553,92 +539,90 @@ export function PantryProductBrowser({
         </div>
         {renderPagination()}
 
-        {isMobileViewport ? (
-          <div className="inventory-mobile-list">
+        <div className="inventory-mobile-list">
+          {products.map((product) => {
+            const isExpanded = expandedProductId === product.product_external_id;
+            return (
+              <article
+                key={product.product_external_id}
+                className="inventory-mobile-card"
+                data-testid={`mobile-product-card-${product.product_external_id}`}
+              >
+                <div className="inventory-mobile-card-header">
+                  <div className="stack compact-stack">
+                    <h3 className="inventory-product-name">{product.product_name}</h3>
+                    <p className="helper-text">{renderMobileSummary(product)}</p>
+                  </div>
+                  {renderStatusPills(product)}
+                </div>
+
+                {renderMobileMeta(product)}
+
+                {renderMobileProductActions(product, isExpanded)}
+
+                {isExpanded ? (
+                  <div className="inventory-mobile-detail">{renderProductDetail(product, true)}</div>
+                ) : null}
+              </article>
+            );
+          })}
+        </div>
+
+        <div className="table-wrap pantry-table-wrap inventory-desktop-table">
+          <table className="data-table pantry-inventory-table">
+            <thead>
+              <tr>
+                <th>Product</th>
+                <th>Total</th>
+                <th>Stored in</th>
+                <th>Expiry</th>
+                <th className="pantry-status-column-heading">Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
             {products.map((product) => {
               const isExpanded = expandedProductId === product.product_external_id;
               return (
-                <article
+                <tbody
                   key={product.product_external_id}
-                  className="inventory-mobile-card"
                   data-testid={`product-card-${product.product_external_id}`}
                 >
-                  <div className="inventory-mobile-card-header">
-                    <div className="stack compact-stack">
-                      <h3 className="inventory-product-name">{product.product_name}</h3>
-                      <p className="helper-text">{renderMobileSummary(product)}</p>
-                    </div>
-                    {renderStatusPills(product)}
-                  </div>
-
-                  {renderMobileMeta(product)}
-
-                  {renderMobileProductActions(product, isExpanded)}
-
+                  <tr>
+                    <td>
+                      <div className="inventory-product-cell">
+                        <h3 className="inventory-product-name">{product.product_name}</h3>
+                        <span>
+                          {product.stock_status === "out_of_stock"
+                            ? "No active stock lots"
+                            : `${product.lot_count} active lot${product.lot_count === 1 ? "" : "s"}`}
+                        </span>
+                      </div>
+                    </td>
+                    <td>
+                      {product.stock_status === "out_of_stock"
+                        ? "Out of stock"
+                        : `${formatQuantityWithUnit(product.total_quantity, product.unit)} across ${product.lot_count} lot${product.lot_count === 1 ? "" : "s"}`}
+                    </td>
+                    <td>
+                      <div className="inventory-product-cell">
+                        <strong>{product.room_summary}</strong>
+                        <span>{product.storage_summary}</span>
+                      </div>
+                    </td>
+                    <td>{formatExpirySummary(product)}</td>
+                    <td className="pantry-status-cell">{renderStatusPills(product)}</td>
+                    <td>{renderProductActions(product, isExpanded)}</td>
+                  </tr>
                   {isExpanded ? (
-                    <div className="inventory-mobile-detail">{renderProductDetail(product, true)}</div>
+                    <tr className="inventory-expanded-row">
+                      <td colSpan={6}>{renderProductDetail(product)}</td>
+                    </tr>
                   ) : null}
-                </article>
+                </tbody>
               );
             })}
-          </div>
-        ) : (
-          <div className="table-wrap pantry-table-wrap inventory-desktop-table">
-            <table className="data-table pantry-inventory-table">
-              <thead>
-                <tr>
-                  <th>Product</th>
-                  <th>Total</th>
-                  <th>Stored in</th>
-                  <th>Expiry</th>
-                  <th className="pantry-status-column-heading">Status</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              {products.map((product) => {
-                const isExpanded = expandedProductId === product.product_external_id;
-                return (
-                  <tbody
-                    key={product.product_external_id}
-                    data-testid={`product-card-${product.product_external_id}`}
-                  >
-                    <tr>
-                      <td>
-                        <div className="inventory-product-cell">
-                          <h3 className="inventory-product-name">{product.product_name}</h3>
-                          <span>
-                            {product.stock_status === "out_of_stock"
-                              ? "No active stock lots"
-                              : `${product.lot_count} active lot${product.lot_count === 1 ? "" : "s"}`}
-                          </span>
-                        </div>
-                      </td>
-                      <td>
-                        {product.stock_status === "out_of_stock"
-                          ? "Out of stock"
-                          : `${formatQuantityWithUnit(product.total_quantity, product.unit)} across ${product.lot_count} lot${product.lot_count === 1 ? "" : "s"}`}
-                      </td>
-                      <td>
-                        <div className="inventory-product-cell">
-                          <strong>{product.room_summary}</strong>
-                          <span>{product.storage_summary}</span>
-                        </div>
-                      </td>
-                      <td>{formatExpirySummary(product)}</td>
-                      <td className="pantry-status-cell">{renderStatusPills(product)}</td>
-                      <td>{renderProductActions(product, isExpanded)}</td>
-                    </tr>
-                    {isExpanded ? (
-                      <tr className="inventory-expanded-row">
-                        <td colSpan={6}>{renderProductDetail(product)}</td>
-                      </tr>
-                    ) : null}
-                  </tbody>
-                );
-              })}
-            </table>
-          </div>
-        )}
+          </table>
+        </div>
         {renderPagination()}
       </section>
 

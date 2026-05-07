@@ -48,6 +48,8 @@ def login(client, *, email: str, password: str = PASSWORD) -> None:
     ("provider_type", "base_url", "default_model", "api_key"),
     [
         ("openai", "https://api.openai.com/v1", "gpt-5.4-mini", "openai-secret"),
+        ("openrouter", "https://openrouter.ai/api/v1", "openai/gpt-4.1-mini", "openrouter-secret"),
+        ("litellm", "http://litellm.local:4000/v1", "gpt-5", "litellm-secret"),
         ("claude", "https://api.anthropic.com", "claude-sonnet-4-6", "claude-secret"),
         ("gemini", "https://generativelanguage.googleapis.com", "gemini-2.5-flash", "gemini-secret"),
         ("ollama", "http://localhost:11434", "qwen3:8b", None),
@@ -99,6 +101,8 @@ def test_platform_admin_ai_provider_config_saves_supported_providers(
     ("provider_type", "base_url", "default_model", "api_key"),
     [
         ("openai", "https://api.openai.com/v1", "gpt-5.4-mini", "openai-secret"),
+        ("openrouter", "https://openrouter.ai/api/v1", "openai/gpt-4.1-mini", "openrouter-secret"),
+        ("litellm", "http://litellm.local:4000/v1", "gpt-5", "litellm-secret"),
         ("claude", "https://api.anthropic.com", "claude-sonnet-4-6", "claude-secret"),
         ("gemini", "https://generativelanguage.googleapis.com", "gemini-2.5-flash", "gemini-secret"),
         ("ollama", "http://localhost:11434", "qwen3:8b", None),

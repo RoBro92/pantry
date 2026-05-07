@@ -87,9 +87,7 @@ export function PantryActivityFeed({ events }: PantryActivityFeedProps) {
                 </div>
                 <div className="activity-feed-copy">
                   <strong>{event.summary}</strong>
-                  <span>
-                    {event.actor_display ?? "System"} · {event.action.replaceAll(".", " / ")}
-                  </span>
+                  <span>{event.actor_display ?? "System"}</span>
                 </div>
               </li>
             ))}
@@ -122,9 +120,7 @@ export function PantryActivityFeed({ events }: PantryActivityFeedProps) {
                   </div>
                   <div className="activity-feed-copy">
                     <strong>{event.summary}</strong>
-                    <span>
-                      {event.actor_display ?? "System"} · {event.action.replaceAll(".", " / ")}
-                    </span>
+                    <span>{event.actor_display ?? "System"}</span>
                   </div>
                 </li>
               ))}

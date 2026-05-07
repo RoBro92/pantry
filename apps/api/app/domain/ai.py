@@ -8,6 +8,8 @@ AI_PROVIDER_OPENAI = "openai"
 AI_PROVIDER_CLAUDE = "claude"
 AI_PROVIDER_GEMINI = "gemini"
 AI_PROVIDER_OLLAMA = "ollama"
+AI_PROVIDER_OPENROUTER = "openrouter"
+AI_PROVIDER_LITELLM = "litellm"
 AI_PROVIDER_OPENAI_COMPATIBLE = "openai_compatible"
 AI_PROVIDER_ALIASES = {
     AI_PROVIDER_OPENAI_COMPATIBLE: AI_PROVIDER_OPENAI,
@@ -17,18 +19,24 @@ AI_PROVIDER_TYPES = {
     AI_PROVIDER_CLAUDE,
     AI_PROVIDER_GEMINI,
     AI_PROVIDER_OLLAMA,
+    AI_PROVIDER_OPENROUTER,
+    AI_PROVIDER_LITELLM,
 }
 AI_PROVIDER_DEFAULT_BASE_URLS = {
     AI_PROVIDER_OPENAI: "https://api.openai.com/v1",
     AI_PROVIDER_CLAUDE: "https://api.anthropic.com",
     AI_PROVIDER_GEMINI: "https://generativelanguage.googleapis.com",
     AI_PROVIDER_OLLAMA: "http://localhost:11434",
+    AI_PROVIDER_OPENROUTER: "https://openrouter.ai/api/v1",
+    AI_PROVIDER_LITELLM: "http://localhost:4000/v1",
 }
 AI_PROVIDER_API_KEY_REQUIRED = {
     AI_PROVIDER_OPENAI: True,
     AI_PROVIDER_CLAUDE: True,
     AI_PROVIDER_GEMINI: True,
     AI_PROVIDER_OLLAMA: False,
+    AI_PROVIDER_OPENROUTER: True,
+    AI_PROVIDER_LITELLM: False,
 }
 
 

@@ -66,41 +66,36 @@ export default async function HouseholdPantryPage({
         )}
       />
 
-      <section className="content-grid pantry-support-grid">
-        <article className="panel">
-          <div className="stack compact-stack">
-            <p className="eyebrow">Recent Activity</p>
-            <h2 className="section-heading">Inventory log</h2>
-            <p className="section-copy">
-              A compact record of product creation, stock changes, enrichment links, and setup
-              milestones.
-            </p>
-          </div>
-          <PantryActivityFeed events={overview.recent_events} />
-        </article>
+      <details className="panel compact-disclosure pantry-support-disclosure">
+        <summary>Activity and storage QR links</summary>
+        <section className="content-grid pantry-support-grid compact-disclosure-body">
+          <article className="support-surface">
+            <div className="stack compact-stack">
+              <h2 className="section-heading">Inventory log</h2>
+              <p className="section-copy">Recent household changes for review.</p>
+            </div>
+            <PantryActivityFeed events={overview.recent_events} />
+          </article>
 
-        <article className="panel">
-          <div className="stack compact-stack">
-            <p className="eyebrow">Location Links</p>
-            <h2 className="section-heading">Storage QR access</h2>
-            <p className="section-copy">
-              QR links resolve to the authenticated location view using the current public browser
-              URL.
-            </p>
-          </div>
-          {overview.locations.length === 0 ? (
-            <div className="empty-state">
-              <p>Create a room and storage location to generate its QR link.</p>
+          <article className="support-surface">
+            <div className="stack compact-stack">
+              <h2 className="section-heading">Storage QR access</h2>
+              <p className="section-copy">Quick links for storage-location views.</p>
             </div>
-          ) : (
-            <div className="location-link-grid compact-link-grid">
-              {overview.locations.map((location) => (
-                <LocationQRCodeCard key={location.external_id} location={location} />
-              ))}
-            </div>
-          )}
-        </article>
-      </section>
+            {overview.locations.length === 0 ? (
+              <div className="empty-state">
+                <p>Create a room and storage location to generate its QR link.</p>
+              </div>
+            ) : (
+              <div className="location-link-grid compact-link-grid">
+                {overview.locations.map((location) => (
+                  <LocationQRCodeCard key={location.external_id} location={location} />
+                ))}
+              </div>
+            )}
+          </article>
+        </section>
+      </details>
     </div>
   );
 }

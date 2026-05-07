@@ -1911,6 +1911,16 @@ button.smtp-template-pill {
   align-items: start;
 }
 
+.pantry-support-disclosure {
+  gap: 0.95rem;
+}
+
+.support-surface {
+  display: grid;
+  gap: 1rem;
+  align-content: start;
+}
+
 .location-link-grid {
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
 }
@@ -2946,7 +2956,7 @@ button.smtp-template-pill {
 @media (max-width: 640px), ((max-height: 500px) and (orientation: landscape)) {
   .page-shell {
     width: min(100%, calc(100% - 1rem));
-    padding: 1rem 0 6.5rem;
+    padding: 1rem 0 calc(6.5rem + env(safe-area-inset-bottom, 0px));
   }
 
   .auth-stage-shell,
@@ -2971,7 +2981,7 @@ button.smtp-template-pill {
     position: fixed;
     left: 0.5rem;
     right: 0.5rem;
-    bottom: 0.5rem;
+    bottom: calc(0.5rem + env(safe-area-inset-bottom, 0px));
     z-index: 30;
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));

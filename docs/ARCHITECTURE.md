@@ -25,7 +25,7 @@ Pantro is a small repo for a self hosted product with three runtime services and
 - Open Food Facts is optional advisory enrichment, not the source of truth for Pantro records
 - AI support is optional, provider-abstracted, and currently focused on guided pantry-aware meal suggestions plus explicit recipe-completion pantry writeback
 - AI provider configuration is stored at installation scope today, with routing kept self-hosted and operator managed
-- The admin AI flow supports guided setup for OpenAI, Claude, Ollama, and a manual custom OpenAI-compatible path
+- The admin AI flow supports guided setup for OpenAI plus operator-managed OpenAI-compatible endpoint presets such as OpenRouter and LiteLLM, with Claude, Ollama, and other provider groundwork kept optional
 - OpenAI runtime requests use Chat Completions with strict JSON Schema response formatting, plus a Pantro-owned schema normalization and compatibility probe layer before the provider is treated as healthy
 - Uploaded files and restore bundles are treated as hostile input
 - Updates are advisory and operator triggered; Pantro does not auto-update

@@ -162,3 +162,23 @@ Deliver the first focused mobile-first household UX sprint so Pantro is easier t
 - the same actions open visible dialogs on mobile
 - the overlay and dialog stack correctly above the pantry detail tree
 - the shared modal shell mounts outside ancestor clipping contexts so stock-lot dialogs are not hidden
+
+## Mobile Usability And PWA Cleanup Pass
+
+### Issues addressed
+
+- remove build/version chrome and generic welcome copy from the daily mobile household header
+- render the mobile inventory card list from the first server/client pass instead of waiting for a viewport effect
+- prevent scan/manual add flows from opening before a household has a storage location, with a mobile admin path back to room management
+- keep pantry filter controls in sync with URL-backed server results
+- move activity and storage QR tools behind a secondary disclosure and remove raw audit action codes or full QR URLs from the main pantry path
+- add manifest, mobile metadata, icon placeholders, and safe-area spacing for installable mobile use
+- extend the instance AI setting schema and web setup/admin forms with OpenRouter and LiteLLM proxy options as OpenAI-compatible, operator-managed endpoints
+
+### Acceptance criteria
+
+- phone inventory remains visible without relying on a `matchMedia` hydration swap
+- mobile add actions do not lead to an unsaveable required-location form
+- daily household screens no longer show version/build text, raw audit action identifiers, full QR URLs, or AI provider/schema metadata in consumer disclosures
+- Pantro exposes a valid web app manifest and theme/icon metadata without adding service-worker caching
+- OpenRouter and LiteLLM proxy configuration can be saved and health-checked without adding billing, hosted control-plane, or native app work

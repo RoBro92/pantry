@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180" role="img" aria-labelledby="title">
+  <title>Pantro icon</title>
+  <rect width="180" height="180" rx="40" fill="#ad5b1f"/>
+  <path fill="#fff9f0" d="M48 60c0-10 8-18 18-18h48c10 0 18 8 18 18v60c0 10-8 18-18 18H66c-10 0-18-8-18-18V60Zm23-2c-3 0-5 2-5 5v54c0 3 2 5 5 5h38c3 0 5-2 5-5V63c0-3-2-5-5-5H71Z"/>
+  <path fill="#fff9f0" d="M78 76h24v12H78V76Zm0 22h24v12H78V98Z"/>
+</svg>

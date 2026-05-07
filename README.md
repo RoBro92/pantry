@@ -14,7 +14,7 @@ It is built for local operation rather than hosted sync. This public repository 
 - Optional AI product intelligence that classifies pantry products into structured recipe-matching metadata
 - Guided first-run setup, including restore from a Pantro backup bundle
 - Admin tools for users, backups, diagnostics, updates, SMTP, and optional AI provider configuration
-- Optional guided household AI meal suggestions backed by an instance-level OpenAI, Claude, Ollama, or custom OpenAI-compatible provider, including pantry-aware recipe completion writeback
+- Optional guided household AI meal suggestions backed by an instance-level OpenAI, OpenRouter, LiteLLM proxy, Claude, Ollama, or custom OpenAI-compatible provider, including pantry-aware recipe completion writeback
 
 ## Project Scope
 
@@ -34,6 +34,8 @@ curl -fsSL https://raw.githubusercontent.com/RoBro92/pantry/main/infra/scripts/i
 The installer prepares Docker, downloads the release assets, writes `.env`, generates required secrets, runs migrations, starts the stack, and runs a health check.
 
 Open `http://<your-server>:3000/` when the installer finishes.
+
+For production phone use, put Pantro behind HTTPS. Browser camera scanning and the best installable PWA experience depend on a secure browser context, except for localhost during development.
 
 ## Manual Installation
 
