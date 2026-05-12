@@ -4,6 +4,8 @@ PANTRO_SELFHOST_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PANTRO_REPO_ROOT="$(cd "${PANTRO_SELFHOST_LIB_DIR}/../../.." && pwd)"
 PANTRO_DEFAULT_REPOSITORY="${PANTRO_REPOSITORY:-${PANTRY_REPOSITORY:-RoBro92/pantry}}"
 PANTRO_DEFAULT_IMAGE_NAMESPACE="${PANTRO_IMAGE_NAMESPACE:-${PANTRY_IMAGE_NAMESPACE:-ghcr.io/robro92}}"
+PANTRO_DEFAULT_APP_UID="${PANTRO_APP_UID:-${PANTRY_APP_UID:-10001}}"
+PANTRO_DEFAULT_APP_GID="${PANTRO_APP_GID:-${PANTRY_APP_GID:-10001}}"
 
 if [[ -t 1 ]]; then
   PANTRO_COLOR_BLUE=$'\033[1;34m'
@@ -322,6 +324,22 @@ backup_file() {
   if [[ -f "${path}" ]]; then
     cp "${path}" "${path}.bak.$(date +%Y%m%d%H%M%S)"
   fi
+}
+
+ensure_app_data_dir_permissions() {
+  local uid="$1"
+  local gid="$2"
+  shift 2
+
+  local dir
+  for dir in "$@"; do
+    mkdir -p "${dir}"
+    if [[ "${EUID}" -eq 0 ]]; then
+      chown -R "${uid}:${gid}" "${dir}"
+    elif [[ ! -w "${dir}" ]]; then
+      log_warn "Directory ${dir} may not be writable by the Pantro app user ${uid}:${gid}. Run: sudo chown -R ${uid}:${gid} ${dir}"
+    fi
+  done
 }
 
 resolve_install_compose_file() {

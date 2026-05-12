@@ -56,6 +56,8 @@ Pantro does not self-update. Operators update it deliberately:
 
 That flow refreshes release assets by default, updates `PANTRO_VERSION`, pulls images, runs migrations, restarts services, and runs the bundled health check.
 
+Before updating, run the health check and back up PostgreSQL plus Pantro-managed import storage. Rollback guidance is in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+
 If you are upgrading an existing Pantry-named install, the legacy `./update-pantry.sh` wrapper remains supported during the migration.
 
 ## First Run

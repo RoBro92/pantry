@@ -76,6 +76,56 @@ to make credentialed API calls. Keep `CSRF_PROTECTION_ENABLED=true` for normal
 self-hosted deployments. Login, password reset, and first-run setup mutation rate
 limits use Redis by default; tune the `*_RATE_LIMIT_*` values in `.env` if needed.
 
+The released web, API, worker, and migration containers run as the numeric app user
+configured by `PANTRO_APP_UID` and `PANTRO_APP_GID` (`10001:10001` by default).
+The installer and updater adjust only the Pantro-managed import and backup data
+directories for that user. Do not change PostgreSQL or Redis data directory
+ownership to the app UID.
+
+## Reverse Proxy Examples
+
+Pantro expects TLS to terminate at your reverse proxy. Forward browser traffic to
+the web container, not directly to the API, unless you are intentionally exposing
+the API for operator automation. The proxy must preserve the public host and
+scheme so the web API proxy and CSRF checks see the same origin as the browser.
+
+Nginx:
+
+```nginx
+server {
+  listen 443 ssl http2;
+  server_name pantro.example.com;
+
+  ssl_certificate /etc/letsencrypt/live/pantro.example.com/fullchain.pem;
+  ssl_certificate_key /etc/letsencrypt/live/pantro.example.com/privkey.pem;
+
+  location / {
+    proxy_pass http://127.0.0.1:3000;
+    proxy_set_header Host $http_host;
+    proxy_set_header X-Forwarded-Host $http_host;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+  }
+}
+```
+
+Caddy:
+
+```caddyfile
+pantro.example.com {
+  reverse_proxy 127.0.0.1:3000 {
+    header_up Host {host}
+    header_up X-Forwarded-Host {host}
+    header_up X-Forwarded-Proto https
+  }
+}
+```
+
+For a non-standard HTTPS port such as `https://pantry.example.com:8443`, include
+the port in `WEB_APP_URL`, `API_BASE_URL`, and `PUBLIC_BROWSER_BASE_URL`. If any
+other trusted browser origin can make credentialed API calls, add that exact
+scheme, host, and port to `CSRF_TRUSTED_ORIGINS`.
+
 3. Validate and start the stack.
 
 ```bash
@@ -97,6 +147,13 @@ Then complete first-run setup in the browser.
 ## Updating
 
 Pantro updates are explicit operator actions.
+
+Before updating:
+
+1. Run `./healthcheck-pantro.sh --install-dir /opt/pantro`.
+2. Record the current `PANTRO_VERSION` from `.env`.
+3. Back up PostgreSQL data and Pantro-managed import storage. Keep the backup
+   until the new version passes health checks.
 
 Update to the latest release:
 
@@ -121,6 +178,33 @@ If you are upgrading an older Pantry-named install, `./update-pantry.sh`, `pantr
 The update script refreshes release assets by default, updates `PANTRO_VERSION`, sets `SESSION_HTTPS_ONLY=true`, pulls images, runs migrations, restarts services, and runs the bundled health check. Before updating older installs, set `PUBLIC_BROWSER_BASE_URL` or `WEB_APP_URL` to the HTTPS URL served by your reverse proxy.
 
 Before upgrading to the release that introduces the stock quantity constraint, repair any rows where `stock_lots.quantity < 0`. The migration stops with an explicit error if negative stock quantities are present, because Pantro now enforces non-negative stock at the database layer.
+
+Before upgrading to the release that introduces the active stock merge index,
+repair duplicate active `stock_lots` rows with the same household, product,
+location, unit, and expiry. The migration stops with an explicit error if those
+duplicates are present.
+
+If an update fails, inspect the service state before taking rollback action:
+
+```bash
+docker compose --env-file .env -f pantro.yml ps
+docker compose --env-file .env -f pantro.yml logs --tail=200 web api worker
+./healthcheck-pantro.sh --install-dir /opt/pantro --timeout 180
+```
+
+Rollback depends on whether migrations applied. If migrations did not run or did
+not apply, restore the pre-update `.env` and compose asset backups, pin
+`PANTRO_VERSION` to the previous version, and restart the stack:
+
+```bash
+docker compose --env-file .env -f pantro.yml up -d --remove-orphans
+```
+
+If migrations applied or data looks inconsistent, restore the pre-update
+PostgreSQL and import-storage backup first, then restore the previous `.env` and
+compose assets before restarting the previous version. Do not run an older image
+against a database that has already been migrated forward unless the release
+notes explicitly say that downgrade path is supported.
 
 For a concise maintainer and operator checklist, see [docs/RELEASE_RUNBOOK.md](RELEASE_RUNBOOK.md).
 
