@@ -37,9 +37,9 @@ The installer:
 - writes `.env` and generates required secrets
 - pulls images, runs migrations, starts the stack, and runs a health check
 
-When the install completes, open `http://<your-ip>:3000/`.
+When the install completes, open the configured public URL.
 
-For day-to-day phone use, serve Pantro through HTTPS. Browser camera scanning and installable PWA behaviour require a secure context in production; localhost remains supported for development.
+For production use, serve Pantro through HTTPS. Production API startup now requires `SESSION_HTTPS_ONLY=true` so signed session cookies are only sent over secure connections. Browser camera scanning and installable PWA behaviour also require a secure context in production; localhost remains supported for development.
 
 ## Manual Install
 
@@ -64,6 +64,7 @@ cp pantro.env.example .env
 - `POSTGRES_PASSWORD`
 - `SETTINGS_ENCRYPTION_KEY`
 - `SESSION_SECRET_KEY`
+- `SESSION_HTTPS_ONLY=true`
 - `INTERNAL_API_PROXY_TOKEN`
 
 Browser-side web requests use the web container's same-origin `/api/*` proxy in self-hosted releases. Operators need `INTERNAL_API_BASE_URL=http://api:8000` so the web container can reach the API container internally, and a random `INTERNAL_API_PROXY_TOKEN` shared by the web and API containers so API rate limits can trust the client scope forwarded by the web proxy.

@@ -357,7 +357,7 @@ main() {
   host="$(prompt_with_default "Public host or IP" "${detected_ip}")"
   web_port="$(prompt_with_default "Web port" "3000")"
   api_port="$(prompt_with_default "API port" "8000")"
-  use_https="$(prompt_with_default "Use HTTPS at the public URL? (y/n)" "n")"
+  use_https="$(prompt_with_default "Use HTTPS at the public URL? (y/n)" "y")"
 
   case "${use_https}" in
     y|Y|yes|YES)
