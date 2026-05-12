@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { RecipeForm } from "../../../../../../../../components/recipe-form";
 import {
-  getPantryOverview,
+  getPantryProductOptions,
   getRecipeDetail,
   requireHouseholdAccess
 } from "../../../../../../../../lib/server-auth";
@@ -16,8 +16,8 @@ type RecipeEditPageProps = {
 export default async function RecipeEditPage({ params }: RecipeEditPageProps) {
   const { householdExternalId, recipeExternalId } = await params;
   await requireHouseholdAccess(householdExternalId);
-  const [pantry, recipeResponse] = await Promise.all([
-    getPantryOverview(householdExternalId),
+  const [pantryProducts, recipeResponse] = await Promise.all([
+    getPantryProductOptions(householdExternalId),
     getRecipeDetail(householdExternalId, recipeExternalId)
   ]);
 
@@ -33,7 +33,7 @@ export default async function RecipeEditPage({ params }: RecipeEditPageProps) {
       </div>
       <RecipeForm
         householdExternalId={householdExternalId}
-        products={pantry.catalog_products}
+        products={pantryProducts.products}
         mode="edit"
         initialValue={{
           recipeExternalId,

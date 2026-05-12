@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { PantryLocationSummary, PantryProductSummary } from "../lib/api-types";
-import type { PantryCatalogProductSummary } from "../lib/api-types";
 import { formatQuantityWithUnit } from "../lib/quantity-format";
 import { PantryLotActions } from "./pantry-lot-actions";
 import { PantryProductDeleteDialog } from "./pantry-product-delete-dialog";
@@ -17,7 +16,6 @@ import { StockLotEditorDialog } from "./stock-lot-editor-dialog";
 
 type PantryProductBrowserProps = {
   householdExternalId: string;
-  catalogProducts: PantryCatalogProductSummary[];
   products: PantryProductSummary[];
   locations: PantryLocationSummary[];
   canAdminister: boolean;
@@ -79,7 +77,6 @@ function describeCanonicalSummary(product: PantryProductSummary) {
 
 export function PantryProductBrowser({
   householdExternalId,
-  catalogProducts,
   products,
   locations,
   canAdminister,
@@ -675,7 +672,6 @@ export function PantryProductBrowser({
       {productIntelligenceProduct ? (
         <ProductIntelligenceRunDialog
           householdExternalId={householdExternalId}
-          catalogProducts={catalogProducts}
           initialMode="product"
           initialProductExternalId={productIntelligenceProduct.product_external_id}
           onClose={() => setProductIntelligenceProduct(null)}

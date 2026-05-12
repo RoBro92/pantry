@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type {
-  PantryCatalogProductSummary,
   PantryLocationGroupSummary,
   PantryLocationSummary,
 } from "../lib/api-types";
@@ -17,7 +16,6 @@ type PantryControlsProps = {
   householdExternalId: string;
   householdName: string;
   canAdminister: boolean;
-  catalogProducts: PantryCatalogProductSummary[];
   locationGroups: PantryLocationGroupSummary[];
   locations: PantryLocationSummary[];
   counts: {
@@ -39,7 +37,6 @@ export function PantryControls({
   householdExternalId,
   householdName,
   canAdminister,
-  catalogProducts,
   locationGroups,
   locations,
   counts,
@@ -421,7 +418,6 @@ export function PantryControls({
       {isProductIntelligenceOpen ? (
         <ProductIntelligenceRunDialog
           householdExternalId={householdExternalId}
-          catalogProducts={catalogProducts}
           onClose={() => setIsProductIntelligenceOpen(false)}
         />
       ) : null}

@@ -1,5 +1,9 @@
 import { ShoppingListPanel } from "../../../../../../components/shopping-list-panel";
-import { getPantryOverview, getShoppingList, requireHouseholdAccess } from "../../../../../../lib/server-auth";
+import {
+  getPantryLocationOptions,
+  getShoppingList,
+  requireHouseholdAccess
+} from "../../../../../../lib/server-auth";
 
 type ShoppingListPageProps = {
   params: Promise<{
@@ -12,17 +16,17 @@ export default async function HouseholdShoppingListPage({
 }: ShoppingListPageProps) {
   const { householdExternalId } = await params;
   await requireHouseholdAccess(householdExternalId);
-  const [shoppingList, pantryOverview] = await Promise.all([
+  const [shoppingList, pantryLocations] = await Promise.all([
     getShoppingList(householdExternalId),
-    getPantryOverview(householdExternalId),
+    getPantryLocationOptions(householdExternalId),
   ]);
 
   return (
     <ShoppingListPanel
       householdExternalId={householdExternalId}
       shoppingList={shoppingList}
-      locations={pantryOverview.locations}
-      canAdminister={pantryOverview.can_administer}
+      locations={pantryLocations.locations}
+      canAdminister={pantryLocations.can_administer}
     />
   );
 }

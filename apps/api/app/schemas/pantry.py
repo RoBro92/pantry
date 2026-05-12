@@ -486,6 +486,48 @@ class PantryOverviewResponse(BaseModel):
     recent_events: list[AuditEventSummary]
 
 
+class PantryItemListResponse(BaseModel):
+    household_external_id: str
+    page: int = 1
+    page_size: int = 25
+    page_count: int = 1
+    matched_product_count: int = 0
+    filters: PantryFilters
+    products: list[PantryProductSummary]
+
+
+class PantrySupportDataResponse(BaseModel):
+    household_external_id: str
+    household_name: str
+    effective_role: str
+    can_administer: bool
+    counts: PantryCounts
+    location_groups: list[LocationGroupSummary]
+    locations: list[LocationSummary]
+    recent_events: list[AuditEventSummary]
+
+
+class PantryLocationOptionsResponse(BaseModel):
+    household_external_id: str
+    can_administer: bool
+    locations: list[LocationSummary]
+
+
+class PantryProductOptionSummary(BaseModel):
+    external_id: str
+    name: str
+    default_unit: str
+    aliases: list[str] = Field(default_factory=list)
+    barcodes: list[str] = Field(default_factory=list)
+    intelligence_ingredient_families: list[str] = Field(default_factory=list)
+    intelligence_food_category: str | None = None
+
+
+class PantryProductOptionsResponse(BaseModel):
+    household_external_id: str
+    products: list[PantryProductOptionSummary]
+
+
 class NearExpiryResponse(BaseModel):
     household_external_id: str
     days: int
