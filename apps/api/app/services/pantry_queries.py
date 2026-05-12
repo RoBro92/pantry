@@ -5,13 +5,15 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import case, distinct, exists, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.audit_event import AuditEvent
+from app.models.barcode import Barcode
 from app.models.location import Location
 from app.models.location_group import LocationGroup
 from app.models.product import Product
+from app.models.product_alias import ProductAlias
 from app.models.product_canonical_link import ProductCanonicalLink
 from app.models.stock_lot import StockLot
 from app.schemas.pantry import (
@@ -21,8 +23,13 @@ from app.schemas.pantry import (
     NearExpiryResponse,
     PantryCounts,
     PantryFilters,
+    PantryItemListResponse,
+    PantryLocationOptionsResponse,
     PantryOverviewResponse,
+    PantryProductOptionSummary,
+    PantryProductOptionsResponse,
     PantryProductSummary,
+    PantrySupportDataResponse,
     ProductLocationSummary,
     StockLotSummary,
 )
@@ -203,6 +210,62 @@ def _load_reference_lists(
     return location_groups, locations, products
 
 
+def _load_location_groups(db: Session, *, household_id) -> list[LocationGroup]:
+    return db.scalars(
+        select(LocationGroup).where(LocationGroup.household_id == household_id).order_by(LocationGroup.name)
+    ).all()
+
+
+def _load_locations(db: Session, *, household_id) -> list[Location]:
+    return db.scalars(
+        select(Location)
+        .where(Location.household_id == household_id)
+        .options(selectinload(Location.location_group))
+        .order_by(Location.name)
+    ).all()
+
+
+def _location_group_summaries(
+    location_groups: list[LocationGroup],
+    locations: list[Location],
+) -> list[LocationGroupSummary]:
+    return [
+        LocationGroupSummary(
+            external_id=group.external_id,
+            name=group.name,
+            location_count=sum(1 for location in locations if location.location_group_id == group.id),
+        )
+        for group in location_groups
+    ]
+
+
+def _serialize_location_link(*, location: Location, public_base_url: str) -> dict[str, str]:
+    location_route = location.external_id
+    browser_path = location_links.build_location_browser_path(location_route)
+    return {
+        "location_route": location_route,
+        "browser_path": browser_path,
+        "browser_url": f"{public_base_url}{browser_path}",
+    }
+
+
+def _location_summaries(
+    locations: list[Location],
+    *,
+    public_base_url: str,
+) -> list[LocationSummary]:
+    return [
+        LocationSummary(
+            external_id=location.external_id,
+            name=location.name,
+            location_group_external_id=location.location_group.external_id,
+            location_group_name=location.location_group.name,
+            **_serialize_location_link(location=location, public_base_url=public_base_url),
+        )
+        for location in locations
+    ]
+
+
 def _load_active_lots(db: Session, *, household_id) -> list[StockLot]:
     return db.scalars(
         select(StockLot)
@@ -218,6 +281,185 @@ def _load_active_lots(db: Session, *, household_id) -> list[StockLot]:
             selectinload(StockLot.location).selectinload(Location.location_group),
         )
         .order_by(StockLot.expires_on, StockLot.created_at)
+    ).all()
+
+
+def _active_lot_exists_for_product(product_id_column, *, household_id):
+    return exists(
+        select(StockLot.id)
+        .where(StockLot.household_id == household_id)
+        .where(StockLot.product_id == product_id_column)
+        .where(StockLot.depleted_at.is_(None))
+        .where(StockLot.quantity > Decimal("0"))
+    )
+
+
+def _lot_scope_exists_for_product(
+    product_id_column,
+    *,
+    household_id,
+    filters: PantryFilterOptions,
+    near_expiry_days: int,
+):
+    scoped_lot = (
+        select(StockLot.id)
+        .join(Location, Location.id == StockLot.location_id)
+        .where(StockLot.household_id == household_id)
+        .where(StockLot.product_id == product_id_column)
+        .where(StockLot.depleted_at.is_(None))
+        .where(StockLot.quantity > Decimal("0"))
+    )
+    if filters.location_group_external_id:
+        scoped_lot = scoped_lot.join(LocationGroup, LocationGroup.id == Location.location_group_id).where(
+            LocationGroup.external_id == filters.location_group_external_id
+        )
+    if filters.location_external_id:
+        scoped_lot = scoped_lot.where(Location.external_id == filters.location_external_id)
+    if filters.near_expiry_only:
+        scoped_lot = scoped_lot.where(StockLot.expires_on.is_not(None)).where(
+            StockLot.expires_on <= _today() + timedelta(days=near_expiry_days)
+        )
+    return exists(scoped_lot)
+
+
+def _product_matches_query_clause(*, household_id, query: str | None):
+    if not query:
+        return None
+
+    normalized_query = normalize_lookup_name(query)
+    try:
+        barcode_query = normalize_barcode(query)
+    except ValueError:
+        barcode_query = None
+
+    alias_match = exists(
+        select(ProductAlias.id)
+        .where(ProductAlias.household_id == household_id)
+        .where(ProductAlias.product_id == Product.id)
+        .where(ProductAlias.normalized_name.contains(normalized_query))
+    )
+    clauses = [Product.normalized_name.contains(normalized_query), alias_match]
+    if barcode_query:
+        barcode_match = exists(
+            select(Barcode.id)
+            .where(Barcode.household_id == household_id)
+            .where(Barcode.product_id == Product.id)
+            .where(Barcode.normalized_value.contains(barcode_query))
+        )
+        clauses.append(barcode_match)
+    return or_(*clauses)
+
+
+def _product_filter_query(
+    *,
+    household_id,
+    filters: PantryFilterOptions,
+    near_expiry_days: int,
+):
+    query = select(Product.id).where(Product.household_id == household_id)
+    query_clause = _product_matches_query_clause(household_id=household_id, query=filters.q)
+    if query_clause is not None:
+        query = query.where(query_clause)
+
+    has_lot_scope_filters = bool(
+        filters.location_group_external_id or filters.location_external_id or filters.near_expiry_only
+    )
+    if has_lot_scope_filters:
+        query = query.where(
+            _lot_scope_exists_for_product(
+                Product.id,
+                household_id=household_id,
+                filters=filters,
+                near_expiry_days=near_expiry_days,
+            )
+        )
+
+    has_active_lots = _active_lot_exists_for_product(Product.id, household_id=household_id)
+    return query.order_by(case((has_active_lots, 0), else_=1), func.lower(Product.name))
+
+
+def _load_products_by_ids(db: Session, *, household_id, product_ids: list) -> list[Product]:
+    if not product_ids:
+        return []
+    products = db.scalars(
+        select(Product)
+        .where(Product.household_id == household_id)
+        .where(Product.id.in_(product_ids))
+        .options(
+            selectinload(Product.aliases),
+            selectinload(Product.barcodes),
+            selectinload(Product.enrichments),
+            selectinload(Product.intelligence_records),
+            selectinload(Product.canonical_link).selectinload(ProductCanonicalLink.canonical_item),
+        )
+    ).all()
+    products_by_id = {product.id: product for product in products}
+    return [products_by_id[product_id] for product_id in product_ids if product_id in products_by_id]
+
+
+def _load_active_lots_for_products(db: Session, *, household_id, product_ids: list) -> list[StockLot]:
+    if not product_ids:
+        return []
+    return db.scalars(
+        select(StockLot)
+        .where(StockLot.household_id == household_id)
+        .where(StockLot.product_id.in_(product_ids))
+        .where(StockLot.depleted_at.is_(None))
+        .where(StockLot.quantity > Decimal("0"))
+        .options(
+            selectinload(StockLot.product).selectinload(Product.aliases),
+            selectinload(StockLot.product).selectinload(Product.barcodes),
+            selectinload(StockLot.product).selectinload(Product.enrichments),
+            selectinload(StockLot.product).selectinload(Product.intelligence_records),
+            selectinload(StockLot.product)
+            .selectinload(Product.canonical_link)
+            .selectinload(ProductCanonicalLink.canonical_item),
+            selectinload(StockLot.location).selectinload(Location.location_group),
+        )
+        .order_by(StockLot.expires_on, StockLot.created_at)
+    ).all()
+
+
+def _build_pantry_counts(db: Session, *, household_id, near_expiry_days: int = 14) -> PantryCounts:
+    product_count = db.scalar(select(func.count(Product.id)).where(Product.household_id == household_id)) or 0
+    active_lot_filters = [
+        StockLot.household_id == household_id,
+        StockLot.depleted_at.is_(None),
+        StockLot.quantity > Decimal("0"),
+    ]
+    active_lot_count = db.scalar(select(func.count(StockLot.id)).where(*active_lot_filters)) or 0
+    near_expiry_lot_count = (
+        db.scalar(
+            select(func.count(StockLot.id))
+            .where(*active_lot_filters)
+            .where(StockLot.expires_on.is_not(None))
+            .where(StockLot.expires_on <= _today() + timedelta(days=near_expiry_days))
+        )
+        or 0
+    )
+    active_product_count = (
+        db.scalar(select(func.count(distinct(StockLot.product_id))).where(*active_lot_filters)) or 0
+    )
+    return PantryCounts(
+        location_group_count=db.scalar(
+            select(func.count(LocationGroup.id)).where(LocationGroup.household_id == household_id)
+        )
+        or 0,
+        location_count=db.scalar(select(func.count(Location.id)).where(Location.household_id == household_id)) or 0,
+        product_count=product_count,
+        active_lot_count=active_lot_count,
+        near_expiry_lot_count=near_expiry_lot_count,
+        out_of_stock_product_count=max(0, product_count - active_product_count),
+    )
+
+
+def _load_recent_events(db: Session, *, household_id, limit: int = 40) -> list[AuditEvent]:
+    return db.scalars(
+        select(AuditEvent)
+        .where(AuditEvent.household_id == household_id)
+        .options(selectinload(AuditEvent.actor_user))
+        .order_by(AuditEvent.occurred_at.desc())
+        .limit(limit)
     ).all()
 
 
@@ -282,16 +524,6 @@ def _product_location_summaries(lots: list[StockLot]) -> list[ProductLocationSum
         ],
         key=lambda location: (location.location_group_name.lower(), location.location_name.lower()),
     )
-
-
-def _serialize_location_link(*, location: Location, public_base_url: str) -> dict[str, str]:
-    location_route = location.external_id
-    browser_path = location_links.build_location_browser_path(location_route)
-    return {
-        "location_route": location_route,
-        "browser_path": browser_path,
-        "browser_url": f"{public_base_url}{browser_path}",
-    }
 
 
 def _build_product_summary(
@@ -478,6 +710,146 @@ def build_pantry_overview(
             )
         ],
         recent_events=[_event_summary(event) for event in recent_events],
+    )
+
+
+def build_pantry_item_list(
+    db: Session,
+    *,
+    access: HouseholdAccess,
+    filters: PantryFilterOptions,
+    page: int = 1,
+    page_size: int = 25,
+    near_expiry_days: int = 14,
+) -> PantryItemListResponse:
+    product_query = _product_filter_query(
+        household_id=access.household.id,
+        filters=filters,
+        near_expiry_days=near_expiry_days,
+    )
+    product_subquery = product_query.order_by(None).subquery()
+    matched_product_count = db.scalar(select(func.count()).select_from(product_subquery)) or 0
+    page_count = max(1, (matched_product_count + page_size - 1) // page_size)
+    current_page = min(page, page_count)
+    product_ids = db.scalars(
+        product_query.offset((current_page - 1) * page_size).limit(page_size)
+    ).all()
+    products = _load_products_by_ids(db, household_id=access.household.id, product_ids=product_ids)
+    active_lots = _load_active_lots_for_products(db, household_id=access.household.id, product_ids=product_ids)
+
+    lots_by_product_id: dict = defaultdict(list)
+    for lot in active_lots:
+        lots_by_product_id[lot.product_id].append(lot)
+
+    has_lot_scope_filters = bool(
+        filters.location_group_external_id or filters.location_external_id or filters.near_expiry_only
+    )
+    open_shopping_product_ids = list_open_shopping_product_ids(db, household=access.household)
+    product_summaries = []
+    for product in products:
+        product_active_lots = lots_by_product_id.get(product.id, [])
+        product_visible_lots = [
+            lot
+            for lot in product_active_lots
+            if _matches_lot_scope(lot, filters=filters, near_expiry_days=near_expiry_days)
+        ]
+        visible_lots = product_visible_lots if has_lot_scope_filters else list(product_active_lots)
+        product_summaries.append(
+            _build_product_summary(
+                product=product,
+                visible_lots=visible_lots,
+                all_active_lots=product_active_lots,
+                open_shopping_product_ids=open_shopping_product_ids,
+                near_expiry_days=near_expiry_days,
+            )
+        )
+
+    return PantryItemListResponse(
+        household_external_id=access.household.external_id,
+        page=current_page,
+        page_size=page_size,
+        page_count=page_count,
+        matched_product_count=matched_product_count,
+        filters=PantryFilters(
+            q=filters.q,
+            location_group_external_id=filters.location_group_external_id,
+            location_external_id=filters.location_external_id,
+            near_expiry_only=filters.near_expiry_only,
+        ),
+        products=product_summaries,
+    )
+
+
+def build_pantry_support_data(
+    db: Session,
+    *,
+    access: HouseholdAccess,
+    near_expiry_days: int = 14,
+) -> PantrySupportDataResponse:
+    location_groups = _load_location_groups(db, household_id=access.household.id)
+    locations = _load_locations(db, household_id=access.household.id)
+    public_base_url = location_links.resolve_public_base_url(db).effective_value
+    return PantrySupportDataResponse(
+        household_external_id=access.household.external_id,
+        household_name=access.household.name,
+        effective_role=access.effective_role,
+        can_administer=access.can_administer,
+        counts=_build_pantry_counts(db, household_id=access.household.id, near_expiry_days=near_expiry_days),
+        location_groups=_location_group_summaries(location_groups, locations),
+        locations=_location_summaries(locations, public_base_url=public_base_url),
+        recent_events=[_event_summary(event) for event in _load_recent_events(db, household_id=access.household.id)],
+    )
+
+
+def build_pantry_location_options(
+    db: Session,
+    *,
+    access: HouseholdAccess,
+) -> PantryLocationOptionsResponse:
+    locations = _load_locations(db, household_id=access.household.id)
+    public_base_url = location_links.resolve_public_base_url(db).effective_value
+    return PantryLocationOptionsResponse(
+        household_external_id=access.household.external_id,
+        can_administer=access.can_administer,
+        locations=_location_summaries(locations, public_base_url=public_base_url),
+    )
+
+
+def build_pantry_product_options(
+    db: Session,
+    *,
+    access: HouseholdAccess,
+) -> PantryProductOptionsResponse:
+    products = db.scalars(
+        select(Product)
+        .where(Product.household_id == access.household.id)
+        .options(
+            selectinload(Product.aliases),
+            selectinload(Product.barcodes),
+            selectinload(Product.intelligence_records),
+        )
+        .order_by(Product.name)
+    ).all()
+    return PantryProductOptionsResponse(
+        household_external_id=access.household.external_id,
+        products=[
+            PantryProductOptionSummary(
+                external_id=product.external_id,
+                name=product.name,
+                default_unit=product.default_unit,
+                aliases=[alias.name for alias in product.aliases],
+                barcodes=[barcode.value for barcode in product.barcodes],
+                intelligence_ingredient_families=list(
+                    product.intelligence_records[0].ingredient_families or []
+                )
+                if product.intelligence_records
+                else [],
+                intelligence_food_category=(
+                    product.intelligence_records[0].food_category if product.intelligence_records else None
+                ),
+            )
+            for product in products
+        ],
     )
 
 

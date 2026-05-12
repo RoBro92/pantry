@@ -27,10 +27,14 @@ from app.schemas.pantry import (
     LocationSummary,
     MoveStockLotRequest,
     NearExpiryResponse,
+    PantryItemListResponse,
+    PantryLocationOptionsResponse,
     PantryOverviewResponse,
     PantryEntryMutationResponse,
     PantryDuplicateCheckRequest,
     PantryDuplicateCheckResponse,
+    PantryProductOptionsResponse,
+    PantrySupportDataResponse,
     ProductIntelligenceRunRequest,
     ProductIntelligenceRunResponse,
     ProductIntelligenceStatusResponse,
@@ -50,8 +54,12 @@ from app.services.pantry_catalog import (
 from app.services.location_links import serialize_location_link
 from app.services.pantry_queries import (
     PantryFilterOptions,
+    build_pantry_item_list,
+    build_pantry_location_options,
     build_near_expiry_response,
     build_pantry_overview,
+    build_pantry_product_options,
+    build_pantry_support_data,
     build_stock_lot_summary,
 )
 from app.services.pantry_stock import (
@@ -152,6 +160,55 @@ def get_pantry_overview(
         page=page,
         page_size=page_size,
     )
+
+
+@router.get("/pantry/support-data", response_model=PantrySupportDataResponse)
+def get_pantry_support_data(
+    db: Session = Depends(get_db_session),
+    access: HouseholdAccess = Depends(require_household_access()),
+):
+    return build_pantry_support_data(db, access=access)
+
+
+@router.get("/pantry/items", response_model=PantryItemListResponse)
+def get_pantry_items(
+    q: str | None = None,
+    location_group_external_id: str | None = None,
+    location_external_id: str | None = None,
+    near_expiry_only: bool = False,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=25, ge=10, le=50),
+    db: Session = Depends(get_db_session),
+    access: HouseholdAccess = Depends(require_household_access()),
+):
+    return build_pantry_item_list(
+        db,
+        access=access,
+        filters=PantryFilterOptions(
+            q=q,
+            location_group_external_id=location_group_external_id,
+            location_external_id=location_external_id,
+            near_expiry_only=near_expiry_only,
+        ),
+        page=page,
+        page_size=page_size,
+    )
+
+
+@router.get("/pantry/location-options", response_model=PantryLocationOptionsResponse)
+def get_pantry_location_options(
+    db: Session = Depends(get_db_session),
+    access: HouseholdAccess = Depends(require_household_access()),
+):
+    return build_pantry_location_options(db, access=access)
+
+
+@router.get("/pantry/product-options", response_model=PantryProductOptionsResponse)
+def get_pantry_product_options(
+    db: Session = Depends(get_db_session),
+    access: HouseholdAccess = Depends(require_household_access()),
+):
+    return build_pantry_product_options(db, access=access)
 
 
 @router.get("/pantry/near-expiry", response_model=NearExpiryResponse)

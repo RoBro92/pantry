@@ -961,6 +961,48 @@ export type PantryOverview = {
   recent_events: PantryAuditEventSummary[];
 };
 
+export type PantryItemList = {
+  household_external_id: string;
+  page: number;
+  page_size: number;
+  page_count: number;
+  matched_product_count: number;
+  filters: PantryOverview["filters"];
+  products: PantryProductSummary[];
+};
+
+export type PantrySupportData = {
+  household_external_id: string;
+  household_name: string;
+  effective_role: string;
+  can_administer: boolean;
+  counts: PantryOverview["counts"];
+  location_groups: PantryLocationGroupSummary[];
+  locations: PantryLocationSummary[];
+  recent_events: PantryAuditEventSummary[];
+};
+
+export type PantryLocationOptions = {
+  household_external_id: string;
+  can_administer: boolean;
+  locations: PantryLocationSummary[];
+};
+
+export type PantryProductOptionSummary = {
+  external_id: string;
+  name: string;
+  default_unit: string;
+  aliases: string[];
+  barcodes: string[];
+  intelligence_ingredient_families: string[];
+  intelligence_food_category: string | null;
+};
+
+export type PantryProductOptions = {
+  household_external_id: string;
+  products: PantryProductOptionSummary[];
+};
+
 export type PantryProductMatchSummary = {
   external_id: string;
   name: string;

@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type {
-  PantryCatalogProductSummary,
+  PantryProductOptionSummary,
+  PantryProductOptions,
   ProductIntelligenceRunResponse,
   ProductIntelligenceStatusResponse
 } from "../lib/api-types";
@@ -15,7 +16,6 @@ import { ModalShell } from "./modal-shell";
 
 type ProductIntelligenceRunDialogProps = {
   householdExternalId: string;
-  catalogProducts: PantryCatalogProductSummary[];
   initialMode?: RunMode;
   initialProductExternalId?: string | null;
   onClose: () => void;
@@ -76,12 +76,12 @@ function formatApproxTokens(value: number) {
 
 export function ProductIntelligenceRunDialog({
   householdExternalId,
-  catalogProducts,
   initialMode = "unclassified",
   initialProductExternalId = null,
   onClose
 }: ProductIntelligenceRunDialogProps) {
   const [status, setStatus] = useState<ProductIntelligenceStatusResponse | null>(null);
+  const [products, setProducts] = useState<PantryProductOptionSummary[]>([]);
   const [currentRun, setCurrentRun] = useState<ProductIntelligenceRunResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<RunMode>(initialMode);
@@ -95,17 +95,17 @@ export function ProductIntelligenceRunDialog({
   const filteredProducts = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     if (!normalizedQuery) {
-      return catalogProducts;
+      return products;
     }
-    return catalogProducts.filter((product) =>
+    return products.filter((product) =>
       [
         product.name,
         ...product.aliases,
         ...product.barcodes,
-        ...(product.intelligence?.ingredient_families ?? [])
+        ...product.intelligence_ingredient_families
       ].some((value) => value.toLowerCase().includes(normalizedQuery))
     );
-  }, [catalogProducts, query]);
+  }, [products, query]);
 
   const progressPercent = useMemo(() => {
     if (!currentRun || currentRun.total_candidates <= 0) {
@@ -138,13 +138,19 @@ export function ProductIntelligenceRunDialog({
       setIsLoadingStatus(true);
       setError(null);
       try {
-        const payload = await getFromApi<ProductIntelligenceStatusResponse>(
-          `/api/households/${householdExternalId}/product-intelligence/status`
-        );
+        const [payload, productOptions] = await Promise.all([
+          getFromApi<ProductIntelligenceStatusResponse>(
+            `/api/households/${householdExternalId}/product-intelligence/status`
+          ),
+          getFromApi<PantryProductOptions>(
+            `/api/households/${householdExternalId}/pantry/product-options`
+          )
+        ]);
         if (isCancelled) {
           return;
         }
         setStatus(payload);
+        setProducts(productOptions.products);
         setCurrentRun((current) => {
           if (!payload.latest_run) {
             return current && ACTIVE_RUN_STATUSES.has(current.status) ? current : null;
@@ -336,7 +342,7 @@ export function ProductIntelligenceRunDialog({
                     {filteredProducts.map((product) => (
                       <option key={product.external_id} value={product.external_id}>
                         {product.name}
-                        {product.intelligence?.food_category ? ` · ${product.intelligence.food_category}` : ""}
+                        {product.intelligence_food_category ? ` · ${product.intelligence_food_category}` : ""}
                       </option>
                     ))}
                   </select>

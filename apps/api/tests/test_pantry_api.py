@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 from decimal import Decimal
+from unittest.mock import ANY
 
 import httpx
 import pytest
@@ -1861,6 +1862,215 @@ def test_pantry_overview_supports_product_pagination_metadata(client, db_session
     assert payload["page_count"] == 2
     assert payload["matched_product_count"] == 12
     assert len(payload["products"]) == 2
+
+
+def test_pantry_support_data_returns_only_household_controls_and_activity(client, db_session):
+    _, household = create_household_with_role(
+        db_session,
+        email="support-data@example.com",
+        household_name="Support Data Household",
+        role_code=HOUSEHOLD_ADMIN_ROLE,
+    )
+    login(client, email="support-data@example.com")
+
+    room = create_location_group(client, household.external_id, "Kitchen")
+    create_location(client, household.external_id, room["external_id"], "Shelf")
+    product = create_product(
+        client,
+        household.external_id,
+        name="Support Beans",
+        default_unit="tin",
+        aliases=[],
+        barcodes=[],
+    )
+
+    response = client.get(f"/api/households/{household.external_id}/pantry/support-data")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["household_external_id"] == household.external_id
+    assert payload["household_name"] == "Support Data Household"
+    assert payload["can_administer"] is True
+    assert payload["counts"]["location_group_count"] == 1
+    assert payload["counts"]["location_count"] == 1
+    assert payload["counts"]["product_count"] == 1
+    assert payload["counts"]["active_lot_count"] == 0
+    assert payload["location_groups"][0]["name"] == "Kitchen"
+    assert payload["locations"][0]["name"] == "Shelf"
+    assert payload["recent_events"][0]["target_external_id"] == product["external_id"]
+    assert "catalog_products" not in payload
+    assert "stock_lots" not in payload
+    assert "products" not in payload
+
+
+def test_pantry_items_endpoint_filters_and_paginates_without_compatibility_payloads(client, db_session):
+    _, household = create_household_with_role(
+        db_session,
+        email="items-endpoint@example.com",
+        household_name="Items Endpoint Household",
+        role_code=HOUSEHOLD_ADMIN_ROLE,
+    )
+    login(client, email="items-endpoint@example.com")
+
+    room = create_location_group(client, household.external_id, "Kitchen")
+    shelf = create_location(client, household.external_id, room["external_id"], "Shelf")
+    cupboard = create_location(client, household.external_id, room["external_id"], "Cupboard")
+    for index in range(11):
+        product = create_product(
+            client,
+            household.external_id,
+            name=f"Beans {index:02d}",
+            default_unit="tin",
+            aliases=[f"Pulse {index:02d}"],
+            barcodes=[],
+        )
+        add_stock_lot(
+            client,
+            household.external_id,
+            product_external_id=product["external_id"],
+            location_external_id=shelf["external_id"],
+            quantity="1.000",
+        )
+    other_product = create_product(
+        client,
+        household.external_id,
+        name="Rice",
+        default_unit="kg",
+        aliases=[],
+        barcodes=["5000000000001"],
+    )
+    add_stock_lot(
+        client,
+        household.external_id,
+        product_external_id=other_product["external_id"],
+        location_external_id=cupboard["external_id"],
+        quantity="2.000",
+    )
+
+    response = client.get(
+        f"/api/households/{household.external_id}/pantry/items",
+        params={"q": "beans", "location_external_id": shelf["external_id"], "page": 2, "page_size": 10},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["page"] == 2
+    assert payload["page_size"] == 10
+    assert payload["page_count"] == 2
+    assert payload["matched_product_count"] == 11
+    assert payload["filters"]["q"] == "beans"
+    assert payload["filters"]["location_external_id"] == shelf["external_id"]
+    assert [product["product_name"] for product in payload["products"]] == ["Beans 10"]
+    assert "catalog_products" not in payload
+    assert "stock_lots" not in payload
+    assert "locations" not in payload
+
+
+def test_pantry_product_options_are_small_and_household_scoped(client, db_session):
+    _, household = create_household_with_role(
+        db_session,
+        email="product-options@example.com",
+        household_name="Product Options Household",
+        role_code=HOUSEHOLD_ADMIN_ROLE,
+    )
+    other_user, other_household = create_household_with_role(
+        db_session,
+        email="other-product-options@example.com",
+        household_name="Other Product Options Household",
+        role_code=HOUSEHOLD_ADMIN_ROLE,
+    )
+    login(client, email="product-options@example.com")
+
+    create_product(
+        client,
+        household.external_id,
+        name="Green Lentils",
+        default_unit="g",
+        aliases=["Puy lentils"],
+        barcodes=["1234567890123"],
+        notes="Do not send notes in option payloads.",
+        manual_ingredient_tags=["lentil"],
+    )
+    create_product_record(
+        db_session,
+        household=other_household,
+        actor=other_user,
+        name="Other Household Lentils",
+        default_unit="g",
+        aliases=[],
+        barcodes=[],
+    )
+
+    response = client.get(f"/api/households/{household.external_id}/pantry/product-options")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["household_external_id"] == household.external_id
+    assert payload["products"] == [
+        {
+            "external_id": ANY,
+            "name": "Green Lentils",
+            "default_unit": "g",
+            "aliases": ["Puy lentils"],
+            "barcodes": ["1234567890123"],
+            "intelligence_ingredient_families": [],
+            "intelligence_food_category": None,
+        }
+    ]
+    assert "Other Household Lentils" not in {product["name"] for product in payload["products"]}
+    assert "notes" not in payload["products"][0]
+    assert "enrichment" not in payload["products"][0]
+
+
+def test_pantry_location_options_return_only_locations_and_capabilities(client, db_session):
+    user, household = create_household_with_role(
+        db_session,
+        email="location-options@example.com",
+        household_name="Location Options Household",
+        role_code=HOUSEHOLD_USER_ROLE,
+    )
+    login(client, email="location-options@example.com")
+
+    room = create_location_group_record(db_session, household=household, actor=user, name="Utility")
+    location = create_location_record(
+        db_session,
+        household=household,
+        actor=user,
+        location_group_external_id=room.external_id,
+        name="Freezer",
+    )
+    product = create_product_record(
+        db_session,
+        household=household,
+        actor=user,
+        name="Frozen peas",
+        default_unit="bag",
+        aliases=[],
+        barcodes=[],
+    )
+    add_stock_lot_record(
+        db_session,
+        household=household,
+        actor=user,
+        product_external_id=product.external_id,
+        location_external_id=location.external_id,
+        quantity=Decimal("1.000"),
+        note=None,
+        purchased_on=None,
+        expires_on=None,
+    )
+
+    response = client.get(f"/api/households/{household.external_id}/pantry/location-options")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["household_external_id"] == household.external_id
+    assert payload["can_administer"] is False
+    assert payload["locations"][0]["name"] == "Freezer"
+    assert "counts" not in payload
+    assert "recent_events" not in payload
+    assert "products" not in payload
+    assert "stock_lots" not in payload
 
 
 def test_pantry_overview_applies_location_filter_before_paginating_product_summaries(client, db_session, monkeypatch):

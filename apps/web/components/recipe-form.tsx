@@ -3,14 +3,14 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import type {
-  PantryCatalogProductSummary,
+  PantryProductOptionSummary,
   RecipeDetailResponse
 } from "../lib/api-types";
 import { postToApi, putToApi } from "../lib/client-api";
 
 type RecipeFormProps = {
   householdExternalId: string;
-  products: PantryCatalogProductSummary[];
+  products: PantryProductOptionSummary[];
   mode: "create" | "edit";
   initialValue?: {
     recipeExternalId: string;

@@ -7,15 +7,15 @@ import type {
   ImportDetail,
   ImportDetailResponse,
   ImportLineSummary,
-  PantryCatalogProductSummary,
-  PantryLocationSummary
+  PantryLocationSummary,
+  PantryProductOptionSummary,
 } from "../lib/api-types";
 import { postToApi, putToApi } from "../lib/client-api";
 
 type ImportReviewPanelProps = {
   householdExternalId: string;
   importJob: ImportDetail;
-  products: PantryCatalogProductSummary[];
+  products: PantryProductOptionSummary[];
   locations: PantryLocationSummary[];
 };
 
@@ -23,7 +23,7 @@ type ImportLineEditorProps = {
   householdExternalId: string;
   importExternalId: string;
   line: ImportLineSummary;
-  products: PantryCatalogProductSummary[];
+  products: PantryProductOptionSummary[];
   locked: boolean;
 };
 

@@ -11,7 +11,11 @@ import type {
   ImportListResponse,
   LocationAccessResponse,
   NearExpiryResponse,
+  PantryItemList,
+  PantryLocationOptions,
   PantryOverview,
+  PantryProductOptions,
+  PantrySupportData,
   PasswordResetAvailabilityResponse,
   PasswordResetTokenStatusResponse,
   PublicBaseURLSummary,
@@ -148,6 +152,46 @@ export async function getPantryOverview(
 ): Promise<PantryOverview> {
   return apiGet<PantryOverview>(
     withQuery(`/api/households/${householdExternalId}/pantry/overview`, params)
+  );
+}
+
+export async function getPantrySupportData(
+  householdExternalId: string
+): Promise<PantrySupportData> {
+  return apiGet<PantrySupportData>(
+    `/api/households/${householdExternalId}/pantry/support-data`
+  );
+}
+
+export async function getPantryItems(
+  householdExternalId: string,
+  params: {
+    q?: string | null;
+    location_group_external_id?: string | null;
+    location_external_id?: string | null;
+    near_expiry_only?: boolean | null;
+    page?: number | null;
+    page_size?: number | null;
+  } = {}
+): Promise<PantryItemList> {
+  return apiGet<PantryItemList>(
+    withQuery(`/api/households/${householdExternalId}/pantry/items`, params)
+  );
+}
+
+export async function getPantryProductOptions(
+  householdExternalId: string
+): Promise<PantryProductOptions> {
+  return apiGet<PantryProductOptions>(
+    `/api/households/${householdExternalId}/pantry/product-options`
+  );
+}
+
+export async function getPantryLocationOptions(
+  householdExternalId: string
+): Promise<PantryLocationOptions> {
+  return apiGet<PantryLocationOptions>(
+    `/api/households/${householdExternalId}/pantry/location-options`
   );
 }
 

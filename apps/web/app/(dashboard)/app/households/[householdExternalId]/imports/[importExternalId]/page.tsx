@@ -3,7 +3,8 @@ import { ImportReviewPanel } from "../../../../../../../components/import-review
 import { StatusCard } from "../../../../../../../components/status-card";
 import {
   getImportDetail,
-  getPantryOverview,
+  getPantryLocationOptions,
+  getPantryProductOptions,
   requireHouseholdAccess
 } from "../../../../../../../lib/server-auth";
 
@@ -17,8 +18,11 @@ type ImportDetailPageProps = {
 export default async function ImportDetailPage({ params }: ImportDetailPageProps) {
   const { householdExternalId, importExternalId } = await params;
   await requireHouseholdAccess(householdExternalId);
-  const response = await getImportDetail(householdExternalId, importExternalId);
-  const overview = await getPantryOverview(householdExternalId);
+  const [response, pantryProducts, pantryLocations] = await Promise.all([
+    getImportDetail(householdExternalId, importExternalId),
+    getPantryProductOptions(householdExternalId),
+    getPantryLocationOptions(householdExternalId),
+  ]);
   const importJob = response.import_job;
 
   return (
@@ -131,8 +135,8 @@ export default async function ImportDetailPage({ params }: ImportDetailPageProps
       <ImportReviewPanel
         householdExternalId={householdExternalId}
         importJob={importJob}
-        products={overview.catalog_products}
-        locations={overview.locations}
+        products={pantryProducts.products}
+        locations={pantryLocations.locations}
       />
     </div>
   );
