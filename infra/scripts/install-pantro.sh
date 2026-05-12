@@ -197,7 +197,7 @@ configure_env_file() {
   env_set "${env_file}" "SETTINGS_ENCRYPTION_KEY" "${settings_key}"
   env_set "${env_file}" "SESSION_SECRET_KEY" "${session_key}"
   env_set "${env_file}" "INTERNAL_API_PROXY_TOKEN" "${proxy_token}"
-  env_set "${env_file}" "SESSION_HTTPS_ONLY" "$([[ "${scheme}" == "https" ]] && printf 'true' || printf 'false')"
+  env_set "${env_file}" "SESSION_HTTPS_ONLY" "true"
   env_set "${env_file}" "RELEASE_CHECK_REPOSITORY" "${REPOSITORY}"
 }
 
@@ -357,14 +357,14 @@ main() {
   host="$(prompt_with_default "Public host or IP" "${detected_ip}")"
   web_port="$(prompt_with_default "Web port" "3000")"
   api_port="$(prompt_with_default "API port" "8000")"
-  use_https="$(prompt_with_default "Use HTTPS at the public URL? (y/n)" "n")"
+  use_https="$(prompt_with_default "Use HTTPS at the public URL? (y/n)" "y")"
 
   case "${use_https}" in
     y|Y|yes|YES)
       scheme="https"
       ;;
     *)
-      scheme="http"
+      die "Production installs require HTTPS because Pantro uses secure-only session cookies. Configure HTTPS at your reverse proxy before continuing."
       ;;
   esac
 

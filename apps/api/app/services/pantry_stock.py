@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.location import Location
@@ -46,8 +46,9 @@ def _load_stock_lot(
     *,
     household: Household,
     external_id: str,
+    for_update: bool = False,
 ) -> StockLot | None:
-    return db.scalar(
+    statement = (
         select(StockLot)
         .where(StockLot.household_id == household.id)
         .where(StockLot.external_id == external_id)
@@ -58,7 +59,11 @@ def _load_stock_lot(
             selectinload(StockLot.product).selectinload(Product.intelligence_records),
             selectinload(StockLot.location).selectinload(Location.location_group),
         )
+        .execution_options(populate_existing=True)
     )
+    if for_update:
+        statement = statement.with_for_update()
+    return db.scalar(statement)
 
 
 def _append_lot_note(existing_note: str | None, next_note: str | None) -> str | None:
@@ -89,6 +94,7 @@ def _find_mergeable_stock_lot(
     unit: str,
     expires_on: date | None,
     exclude_lot_id=None,
+    for_update: bool = False,
 ) -> StockLot | None:
     statement = (
         select(StockLot)
@@ -106,11 +112,37 @@ def _find_mergeable_stock_lot(
             selectinload(StockLot.product).selectinload(Product.intelligence_records),
             selectinload(StockLot.location).selectinload(Location.location_group),
         )
+        .execution_options(populate_existing=True)
     )
     if exclude_lot_id is not None:
         statement = statement.where(StockLot.id != exclude_lot_id)
     statement = statement.order_by(StockLot.created_at.asc())
+    if for_update:
+        statement = statement.with_for_update()
     return db.scalar(statement)
+
+
+def _lock_stock_lot_merge_key(
+    db: Session,
+    *,
+    household_id,
+    product_id,
+    location_id,
+    unit: str,
+    expires_on: date | None,
+) -> None:
+    if db.bind is None or db.bind.dialect.name != "postgresql":
+        return
+    lock_key = "|".join(
+        [
+            str(household_id),
+            str(product_id),
+            str(location_id),
+            unit,
+            expires_on.isoformat() if expires_on is not None else "",
+        ]
+    )
+    db.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:lock_key, 0))"), {"lock_key": lock_key})
 
 
 def _merge_into_stock_lot(
@@ -163,6 +195,14 @@ def add_stock_lot(
     if purchased_on and expires_on and expires_on < purchased_on:
         raise ValueError("Expiry date cannot be earlier than purchase date.")
 
+    _lock_stock_lot_merge_key(
+        db,
+        household_id=household.id,
+        product_id=product.id,
+        location_id=location.id,
+        unit=normalized_unit,
+        expires_on=expires_on,
+    )
     merge_target = _find_mergeable_stock_lot(
         db,
         household=household,
@@ -170,6 +210,7 @@ def add_stock_lot(
         location_id=location.id,
         unit=normalized_unit,
         expires_on=expires_on,
+        for_update=True,
     )
     if merge_target is not None:
         _merge_into_stock_lot(
@@ -657,6 +698,7 @@ def _try_apply_confirmed_enrichment(
 ) -> str | None:
     if confirmed_enrichment is None:
         return None
+    savepoint = db.begin_nested()
     try:
         apply_confirmed_product_enrichment(
             db,
@@ -665,9 +707,14 @@ def _try_apply_confirmed_enrichment(
             product=product,
             confirmed_enrichment=confirmed_enrichment,
         )
+        savepoint.commit()
         return "Open Food Facts details linked."
     except ProductEnrichmentError as exc:
+        savepoint.rollback()
         return f"Open Food Facts details were not linked: {exc}"
+    except Exception:
+        savepoint.rollback()
+        return "Open Food Facts details were not linked."
 
 
 def _build_metadata_message(base_message: str, metadata_message: str | None) -> str:
@@ -691,7 +738,7 @@ def remove_stock_from_lot(
     quantity: Decimal,
     commit: bool = True,
 ) -> StockLot:
-    lot = get_stock_lot_by_external_id(db, household=household, external_id=lot_external_id)
+    lot = _load_stock_lot(db, household=household, external_id=lot_external_id, for_update=True)
     if lot is None or lot.depleted_at is not None:
         raise ValueError("Stock lot not found.")
 
@@ -739,7 +786,7 @@ def update_stock_lot(
     purchased_on: date | None,
     expires_on: date | None,
 ) -> StockLot:
-    lot = get_stock_lot_by_external_id(db, household=household, external_id=lot_external_id)
+    lot = _load_stock_lot(db, household=household, external_id=lot_external_id, for_update=True)
     if lot is None or lot.depleted_at is not None:
         raise ValueError("Stock lot not found.")
 
@@ -752,6 +799,14 @@ def update_stock_lot(
     if purchased_on and expires_on and expires_on < purchased_on:
         raise ValueError("Expiry date cannot be earlier than purchase date.")
 
+    _lock_stock_lot_merge_key(
+        db,
+        household_id=household.id,
+        product_id=lot.product_id,
+        location_id=location.id,
+        unit=lot.unit,
+        expires_on=expires_on,
+    )
     merge_target = _find_mergeable_stock_lot(
         db,
         household=household,
@@ -760,6 +815,7 @@ def update_stock_lot(
         unit=lot.unit,
         expires_on=expires_on,
         exclude_lot_id=lot.id,
+        for_update=True,
     )
     if merge_target is not None:
         _merge_into_stock_lot(
@@ -828,7 +884,7 @@ def move_stock_lot(
     quantity: Decimal,
     destination_location_external_id: str,
 ) -> tuple[StockLot, StockLot | None]:
-    lot = get_stock_lot_by_external_id(db, household=household, external_id=lot_external_id)
+    lot = _load_stock_lot(db, household=household, external_id=lot_external_id, for_update=True)
     if lot is None or lot.depleted_at is not None:
         raise ValueError("Stock lot not found.")
 
@@ -848,6 +904,14 @@ def move_stock_lot(
 
     created_lot: StockLot | None = None
     source_location = lot.location
+    _lock_stock_lot_merge_key(
+        db,
+        household_id=household.id,
+        product_id=lot.product_id,
+        location_id=destination.id,
+        unit=lot.unit,
+        expires_on=lot.expires_on,
+    )
     merge_target = _find_mergeable_stock_lot(
         db,
         household=household,
@@ -856,6 +920,7 @@ def move_stock_lot(
         unit=lot.unit,
         expires_on=lot.expires_on,
         exclude_lot_id=lot.id,
+        for_update=True,
     )
 
     if merge_target is not None:

@@ -5,6 +5,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 import re
+import threading
 from time import monotonic
 from typing import Any
 
@@ -323,6 +324,78 @@ class _CacheEntry:
     value: Any
 
 
+@dataclass
+class _InFlightRequest:
+    event: threading.Event
+    value: Any = None
+    error: BaseException | None = None
+
+
+class _OpenFoodFactsResponseCache:
+    def __init__(self, *, ttl_seconds: float, max_cache_entries: int):
+        self._ttl_seconds = ttl_seconds
+        self._max_cache_entries = max_cache_entries
+        self._entries: OrderedDict[str, _CacheEntry] = OrderedDict()
+        self._in_flight: dict[str, _InFlightRequest] = {}
+        self._lock = threading.Lock()
+
+    def get_or_reserve(self, key: str) -> tuple[str, Any | _InFlightRequest | None]:
+        with self._lock:
+            cached = self._get_cached_locked(key)
+            if cached is not None:
+                return "hit", cached
+
+            in_flight = self._in_flight.get(key)
+            if in_flight is not None:
+                return "wait", in_flight
+
+            in_flight = _InFlightRequest(event=threading.Event())
+            self._in_flight[key] = in_flight
+            return "leader", in_flight
+
+    def complete(
+        self,
+        key: str,
+        request: _InFlightRequest,
+        *,
+        value: Any = None,
+        error: BaseException | None = None,
+    ) -> None:
+        with self._lock:
+            if error is None:
+                self._set_cached_locked(key, value)
+                request.value = value
+            else:
+                request.error = error
+            self._in_flight.pop(key, None)
+            request.event.set()
+
+    def wait_for(self, request: _InFlightRequest) -> Any:
+        request.event.wait()
+        if request.error is not None:
+            raise request.error
+        return request.value
+
+    def _get_cached_locked(self, key: str) -> Any | None:
+        entry = self._entries.get(key)
+        if entry is None:
+            return None
+        if entry.expires_at <= monotonic():
+            self._entries.pop(key, None)
+            return None
+        self._entries.move_to_end(key)
+        return entry.value
+
+    def _set_cached_locked(self, key: str, value: Any) -> None:
+        self._entries[key] = _CacheEntry(expires_at=monotonic() + self._ttl_seconds, value=value)
+        self._entries.move_to_end(key)
+        while len(self._entries) > self._max_cache_entries:
+            self._entries.popitem(last=False)
+
+
+_SHARED_RESPONSE_CACHE = _OpenFoodFactsResponseCache(ttl_seconds=600.0, max_cache_entries=512)
+
+
 class OpenFoodFactsClient:
     def __init__(
         self,
@@ -334,15 +407,23 @@ class OpenFoodFactsClient:
         ttl_seconds: float = 600.0,
         max_cache_entries: int = 128,
         client_factory: Callable[[], httpx.Client] | None = None,
+        shared_cache: bool | None = None,
     ):
         self._timeout_seconds = timeout_seconds
         self._base_url = base_url.rstrip("/")
         self._user_agent = user_agent
         self._transport = transport
-        self._ttl_seconds = ttl_seconds
-        self._max_cache_entries = max_cache_entries
-        self._cache: OrderedDict[str, _CacheEntry] = OrderedDict()
         self._client_factory = client_factory
+        should_share_cache = (
+            shared_cache
+            if shared_cache is not None
+            else transport is None and client_factory is None
+        )
+        self._cache = (
+            _SHARED_RESPONSE_CACHE
+            if should_share_cache
+            else _OpenFoodFactsResponseCache(ttl_seconds=ttl_seconds, max_cache_entries=max_cache_entries)
+        )
 
     def fetch_product_by_id(self, source_product_id: str) -> ProductEnrichmentCandidate | None:
         response = self._request_json(
@@ -410,9 +491,13 @@ class OpenFoodFactsClient:
         return matches[:limit]
 
     def _request_json(self, path: str, *, params: dict[str, str], cache_key: str) -> dict[str, Any]:
-        cached = self._get_cached(cache_key)
-        if cached is not None:
-            return cached
+        effective_cache_key = f"{self._base_url}:{cache_key}"
+        cache_status, cached_or_request = self._cache.get_or_reserve(effective_cache_key)
+        if cache_status == "hit":
+            return cached_or_request
+        if cache_status == "wait":
+            return self._cache.wait_for(cached_or_request)
+        in_flight_request = cached_or_request
 
         if self._client_factory is not None:
             client = self._client_factory()
@@ -433,39 +518,39 @@ class OpenFoodFactsClient:
                 response = client.get(path, params=params)
                 response.raise_for_status()
         except httpx.HTTPStatusError as exc:
-            raise OpenFoodFactsUnavailableError(
+            error = OpenFoodFactsUnavailableError(
                 f"Open Food Facts request failed with status {exc.response.status_code}."
-            ) from exc
+            )
+            self._cache.complete(effective_cache_key, in_flight_request, error=error)
+            raise error from exc
         except httpx.HTTPError as exc:
-            raise OpenFoodFactsUnavailableError("Open Food Facts request failed.") from exc
+            error = OpenFoodFactsUnavailableError("Open Food Facts request failed.")
+            self._cache.complete(effective_cache_key, in_flight_request, error=error)
+            raise error from exc
+        except Exception as exc:
+            self._cache.complete(effective_cache_key, in_flight_request, error=exc)
+            raise
 
         content_type = response.headers.get("content-type", "")
         if "json" not in content_type.lower():
-            raise OpenFoodFactsUnavailableError("Open Food Facts returned a non-JSON response.")
+            error = OpenFoodFactsUnavailableError("Open Food Facts returned a non-JSON response.")
+            self._cache.complete(effective_cache_key, in_flight_request, error=error)
+            raise error
 
         try:
             payload = response.json()
         except ValueError as exc:
-            raise OpenFoodFactsUnavailableError("Open Food Facts returned invalid JSON.") from exc
+            error = OpenFoodFactsUnavailableError("Open Food Facts returned invalid JSON.")
+            self._cache.complete(effective_cache_key, in_flight_request, error=error)
+            raise error from exc
+        except Exception as exc:
+            self._cache.complete(effective_cache_key, in_flight_request, error=exc)
+            raise
 
         if not isinstance(payload, dict):
-            raise OpenFoodFactsUnavailableError("Open Food Facts returned an unexpected payload.")
+            error = OpenFoodFactsUnavailableError("Open Food Facts returned an unexpected payload.")
+            self._cache.complete(effective_cache_key, in_flight_request, error=error)
+            raise error
 
-        self._set_cached(cache_key, payload)
+        self._cache.complete(effective_cache_key, in_flight_request, value=payload)
         return payload
-
-    def _get_cached(self, key: str) -> Any | None:
-        entry = self._cache.get(key)
-        if entry is None:
-            return None
-        if entry.expires_at <= monotonic():
-            self._cache.pop(key, None)
-            return None
-        self._cache.move_to_end(key)
-        return entry.value
-
-    def _set_cached(self, key: str, value: Any) -> None:
-        self._cache[key] = _CacheEntry(expires_at=monotonic() + self._ttl_seconds, value=value)
-        self._cache.move_to_end(key)
-        while len(self._cache) > self._max_cache_entries:
-            self._cache.popitem(last=False)

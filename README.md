@@ -33,9 +33,9 @@ curl -fsSL https://raw.githubusercontent.com/RoBro92/pantry/main/infra/scripts/i
 
 The installer prepares Docker, downloads the release assets, writes `.env`, generates required secrets, runs migrations, starts the stack, and runs a health check.
 
-Open `http://<your-server>:3000/` when the installer finishes.
+Open the configured public URL when the installer finishes.
 
-For production phone use, put Pantro behind HTTPS. Browser camera scanning and the best installable PWA experience depend on a secure browser context, except for localhost during development.
+For production use, put Pantro behind HTTPS. Production session cookies are secure-only, and browser camera scanning plus the best installable PWA experience depend on a secure browser context, except for localhost during development.
 
 ## Manual Installation
 
@@ -98,12 +98,14 @@ Contributor workflow details live in [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md
 
 - [LICENSE](LICENSE)
 - [SUPPORT.md](SUPPORT.md)
+- [CHANGELOG.md](CHANGELOG.md)
 - [docs/FILE_MAP.md](docs/FILE_MAP.md)
 - [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - [docs/RELEASE_RUNBOOK.md](docs/RELEASE_RUNBOOK.md)
 - [docs/SECURITY.md](docs/SECURITY.md)
 - [docs/VERSIONING.md](docs/VERSIONING.md)
+- [docs/sprints/README.md](docs/sprints/README.md)
 - [docs/MIGRATION_TO_PANTRO.md](docs/MIGRATION_TO_PANTRO.md)
 - [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md)
 - [docs/TEST_STRATEGY.md](docs/TEST_STRATEGY.md)

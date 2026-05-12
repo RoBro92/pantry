@@ -6,6 +6,7 @@ Pantro keeps release visibility explicit and operator-controlled.
 
 - The repository `VERSION` file is the source of truth for the application version
 - The running stack surfaces that version in diagnostics and update related UI
+- `CHANGELOG.md` should carry the matching released section for the version in `VERSION`, with any new work kept under `Unreleased` until the next tag ships
 
 ## Release Source Of Truth
 

@@ -54,6 +54,7 @@ from app.services.product_intelligence import (
     estimate_product_intelligence_tokens,
 )
 from app.services.product_intelligence_profiles import get_default_supported_model, resolve_product_intelligence_profile
+from app.services import product_intelligence_runs as pi_runs
 from app.services.product_intelligence_runs import process_next_product_intelligence_run
 from app.services.product_intelligence_runs import PreparedClassificationCandidate, _build_batches
 
@@ -1390,6 +1391,40 @@ def test_product_intelligence_worker_batches_requests_and_recovers_from_429s(cli
     assert len(sleep_calls) >= 2
 
 
+def test_product_intelligence_run_lease_heartbeat_prevents_reclaim(db_session):
+    user, household = create_member_household(
+        db_session,
+        email="classification-lease@example.com",
+        household_name="Classification Lease Household",
+    )
+    stale_timestamp = pi_runs.utc_now() - (pi_runs.RUN_RESUME_TIMEOUT * 2)
+    run = ProductIntelligenceRun(
+        household_id=household.id,
+        requested_by_user_id=user.id,
+        provider_type="openai",
+        source_model="gpt-5.4-mini",
+        mode="all",
+        status="running",
+        target_product_external_ids=[],
+        target_product_count=0,
+        processing_started_at=stale_timestamp,
+        last_progress_at=stale_timestamp,
+        items_payload=[],
+        events_payload=[],
+        diagnostics_payload={},
+    )
+    db_session.add(run)
+    db_session.commit()
+
+    pi_runs._heartbeat_product_intelligence_run_lease(db_session, run)
+    claimed = pi_runs._claim_next_product_intelligence_run(db_session)
+
+    assert claimed is None
+    db_session.refresh(run)
+    assert run.last_progress_at is not None
+    assert run.last_progress_at.replace(tzinfo=None) > stale_timestamp.replace(tzinfo=None)
+
+
 def test_product_intelligence_run_reports_partial_success_when_batch_output_omits_a_product(
     client, db_session, monkeypatch
 ):
@@ -1826,6 +1861,118 @@ def test_pantry_overview_supports_product_pagination_metadata(client, db_session
     assert payload["page_count"] == 2
     assert payload["matched_product_count"] == 12
     assert len(payload["products"]) == 2
+
+
+def test_pantry_overview_applies_location_filter_before_paginating_product_summaries(client, db_session, monkeypatch):
+    _, household = create_household_with_role(
+        db_session,
+        email="filtered-pagination@example.com",
+        household_name="Filtered Pagination Household",
+        role_code=HOUSEHOLD_ADMIN_ROLE,
+    )
+    login(client, email="filtered-pagination@example.com")
+
+    room = create_location_group(client, household.external_id, "Kitchen")
+    shelf = create_location(client, household.external_id, room["external_id"], "Shelf")
+    cupboard = create_location(client, household.external_id, room["external_id"], "Cupboard")
+    for index in range(13):
+        product = create_product(
+            client,
+            household.external_id,
+            name=f"Filtered Product {index:02d}",
+            default_unit="count",
+            aliases=[],
+            barcodes=[],
+        )
+        add_stock_lot(
+            client,
+            household.external_id,
+            product_external_id=product["external_id"],
+            location_external_id=shelf["external_id"],
+            quantity="1.000",
+        )
+    other_product = create_product(
+        client,
+        household.external_id,
+        name="Other Product",
+        default_unit="count",
+        aliases=[],
+        barcodes=[],
+    )
+    add_stock_lot(
+        client,
+        household.external_id,
+        product_external_id=other_product["external_id"],
+        location_external_id=cupboard["external_id"],
+        quantity="1.000",
+    )
+
+    from app.services import pantry_queries
+
+    original_build_product_summary = pantry_queries._build_product_summary
+    summary_build_count = 0
+
+    def counting_build_product_summary(*args, **kwargs):
+        nonlocal summary_build_count
+        summary_build_count += 1
+        return original_build_product_summary(*args, **kwargs)
+
+    monkeypatch.setattr(pantry_queries, "_build_product_summary", counting_build_product_summary)
+
+    response = client.get(
+        f"/api/households/{household.external_id}/pantry/overview",
+        params={"location_external_id": shelf["external_id"], "page": 2, "page_size": 10},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["page"] == 2
+    assert payload["page_count"] == 2
+    assert payload["matched_product_count"] == 13
+    assert [product["product_name"] for product in payload["products"]] == [
+        "Filtered Product 10",
+        "Filtered Product 11",
+        "Filtered Product 12",
+    ]
+    assert {lot["location_name"] for lot in payload["stock_lots"]} == {"Shelf"}
+    assert summary_build_count == 3
+
+
+def test_pantry_overview_resolves_public_base_url_once_for_location_links(client, db_session, monkeypatch):
+    _, household = create_household_with_role(
+        db_session,
+        email="location-links@example.com",
+        household_name="Location Links Household",
+        role_code=HOUSEHOLD_ADMIN_ROLE,
+    )
+    login(client, email="location-links@example.com")
+
+    room = create_location_group(client, household.external_id, "Kitchen")
+    for name in ["Shelf", "Cupboard", "Drawer"]:
+        create_location(client, household.external_id, room["external_id"], name)
+
+    from app.services.instance_settings import PublicBaseURLState
+    from app.services import location_links
+
+    resolve_count = 0
+
+    def counting_resolve_public_base_url(db):
+        nonlocal resolve_count
+        resolve_count += 1
+        return PublicBaseURLState(
+            stored_value=None,
+            effective_value="https://pantry.example.test",
+            effective_source="web_app_url",
+        )
+
+    monkeypatch.setattr(location_links, "resolve_public_base_url", counting_resolve_public_base_url)
+
+    response = client.get(f"/api/households/{household.external_id}/pantry/overview")
+    assert response.status_code == 200
+    payload = response.json()
+    assert [location["browser_url"] for location in payload["locations"]] == [
+        f"https://pantry.example.test/locations/{location['location_route']}" for location in payload["locations"]
+    ]
+    assert resolve_count == 1
 
 
 def test_product_creation_rejects_alias_name_collision(client, db_session):
@@ -2775,6 +2922,50 @@ def test_product_enrichment_preview_and_confirmed_persistence(client, db_session
     assert overview_payload["products"][0]["enrichment"]["nutrition_summary_text"] == (
         "Energy 100 kcal per 100 g · Salt 1.2 g per 100 g"
     )
+
+
+def test_pantry_entry_creation_does_not_depend_on_advisory_enrichment(client, db_session, monkeypatch):
+    _, household = create_household_with_role(
+        db_session,
+        email="enrichment-advisory@example.com",
+        household_name="Enrichment Advisory Household",
+        role_code=HOUSEHOLD_ADMIN_ROLE,
+    )
+    login(client, email="enrichment-advisory@example.com")
+
+    room = create_location_group(client, household.external_id, "Kitchen")
+    shelf = create_location(client, household.external_id, room["external_id"], "Shelf")
+
+    class BrokenOpenFoodFactsClient:
+        def fetch_product_by_id(self, source_product_id: str):
+            raise RuntimeError(f"unexpected advisory lookup failure for {source_product_id}")
+
+    monkeypatch.setattr(
+        "app.services.product_enrichment.get_default_open_food_facts_client",
+        lambda: BrokenOpenFoodFactsClient(),
+    )
+
+    payload = create_pantry_entry(
+        client,
+        household.external_id,
+        name="Advisory beans",
+        quantity="2.000",
+        unit="can",
+        location_external_id=shelf["external_id"],
+        barcode="9900000000031",
+        confirmed_enrichment={
+            "source_name": "open_food_facts",
+            "source_product_id": "9900000000031",
+            "match_status": "barcode_exact",
+        },
+    )
+
+    assert payload["status"] == "created"
+    assert payload["product"]["name"] == "Advisory beans"
+    assert payload["product"]["enrichment"] is None
+    assert db_session.scalars(select(Product)).one().name == "Advisory beans"
+    assert db_session.scalars(select(StockLot)).one().product.name == "Advisory beans"
+    assert db_session.scalars(select(ProductEnrichment)).all() == []
 
 
 def test_existing_product_can_link_open_food_facts_enrichment_after_creation(client, db_session, monkeypatch):

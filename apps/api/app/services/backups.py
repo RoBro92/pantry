@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import Date, DateTime, Numeric, Uuid, delete, func, select, text
+from sqlalchemy import Date, DateTime, Numeric, Uuid, delete, func, select, text, update
 from sqlalchemy.orm import Session
 
 from app.core.security import normalize_email
@@ -19,6 +19,7 @@ from app.core.config import AppSettings, get_settings
 from app.models.base import Base
 from app.models.household import Household
 from app.models.membership import Membership
+from app.models.password_reset_token import PasswordResetToken
 from app.models.role import Role
 from app.models.user import User
 from app.models.identifiers import generate_external_id
@@ -657,24 +658,33 @@ _SCHEMA_COMPATIBILITY: dict[tuple[str | None, str | None], RestoreCompatibility]
 # Revisions listed here keep the same backup table layout and restore compatibility
 # behaviour as the mapped baseline revision.
 _SCHEMA_COMPATIBILITY_ALIASES: dict[str, str] = {
+    "20260512_000025": "20260412_000019",
+    "20260512_000024": "20260412_000019",
+    "20260512_000023": "20260412_000019",
     "20260505_000022": "20260412_000019",
     "20260419_000021": "20260412_000019",
     "20260416_000020": "20260412_000019",
     "20260409_000017": "20260409_000016",
 }
 
+_CANONICAL_SCHEMA_ADDITIVE_TABLES = frozenset(
+    {"canonical_items", "canonical_aliases", "product_canonical_links"}
+)
+_CANONICAL_SCHEMA_ADDITIVE_WARNINGS = (
+    "This backup predates canonical knowledge-base groundwork. Canonical items, aliases, and product links will restore as empty.",
+)
+
 _ADDITIVE_SCHEMA_TABLES: dict[str, tuple[frozenset[str], tuple[str, ...]]] = {
+    "20260512_000025": (_CANONICAL_SCHEMA_ADDITIVE_TABLES, _CANONICAL_SCHEMA_ADDITIVE_WARNINGS),
+    "20260512_000024": (_CANONICAL_SCHEMA_ADDITIVE_TABLES, _CANONICAL_SCHEMA_ADDITIVE_WARNINGS),
+    "20260512_000023": (_CANONICAL_SCHEMA_ADDITIVE_TABLES, _CANONICAL_SCHEMA_ADDITIVE_WARNINGS),
     "20260505_000022": (
-        frozenset({"canonical_items", "canonical_aliases", "product_canonical_links"}),
-        (
-            "This backup predates canonical knowledge-base groundwork. Canonical items, aliases, and product links will restore as empty.",
-        ),
+        _CANONICAL_SCHEMA_ADDITIVE_TABLES,
+        _CANONICAL_SCHEMA_ADDITIVE_WARNINGS,
     ),
     "20260419_000021": (
-        frozenset({"canonical_items", "canonical_aliases", "product_canonical_links"}),
-        (
-            "This backup predates canonical knowledge-base groundwork. Canonical items, aliases, and product links will restore as empty.",
-        ),
+        _CANONICAL_SCHEMA_ADDITIVE_TABLES,
+        _CANONICAL_SCHEMA_ADDITIVE_WARNINGS,
     ),
 }
 
@@ -1170,6 +1180,9 @@ def restore_instance_backup_bundle(
                     }
                 )
             db.execute(table.insert(), deserialized_rows)
+
+        db.execute(update(User).values(session_version=User.session_version + 1))
+        db.execute(delete(PasswordResetToken))
 
         actor = db.scalar(select(User).where(User.external_id == actor_external_id)) if actor_external_id else None
         record_audit_event(

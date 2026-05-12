@@ -208,6 +208,15 @@ main() {
   redis_data_dir="$(env_get_any "${env_file}" "$(default_data_root)/redis" "PANTRO_REDIS_DATA_DIR" "PANTRY_REDIS_DATA_DIR")"
   imports_data_dir="$(env_get_any "${env_file}" "$(default_data_root)/imports" "PANTRO_IMPORTS_DATA_DIR" "PANTRY_IMPORTS_DATA_DIR")"
   backups_data_dir="$(env_get_any "${env_file}" "$(default_data_root)/backups" "PANTRO_BACKUPS_DATA_DIR" "PANTRY_BACKUPS_DATA_DIR")"
+  browser_url="$(env_get "${env_file}" "PUBLIC_BROWSER_BASE_URL" "$(env_get "${env_file}" "WEB_APP_URL" "")")"
+  session_https_only="$(env_get "${env_file}" "SESSION_HTTPS_ONLY" "")"
+
+  if [[ "${browser_url}" != https://* ]]; then
+    die "Pantro production updates now require an HTTPS public URL because session cookies are secure-only. Set PUBLIC_BROWSER_BASE_URL or WEB_APP_URL to your HTTPS reverse-proxy URL before updating."
+  fi
+  if [[ "${session_https_only}" == "false" ]]; then
+    log_warn "Updating SESSION_HTTPS_ONLY from false to true; production Pantro requires secure-only session cookies."
+  fi
 
   log_step "Updating .env"
   env_set "${env_file}" "PANTRO_VERSION" "${target_version}"
@@ -223,6 +232,7 @@ main() {
   env_set "${env_file}" "PANTRY_IMPORTS_DATA_DIR" "${imports_data_dir}"
   env_set "${env_file}" "PANTRY_BACKUPS_DATA_DIR" "${backups_data_dir}"
   env_set "${env_file}" "BACKUP_STORAGE_ROOT" "$(env_get "${env_file}" "BACKUP_STORAGE_ROOT" "/var/lib/pantro/backups")"
+  env_set "${env_file}" "SESSION_HTTPS_ONLY" "true"
   env_set "${env_file}" "RELEASE_CHECK_REPOSITORY" "$(env_get "${env_file}" "RELEASE_CHECK_REPOSITORY" "${REPOSITORY}")"
 
   log_step "Pulling Pantro images"

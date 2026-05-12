@@ -81,6 +81,7 @@ def get_status(db: Session = Depends(get_db_session)):
 
 @router.get("/wizard", response_model=SetupWizardStateResponse)
 def get_wizard_state(db: Session = Depends(get_db_session)):
+    _ensure_setup_is_open(db)
     return get_setup_wizard_state(db)
 
 

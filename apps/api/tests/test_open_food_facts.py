@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
+import threading
+import time
+
 import httpx
 import pytest
 
@@ -113,3 +117,54 @@ def test_service_raises_unavailable_for_non_json_or_http_errors():
     html_client = OpenFoodFactsClient(transport=httpx.MockTransport(html_handler))
     with pytest.raises(OpenFoodFactsUnavailableError):
         html_client.lookup_by_barcode("5000111046244")
+
+
+def test_shared_cache_reuses_response_across_client_instances():
+    calls = 0
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(
+            200,
+            json={"status": 1, "product": {"code": "9900000000017", "product_name": "Shared cache beans"}},
+        )
+
+    first_client = OpenFoodFactsClient(transport=httpx.MockTransport(handler), shared_cache=True)
+    second_client = OpenFoodFactsClient(transport=httpx.MockTransport(handler), shared_cache=True)
+
+    assert first_client.lookup_by_barcode("9900000000017") is not None
+    assert second_client.lookup_by_barcode("9900000000017") is not None
+    assert calls == 1
+
+
+def test_concurrent_same_lookup_coalesces_to_one_http_request():
+    calls = 0
+    calls_lock = threading.Lock()
+    start_gate = threading.Barrier(3)
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        with calls_lock:
+            calls += 1
+        time.sleep(0.05)
+        return httpx.Response(
+            200,
+            json={"status": 1, "product": {"code": "9900000000024", "product_name": "Coalesced oats"}},
+        )
+
+    client = OpenFoodFactsClient(transport=httpx.MockTransport(handler))
+
+    def lookup_name() -> str:
+        start_gate.wait()
+        candidate = client.lookup_by_barcode("9900000000024")
+        assert candidate is not None
+        return candidate.source_product_name or ""
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = [executor.submit(lookup_name), executor.submit(lookup_name)]
+        start_gate.wait()
+        names = [future.result(timeout=2) for future in futures]
+
+    assert names == ["Coalesced oats", "Coalesced oats"]
+    assert calls == 1

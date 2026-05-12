@@ -3,17 +3,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
-import type {
-  ReleaseCheckResponse,
-  SessionMembership,
-  SessionResponse,
-} from "../lib/api-types";
-import { AdminReleaseNotesDialog } from "./admin-release-notes-dialog";
+import type { SessionMembership, SessionResponse } from "../lib/api-types";
 import { LogoutButtonInner } from "./logout-button";
 
 type AppShellProps = {
   session: SessionResponse;
-  releaseStatus?: ReleaseCheckResponse | null;
   children: ReactNode;
 };
 
@@ -104,7 +98,7 @@ function getCurrentMembership(pathname: string, memberships: SessionMembership[]
   return memberships.find((membership) => membership.household_external_id === currentHouseholdExternalId) ?? null;
 }
 
-export function AppShell({ session, releaseStatus, children }: AppShellProps) {
+export function AppShell({ session, children }: AppShellProps) {
   const pathname = usePathname() ?? "/app";
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const currentMembership = getCurrentMembership(pathname, session.memberships);
@@ -115,9 +109,6 @@ export function AppShell({ session, releaseStatus, children }: AppShellProps) {
     { href: "/app", label: "Dashboard" },
     { href: "/app/settings", label: "Settings", matchPrefix: "/app/settings" },
   ];
-  if (session.user.platform_role === "platform_admin") {
-    mobileUtilityNavItems.push({ href: "/admin", label: "Admin", matchPrefix: "/admin" });
-  }
 
   const mobileShellTitle = currentMembership
     ? currentMembership.household_name
@@ -131,8 +122,6 @@ export function AppShell({ session, releaseStatus, children }: AppShellProps) {
 
   return (
     <main className="page-shell dashboard-page-shell">
-      {releaseStatus ? <AdminReleaseNotesDialog initialReleaseStatus={releaseStatus} /> : null}
-
       <div className="mobile-shell-header">
         <div className="mobile-shell-topbar">
           <div className="stack compact-stack">
@@ -240,14 +229,6 @@ export function AppShell({ session, releaseStatus, children }: AppShellProps) {
                 ))}
               </div>
             ))}
-            {session.user.platform_role === "platform_admin" ? (
-              <div className="nav-group">
-                <AppShellNavLink
-                  item={{ href: "/admin", label: "Admin Dashboard", matchPrefix: "/admin" }}
-                  pathname={pathname}
-                />
-              </div>
-            ) : null}
           </nav>
           {session.memberships.length === 0 ? (
             <p className="sidebar-copy">

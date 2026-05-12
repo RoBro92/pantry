@@ -26,7 +26,7 @@ from app.schemas.pantry import (
     ProductLocationSummary,
     StockLotSummary,
 )
-from app.services.location_links import serialize_location_link
+from app.services import location_links
 from app.services.canonical_knowledge import serialize_product_canonical_summary
 from app.services.pantry_normalization import normalize_barcode, normalize_lookup_name
 from app.services.pantry_serialization import (
@@ -284,6 +284,16 @@ def _product_location_summaries(lots: list[StockLot]) -> list[ProductLocationSum
     )
 
 
+def _serialize_location_link(*, location: Location, public_base_url: str) -> dict[str, str]:
+    location_route = location.external_id
+    browser_path = location_links.build_location_browser_path(location_route)
+    return {
+        "location_route": location_route,
+        "browser_path": browser_path,
+        "browser_url": f"{public_base_url}{browser_path}",
+    }
+
+
 def _build_product_summary(
     *,
     product: Product,
@@ -349,7 +359,7 @@ def build_pantry_overview(
     )
     open_shopping_product_ids = list_open_shopping_product_ids(db, household=access.household)
 
-    product_summaries: list[PantryProductSummary] = []
+    matched_products: list[tuple[Product, list[StockLot], list[StockLot]]] = []
     filtered_lots: list[StockLot] = []
     for product in products:
         if not _matches_product_query(product, query=filters.q):
@@ -366,27 +376,28 @@ def build_pantry_overview(
 
         visible_lots = product_visible_lots if has_lot_scope_filters else list(product_active_lots)
         filtered_lots.extend(visible_lots)
-        product_summaries.append(
-            _build_product_summary(
-                product=product,
-                visible_lots=visible_lots,
-                all_active_lots=list(product_active_lots),
-                open_shopping_product_ids=open_shopping_product_ids,
-                near_expiry_days=near_expiry_days,
-            )
-        )
+        matched_products.append((product, visible_lots, list(product_active_lots)))
 
-    product_summaries.sort(
+    matched_products.sort(
         key=lambda item: (
-            item.stock_status != "in_stock",
-            item.product_name.lower(),
+            not item[2],
+            item[0].name.lower(),
         )
     )
-    matched_product_count = len(product_summaries)
+    matched_product_count = len(matched_products)
     page_count = max(1, (matched_product_count + page_size - 1) // page_size)
     current_page = min(page, page_count)
     page_start = (current_page - 1) * page_size
-    paginated_products = product_summaries[page_start : page_start + page_size]
+    paginated_products = [
+        _build_product_summary(
+            product=product,
+            visible_lots=visible_lots,
+            all_active_lots=product_active_lots,
+            open_shopping_product_ids=open_shopping_product_ids,
+            near_expiry_days=near_expiry_days,
+        )
+        for product, visible_lots, product_active_lots in matched_products[page_start : page_start + page_size]
+    ]
 
     recent_events = db.scalars(
         select(AuditEvent)
@@ -395,6 +406,7 @@ def build_pantry_overview(
         .order_by(AuditEvent.occurred_at.desc())
         .limit(40)
     ).all()
+    public_base_url = location_links.resolve_public_base_url(db).effective_value
 
     return PantryOverviewResponse(
         household_external_id=access.household.external_id,
@@ -433,7 +445,7 @@ def build_pantry_overview(
                 name=location.name,
                 location_group_external_id=location.location_group.external_id,
                 location_group_name=location.location_group.name,
-                **serialize_location_link(db, location=location),
+                **_serialize_location_link(location=location, public_base_url=public_base_url),
             )
             for location in locations
         ],

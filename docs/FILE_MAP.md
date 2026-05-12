@@ -31,6 +31,7 @@ Quick reference for the public repository layout.
 ## Public Documentation
 
 - `README.md`: product overview, install entry point, and docs index
+- `CHANGELOG.md`: released and unreleased public change log
 - `LICENSE`: public repository license
 - `SUPPORT.md`: support, bug-reporting, and security-reporting expectations
 - `AGENTS.md`: public repository working rules
@@ -41,3 +42,4 @@ Quick reference for the public repository layout.
 - `docs/SECURITY.md`: safe operation and data handling notes
 - `docs/TEST_STRATEGY.md`: proportionate validation guidance
 - `docs/VERSIONING.md`: release and update model
+- `docs/sprints/README.md`: discoverability entry point for the public sprint notes that currently double as roadmap and decision records

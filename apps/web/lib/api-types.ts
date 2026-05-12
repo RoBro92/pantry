@@ -468,9 +468,13 @@ export type DiagnosticsResponse = {
     backend: string;
     queued_import_jobs: number;
     processing_import_jobs: number;
+    stale_processing_import_jobs: number;
     failed_import_jobs: number;
     completed_import_jobs: number;
     confirmed_import_jobs: number;
+    imports: Record<string, number>;
+    recipe_url_imports: Record<string, number>;
+    product_intelligence_runs: Record<string, number>;
     message: string;
   };
   database: {

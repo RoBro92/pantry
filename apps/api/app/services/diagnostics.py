@@ -4,18 +4,23 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from time import perf_counter
 
-from sqlalchemy import func, select, text
+from sqlalchemy import func, or_, select, text
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.models.household import Household
 from app.models.import_job import ImportJob
 from app.models.product import Product
+from app.models.product_intelligence_run import ProductIntelligenceRun
 from app.models.recipe import Recipe
+from app.models.recipe_url_import import RecipeURLImport
 from app.models.stock_lot import StockLot
 from app.models.user import User
 from app.services.ai_config import get_instance_provider_config, serialize_provider_config
+from app.services.import_processing import IMPORT_JOB_RESUME_TIMEOUT
 from app.services.instance_settings import build_public_base_url_summary, build_smtp_summary
+from app.services.product_intelligence_runs import RUN_RESUME_TIMEOUT
+from app.services.recipe_url_imports import RECIPE_URL_IMPORT_RESUME_TIMEOUT
 from app.services.releases import build_release_check_summary
 from app.services.runtime_status import check_redis_health, read_worker_heartbeat
 
@@ -76,16 +81,70 @@ def _count_scalar(db: Session, model) -> int:
     return db.scalar(select(func.count(model.id))) or 0
 
 
-def _import_queue_counts(db: Session) -> dict[str, int]:
+def _status_counts(db: Session, model) -> defaultdict[str, int]:
     counts = defaultdict(int)
-    for status, count in db.execute(select(ImportJob.status, func.count(ImportJob.id)).group_by(ImportJob.status)).all():
+    for status, count in db.execute(select(model.status, func.count(model.id)).group_by(model.status)).all():
         counts[status] = count
+    return counts
+
+
+def _import_queue_counts(db: Session, *, now: datetime) -> dict[str, int]:
+    counts = _status_counts(db, ImportJob)
+    stale_processing = db.scalar(
+        select(func.count(ImportJob.id))
+        .where(ImportJob.status == "processing")
+        .where(
+            or_(
+                ImportJob.processing_started_at.is_(None),
+                ImportJob.processing_started_at < (now - IMPORT_JOB_RESUME_TIMEOUT),
+            )
+        )
+    ) or 0
     return {
         "queued": counts["queued"],
         "processing": counts["processing"],
+        "stale_processing": stale_processing,
         "failed": counts["failed"],
         "completed": counts["completed"],
         "confirmed": counts["confirmed"],
+    }
+
+
+def _recipe_url_import_queue_counts(db: Session, *, now: datetime) -> dict[str, int]:
+    counts = _status_counts(db, RecipeURLImport)
+    stale_processing = db.scalar(
+        select(func.count(RecipeURLImport.id))
+        .where(RecipeURLImport.status == "processing")
+        .where(RecipeURLImport.updated_at < (now - RECIPE_URL_IMPORT_RESUME_TIMEOUT))
+    ) or 0
+    return {
+        "queued": counts["queued"],
+        "processing": counts["processing"],
+        "stale_processing": stale_processing,
+        "imported": counts["imported"],
+        "failed": counts["failed"],
+    }
+
+
+def _product_intelligence_queue_counts(db: Session, *, now: datetime) -> dict[str, int]:
+    counts = _status_counts(db, ProductIntelligenceRun)
+    stale_running = db.scalar(
+        select(func.count(ProductIntelligenceRun.id))
+        .where(ProductIntelligenceRun.status == "running")
+        .where(
+            or_(
+                ProductIntelligenceRun.last_progress_at.is_(None),
+                ProductIntelligenceRun.last_progress_at < (now - RUN_RESUME_TIMEOUT),
+            )
+        )
+    ) or 0
+    return {
+        "queued": counts["queued"],
+        "running": counts["running"],
+        "stale_running": stale_running,
+        "completed": counts["completed"],
+        "partially_completed": counts["partially_completed"],
+        "failed": counts["failed"],
     }
 
 
@@ -166,7 +225,9 @@ def build_diagnostics_report(db: Session) -> dict[str, object]:
     now = _utc_now()
     redis_health = check_redis_health()
     public_base_url = build_public_base_url_summary(db)
-    queue_counts = _import_queue_counts(db)
+    import_queue_counts = _import_queue_counts(db, now=now)
+    recipe_url_import_counts = _recipe_url_import_queue_counts(db, now=now)
+    product_intelligence_counts = _product_intelligence_queue_counts(db, now=now)
 
     return {
         "generated_at": now,
@@ -190,13 +251,17 @@ def build_diagnostics_report(db: Session) -> dict[str, object]:
             "message": redis_health.message,
         },
         "queue": {
-            "backend": "database_import_jobs",
-            "queued_import_jobs": queue_counts["queued"],
-            "processing_import_jobs": queue_counts["processing"],
-            "failed_import_jobs": queue_counts["failed"],
-            "completed_import_jobs": queue_counts["completed"],
-            "confirmed_import_jobs": queue_counts["confirmed"],
-            "message": "Import queue visibility is measured from ImportJob records. Redis is not the durable import queue in this milestone.",
+            "backend": "database",
+            "queued_import_jobs": import_queue_counts["queued"],
+            "processing_import_jobs": import_queue_counts["processing"],
+            "stale_processing_import_jobs": import_queue_counts["stale_processing"],
+            "failed_import_jobs": import_queue_counts["failed"],
+            "completed_import_jobs": import_queue_counts["completed"],
+            "confirmed_import_jobs": import_queue_counts["confirmed"],
+            "imports": import_queue_counts,
+            "recipe_url_imports": recipe_url_import_counts,
+            "product_intelligence_runs": product_intelligence_counts,
+            "message": "Queue visibility is measured from durable database records. Redis is not the durable queue in this milestone.",
         },
         "database": _database_diagnostics(db),
         "counts": _counts_summary(db),
