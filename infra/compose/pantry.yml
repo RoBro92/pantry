@@ -5,6 +5,7 @@ name: pantry
 services:
   web:
     image: ${PANTRY_IMAGE_NAMESPACE:-ghcr.io/robro92}/pantry-web:${PANTRY_VERSION:-0.2.1}
+    user: "${PANTRY_APP_UID:-10001}:${PANTRY_APP_GID:-10001}"
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
@@ -29,6 +30,7 @@ services:
 
   api:
     image: ${PANTRY_IMAGE_NAMESPACE:-ghcr.io/robro92}/pantry-api:${PANTRY_VERSION:-0.2.1}
+    user: "${PANTRY_APP_UID:-10001}:${PANTRY_APP_GID:-10001}"
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
@@ -113,6 +115,7 @@ services:
 
   worker:
     image: ${PANTRY_IMAGE_NAMESPACE:-ghcr.io/robro92}/pantry-worker:${PANTRY_VERSION:-0.2.1}
+    user: "${PANTRY_APP_UID:-10001}:${PANTRY_APP_GID:-10001}"
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
@@ -144,6 +147,7 @@ services:
 
   migrate:
     image: ${PANTRY_IMAGE_NAMESPACE:-ghcr.io/robro92}/pantry-api:${PANTRY_VERSION:-0.2.1}
+    user: "${PANTRY_APP_UID:-10001}:${PANTRY_APP_GID:-10001}"
     profiles: ["manual"]
     restart: "no"
     security_opt:

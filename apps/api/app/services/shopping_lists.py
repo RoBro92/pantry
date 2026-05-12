@@ -490,6 +490,7 @@ def add_item_to_default_shopping_list(
     note: str | None = None,
     pantry_location_external_id: str | None = None,
     source_type: str = "manual",
+    commit: bool = True,
 ) -> ShoppingListItem:
     shopping_list = get_or_create_active_shopping_list(db, household=household)
 
@@ -544,10 +545,12 @@ def add_item_to_default_shopping_list(
             "unit": item.unit,
         },
     )
-    db.commit()
-    db.expire_all()
-    db.refresh(item)
-    return get_shopping_list_item_by_external_id(db, household=household, item_external_id=item.external_id) or item
+    if commit:
+        db.commit()
+        db.expire_all()
+        db.refresh(item)
+        return get_shopping_list_item_by_external_id(db, household=household, item_external_id=item.external_id) or item
+    return item
 
 
 def update_shopping_list_item(

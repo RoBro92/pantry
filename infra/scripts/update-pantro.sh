@@ -23,6 +23,19 @@ Usage: update-pantro.sh [--install-dir DIR] [--version X.Y.Z] [--repository OWNE
 EOF
 }
 
+print_update_failure_guidance() {
+  local exit_code="$?"
+  trap - ERR
+
+  log_error "Pantro update failed while moving from ${current_version:-unknown} to ${target_version:-unknown}."
+  log_info "Inspect service state with:"
+  printf '  docker compose --env-file %s -f %s ps\n' "${env_file:-${INSTALL_DIR}/.env}" "${compose_file:-${INSTALL_DIR}/pantro.yml}" >&2
+  printf '  docker compose --env-file %s -f %s logs --tail=200 api worker web migrate\n' "${env_file:-${INSTALL_DIR}/.env}" "${compose_file:-${INSTALL_DIR}/pantro.yml}" >&2
+  log_info "If migrations did not run or did not apply, restore the previous .env/compose asset backups, pin the previous version, and restart the stack."
+  log_info "If migrations applied or data looks inconsistent, restore PostgreSQL and import storage from the pre-update backup before restarting the previous version."
+  exit "${exit_code}"
+}
+
 resolve_target_version() {
   local resolved_version
 
@@ -139,7 +152,7 @@ refresh_release_assets() {
 main() {
   local env_file compose_file current_version target_version image_namespace
   local postgres_data_dir redis_data_dir imports_data_dir backups_data_dir
-  local web_url api_url
+  local web_url api_url browser_url session_https_only app_uid app_gid
 
   require_command curl
   require_command docker
@@ -197,19 +210,29 @@ main() {
     exit 0
   fi
 
-  if [[ "${ASSUME_YES}" -ne 1 ]]; then
-    prompt_yes_no "Continue with the update?" "n" || exit 1
-  fi
-
-  refresh_release_assets "${target_version}"
+  trap print_update_failure_guidance ERR
 
   image_namespace="$(env_get_any "${env_file}" "${PANTRO_DEFAULT_IMAGE_NAMESPACE}" "PANTRO_IMAGE_NAMESPACE" "PANTRY_IMAGE_NAMESPACE")"
   postgres_data_dir="$(env_get_any "${env_file}" "$(default_data_root)/postgres" "PANTRO_POSTGRES_DATA_DIR" "PANTRY_POSTGRES_DATA_DIR")"
   redis_data_dir="$(env_get_any "${env_file}" "$(default_data_root)/redis" "PANTRO_REDIS_DATA_DIR" "PANTRY_REDIS_DATA_DIR")"
   imports_data_dir="$(env_get_any "${env_file}" "$(default_data_root)/imports" "PANTRO_IMPORTS_DATA_DIR" "PANTRY_IMPORTS_DATA_DIR")"
   backups_data_dir="$(env_get_any "${env_file}" "$(default_data_root)/backups" "PANTRO_BACKUPS_DATA_DIR" "PANTRY_BACKUPS_DATA_DIR")"
+  app_uid="$(env_get_any "${env_file}" "${PANTRO_DEFAULT_APP_UID}" "PANTRO_APP_UID" "PANTRY_APP_UID")"
+  app_gid="$(env_get_any "${env_file}" "${PANTRO_DEFAULT_APP_GID}" "PANTRO_APP_GID" "PANTRY_APP_GID")"
   browser_url="$(env_get "${env_file}" "PUBLIC_BROWSER_BASE_URL" "$(env_get "${env_file}" "WEB_APP_URL" "")")"
   session_https_only="$(env_get "${env_file}" "SESSION_HTTPS_ONLY" "")"
+
+  log_step "Pre-update backup check"
+  log_info "PostgreSQL data: ${postgres_data_dir}"
+  log_info "Import storage: ${imports_data_dir}"
+  log_info "Backup storage: ${backups_data_dir}"
+  log_info "Create or verify a current backup before continuing. Keep the backup until post-update health checks pass."
+  if [[ "${ASSUME_YES}" -ne 1 ]]; then
+    prompt_yes_no "I have a current PostgreSQL and import-storage backup. Continue?" "n" || exit 1
+    prompt_yes_no "Continue with the update?" "n" || exit 1
+  fi
+
+  refresh_release_assets "${target_version}"
 
   if [[ "${browser_url}" != https://* ]]; then
     die "Pantro production updates now require an HTTPS public URL because session cookies are secure-only. Set PUBLIC_BROWSER_BASE_URL or WEB_APP_URL to your HTTPS reverse-proxy URL before updating."
@@ -219,6 +242,7 @@ main() {
   fi
 
   log_step "Updating .env"
+  backup_file "${env_file}"
   env_set "${env_file}" "PANTRO_VERSION" "${target_version}"
   env_set "${env_file}" "PANTRY_VERSION" "${target_version}"
   env_set "${env_file}" "PANTRO_IMAGE_NAMESPACE" "${image_namespace}"
@@ -227,13 +251,21 @@ main() {
   env_set "${env_file}" "PANTRO_REDIS_DATA_DIR" "${redis_data_dir}"
   env_set "${env_file}" "PANTRO_IMPORTS_DATA_DIR" "${imports_data_dir}"
   env_set "${env_file}" "PANTRO_BACKUPS_DATA_DIR" "${backups_data_dir}"
+  env_set "${env_file}" "PANTRO_APP_UID" "${app_uid}"
+  env_set "${env_file}" "PANTRO_APP_GID" "${app_gid}"
   env_set "${env_file}" "PANTRY_POSTGRES_DATA_DIR" "${postgres_data_dir}"
   env_set "${env_file}" "PANTRY_REDIS_DATA_DIR" "${redis_data_dir}"
   env_set "${env_file}" "PANTRY_IMPORTS_DATA_DIR" "${imports_data_dir}"
   env_set "${env_file}" "PANTRY_BACKUPS_DATA_DIR" "${backups_data_dir}"
+  env_set "${env_file}" "PANTRY_APP_UID" "${app_uid}"
+  env_set "${env_file}" "PANTRY_APP_GID" "${app_gid}"
   env_set "${env_file}" "BACKUP_STORAGE_ROOT" "$(env_get "${env_file}" "BACKUP_STORAGE_ROOT" "/var/lib/pantro/backups")"
   env_set "${env_file}" "SESSION_HTTPS_ONLY" "true"
   env_set "${env_file}" "RELEASE_CHECK_REPOSITORY" "$(env_get "${env_file}" "RELEASE_CHECK_REPOSITORY" "${REPOSITORY}")"
+
+  ensure_app_data_dir_permissions "${app_uid}" "${app_gid}" \
+    "${imports_data_dir}" \
+    "${backups_data_dir}"
 
   log_step "Pulling Pantro images"
   docker_compose_in_dir "${INSTALL_DIR}" pull

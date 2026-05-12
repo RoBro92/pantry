@@ -65,6 +65,18 @@ The mandatory pre-release gate is:
 
 That gate now boots the local demo stack, runs `./infra/scripts/smoke-check.sh`, runs `CI=1 npm run test:e2e`, and then continues with the existing release-oriented checks.
 
+## Live PostgreSQL Contention Checks
+
+SQLite-backed unit tests do not prove row locking, `SKIP LOCKED`, advisory locks, or PostgreSQL partial indexes. Before release candidates that touch stock, import, queue, or worker claiming behaviour, run the gated PostgreSQL checks against a disposable database:
+
+```bash
+cd apps/api
+PANTRY_TEST_POSTGRES_URL=postgresql+psycopg://pantro:password@localhost:5432/pantro_test \
+  pytest tests/test_queue_concurrency.py tests/test_stock_import_integrity.py -q
+```
+
+The tests create and drop isolated schemas. Do not point `PANTRY_TEST_POSTGRES_URL` at a production database.
+
 When iterating locally before the full gate, use:
 
 ```bash

@@ -847,7 +847,7 @@ def test_platform_admin_can_export_and_restore_instance_backups(client, db_sessi
         "/api/platform-admin/backups/restore",
         json={
             "stage_id": staged_payload["stage_id"],
-            "confirmation_phrase": "RESTORE PANTRY INSTANCE",
+            "confirmation_phrase": "RESTORE PANTRO INSTANCE",
         },
     )
     assert restore_response.status_code == 200
@@ -935,7 +935,7 @@ def test_platform_admin_can_restore_household_backup_into_a_new_household(client
         json={
             "stage_id": staged_payload["stage_id"],
             "target_household_name": "Restored Household",
-            "confirmation_phrase": "RESTORE PANTRY HOUSEHOLD",
+            "confirmation_phrase": "RESTORE PANTRO HOUSEHOLD",
         },
     )
     assert restore_response.status_code == 200
@@ -995,7 +995,7 @@ def test_platform_admin_household_restore_blocks_existing_target_name_conflicts(
         json={
             "stage_id": staged_payload["stage_id"],
             "target_household_name": "Existing Household",
-            "confirmation_phrase": "RESTORE PANTRY HOUSEHOLD",
+            "confirmation_phrase": "RESTORE PANTRO HOUSEHOLD",
         },
     )
     assert restore_response.status_code == 400
@@ -1044,7 +1044,7 @@ def test_platform_admin_household_restore_accepts_supported_older_schema_bundle(
         json={
             "stage_id": staged_payload["stage_id"],
             "target_household_name": "Older Restored Household",
-            "confirmation_phrase": "RESTORE PANTRY HOUSEHOLD",
+            "confirmation_phrase": "RESTORE PANTRO HOUSEHOLD",
         },
     )
     assert restore_response.status_code == 200

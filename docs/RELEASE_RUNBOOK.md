@@ -34,23 +34,25 @@ git push origin vX.Y.Z
 
 ## Operator Upgrade Checklist
 
-1. Back up PostgreSQL data and Pantro-managed upload storage before upgrading.
-2. Review the new `infra/env/pantro.env.example` before reusing older environment values.
-3. Run the explicit operator update flow:
+1. Run `./healthcheck-pantro.sh --install-dir /opt/pantro` before upgrading so rollback starts from a known-good stack.
+2. Record the current `PANTRO_VERSION` and keep the existing `.env` plus compose asset backups until post-update validation passes.
+3. Back up PostgreSQL data and Pantro-managed import storage before upgrading.
+4. Review the new `infra/env/pantro.env.example` before reusing older environment values.
+5. Run the explicit operator update flow:
 
 ```bash
 ./update-pantro.sh
 ```
 
-4. Run the bundled health check:
+6. Run the bundled health check:
 
 ```bash
 ./healthcheck-pantro.sh --install-dir /opt/pantro
 ```
 
-5. Confirm the browser UI, API health endpoint, worker status, and any optional integrations you rely on.
-6. Treat restore compatibility as stricter than normal upgrades and verify backup format support before using older backup bundles on a newer build.
-7. If your install still uses Pantry-named asset paths, the legacy `update-pantry.sh` and `healthcheck-pantry.sh` aliases remain supported during this migration.
+7. Confirm the browser UI, API health endpoint, worker status, and any optional integrations you rely on.
+8. Treat restore compatibility as stricter than normal upgrades and verify backup format support before using older backup bundles on a newer build.
+9. If your install still uses Pantry-named asset paths, the legacy `update-pantry.sh` and `healthcheck-pantry.sh` aliases remain supported during this migration.
 
 ## Notes
 

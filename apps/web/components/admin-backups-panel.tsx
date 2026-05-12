@@ -9,7 +9,7 @@ import type {
 import { appConfig } from "../lib/app-config";
 import { postFormToApi, postToApi, readApiErrorMessage } from "../lib/client-api";
 
-const RESTORE_CONFIRMATION_PHRASE = "RESTORE PANTRY INSTANCE";
+const RESTORE_CONFIRMATION_PHRASE = "RESTORE PANTRO INSTANCE";
 
 type AdminBackupsPanelProps = {
   households: AdminHouseholdSummary[];

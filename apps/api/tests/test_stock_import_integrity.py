@@ -1,15 +1,22 @@
 from __future__ import annotations
 
+import os
+from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
+from uuid import uuid4
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import create_engine, func, select, text
 from sqlalchemy.dialects import postgresql
+from sqlalchemy.engine import make_url
+from sqlalchemy.orm import sessionmaker
 
 from app.core.db import SessionLocal
 from app.domain.roles import HOUSEHOLD_ADMIN_ROLE
+from app.models import Base
 from app.models.import_job import ImportJob
 from app.models.import_line import ImportLine
+from app.models.shopping_list_item import ShoppingListItem
 from app.models.stock_lot import StockLot
 from app.services.auth import create_household, create_membership, create_user
 from app.services.import_workflow import confirm_import_job, get_import_job_by_external_id, refresh_import_job_counts
@@ -17,6 +24,7 @@ from app.services.pantry_catalog import create_location, create_location_group, 
 from app.services.pantry_normalization import normalize_lookup_name
 from app.services.pantry_stock import (
     add_stock_lot,
+    buy_more_from_stock_lot,
     get_stock_lot_by_external_id,
     move_stock_lot,
     remove_stock_from_lot,
@@ -25,6 +33,7 @@ from app.services.pantry_stock import (
 
 
 PASSWORD = "correct horse battery"
+POSTGRES_URL_ENV = "PANTRY_TEST_POSTGRES_URL"
 
 
 class CapturingSession:
@@ -98,6 +107,42 @@ def _load_household_actor(db, household_id, actor_id):
     assert household is not None
     assert actor is not None
     return household, actor
+
+
+@pytest.fixture
+def postgres_session_factory():
+    postgres_url = os.environ.get(POSTGRES_URL_ENV)
+    if not postgres_url:
+        pytest.skip(f"Set {POSTGRES_URL_ENV} to run live PostgreSQL stock contention tests.")
+
+    parsed_url = make_url(postgres_url)
+    if not parsed_url.drivername.startswith("postgresql"):
+        pytest.skip(f"{POSTGRES_URL_ENV} must use a PostgreSQL SQLAlchemy URL.")
+
+    schema = f"stock_integrity_{uuid4().hex}"
+    admin_engine = create_engine(postgres_url, future=True, pool_pre_ping=True)
+    schema_engine = None
+    schema_created = False
+    try:
+        with admin_engine.begin() as connection:
+            connection.execute(text(f'CREATE SCHEMA "{schema}"'))
+        schema_created = True
+
+        schema_engine = create_engine(
+            postgres_url,
+            future=True,
+            pool_pre_ping=True,
+            connect_args={"options": f"-csearch_path={schema}"},
+        )
+        Base.metadata.create_all(bind=schema_engine)
+        yield sessionmaker(bind=schema_engine, autoflush=False, autocommit=False, expire_on_commit=False)
+    finally:
+        if schema_engine is not None:
+            schema_engine.dispose()
+        if schema_created:
+            with admin_engine.begin() as connection:
+                connection.execute(text(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE'))
+        admin_engine.dispose()
 
 
 @pytest.mark.parametrize(
@@ -379,3 +424,107 @@ def test_repeated_import_confirmation_returns_existing_confirmation_without_addi
     finally:
         stale_session.close()
         fresh_session.close()
+
+
+def test_postgresql_concurrent_add_stock_merges_into_one_active_lot(postgres_session_factory):
+    # Invariant: concurrent inserts with the same merge key cannot create duplicate active lots.
+    with postgres_session_factory() as db:
+        actor, household, shelf, _, _, product, _ = _create_stock_fixture(
+            db,
+            email=f"pg-add-{uuid4().hex[:8]}@example.com",
+        )
+        for lot in db.scalars(select(StockLot).where(StockLot.household_id == household.id)).all():
+            db.delete(lot)
+        db.commit()
+        household_id = household.id
+        actor_id = actor.id
+        product_external_id = product.external_id
+        shelf_external_id = shelf.external_id
+
+    def add_once(quantity: str) -> None:
+        with postgres_session_factory() as db:
+            household, actor = _load_household_actor(db, household_id, actor_id)
+            add_stock_lot(
+                db,
+                household=household,
+                actor=actor,
+                product_external_id=product_external_id,
+                location_external_id=shelf_external_id,
+                quantity=Decimal(quantity),
+                note=None,
+                purchased_on=None,
+                expires_on=None,
+            )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = [executor.submit(add_once, quantity) for quantity in ("2.000", "3.000")]
+        for future in futures:
+            future.result(timeout=10)
+
+    with postgres_session_factory() as db:
+        lots = db.scalars(
+            select(StockLot)
+            .where(StockLot.household_id == household_id)
+            .where(StockLot.depleted_at.is_(None))
+        ).all()
+        assert len(lots) == 1
+        assert lots[0].quantity == Decimal("5.000")
+
+
+def test_postgresql_buy_more_and_depletion_commit_atomically(postgres_session_factory):
+    # Invariant: a buy-more shopping item is not committed unless the paired depletion commits too.
+    with postgres_session_factory() as db:
+        actor, household, _, _, _, _, lot = _create_stock_fixture(
+            db,
+            email=f"pg-buy-more-{uuid4().hex[:8]}@example.com",
+        )
+        household_id = household.id
+        actor_id = actor.id
+        lot_external_id = lot.external_id
+
+    def buy_more() -> str:
+        with postgres_session_factory() as db:
+            household, actor = _load_household_actor(db, household_id, actor_id)
+            try:
+                buy_more_from_stock_lot(
+                    db,
+                    household=household,
+                    actor=actor,
+                    lot_external_id=lot_external_id,
+                )
+                return "buy_more"
+            except ValueError as exc:
+                db.rollback()
+                return str(exc)
+
+    def deplete() -> str:
+        with postgres_session_factory() as db:
+            household, actor = _load_household_actor(db, household_id, actor_id)
+            try:
+                remove_stock_from_lot(
+                    db,
+                    household=household,
+                    actor=actor,
+                    lot_external_id=lot_external_id,
+                    quantity=Decimal("5.000"),
+                )
+                return "deplete"
+            except ValueError as exc:
+                db.rollback()
+                return str(exc)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        outcomes = [future.result(timeout=10) for future in (executor.submit(buy_more), executor.submit(deplete))]
+
+    assert outcomes.count("buy_more") + outcomes.count("deplete") == 1
+    assert any("Stock lot not found" in outcome for outcome in outcomes)
+
+    with postgres_session_factory() as db:
+        lot = db.scalar(select(StockLot).where(StockLot.external_id == lot_external_id))
+        assert lot is not None
+        assert lot.quantity == Decimal("0.000")
+        assert lot.depleted_at is not None
+        shopping_items = db.scalars(
+            select(ShoppingListItem).where(ShoppingListItem.household_id == household_id)
+        ).all()
+        assert len(shopping_items) == (1 if "buy_more" in outcomes else 0)

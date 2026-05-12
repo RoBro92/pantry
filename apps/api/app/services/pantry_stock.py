@@ -1000,7 +1000,7 @@ def buy_more_from_stock_lot(
     actor: User,
     lot_external_id: str,
 ) -> StockLot:
-    lot = get_stock_lot_by_external_id(db, household=household, external_id=lot_external_id)
+    lot = _load_stock_lot(db, household=household, external_id=lot_external_id, for_update=True)
     if lot is None or lot.depleted_at is not None:
         raise ValueError("Stock lot not found.")
 
@@ -1016,11 +1016,16 @@ def buy_more_from_stock_lot(
         note=lot.note,
         pantry_location_external_id=lot.location.external_id,
         source_type="pantry_depleted",
+        commit=False,
     )
-    return remove_stock_from_lot(
+    removed = remove_stock_from_lot(
         db,
         household=household,
         actor=actor,
         lot_external_id=lot.external_id,
         quantity=lot.quantity,
+        commit=False,
     )
+    db.commit()
+    db.refresh(removed)
+    return get_stock_lot_by_external_id(db, household=household, external_id=removed.external_id) or removed

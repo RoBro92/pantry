@@ -3,6 +3,7 @@ name: pantro
 services:
   web:
     image: ${PANTRO_IMAGE_NAMESPACE:-ghcr.io/robro92}/pantro-web:${PANTRO_VERSION:-0.2.1}
+    user: "${PANTRO_APP_UID:-10001}:${PANTRO_APP_GID:-10001}"
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
@@ -27,6 +28,7 @@ services:
 
   api:
     image: ${PANTRO_IMAGE_NAMESPACE:-ghcr.io/robro92}/pantro-api:${PANTRO_VERSION:-0.2.1}
+    user: "${PANTRO_APP_UID:-10001}:${PANTRO_APP_GID:-10001}"
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
@@ -111,6 +113,7 @@ services:
 
   worker:
     image: ${PANTRO_IMAGE_NAMESPACE:-ghcr.io/robro92}/pantro-worker:${PANTRO_VERSION:-0.2.1}
+    user: "${PANTRO_APP_UID:-10001}:${PANTRO_APP_GID:-10001}"
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
@@ -142,6 +145,7 @@ services:
 
   migrate:
     image: ${PANTRO_IMAGE_NAMESPACE:-ghcr.io/robro92}/pantro-api:${PANTRO_VERSION:-0.2.1}
+    user: "${PANTRO_APP_UID:-10001}:${PANTRO_APP_GID:-10001}"
     profiles: ["manual"]
     restart: "no"
     security_opt:

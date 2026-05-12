@@ -51,13 +51,27 @@ wait_for_ready_or_health_ok() {
   return 1
 }
 
+print_healthcheck_guidance() {
+  local env_file="$1"
+  local compose_file="$2"
+  local web_probe_url="$3"
+  local api_probe_url="$4"
+
+  log_info "Diagnostic commands:"
+  printf '  docker compose --env-file %s -f %s ps\n' "${env_file}" "${compose_file}" >&2
+  printf '  docker compose --env-file %s -f %s logs --tail=200 web api worker\n' "${env_file}" "${compose_file}" >&2
+  printf '  curl -fsS %s/api/ready\n' "${api_probe_url}" >&2
+  printf '  curl -fsS %s/api/ready\n' "${web_probe_url}" >&2
+  printf '  docker compose --env-file %s -f %s exec -T worker python -m worker.main --status\n' "${env_file}" "${compose_file}" >&2
+}
+
 main() {
   local env_file web_url api_url web_probe_url api_probe_url
   local web_api_health_url web_api_ready_url web_api_probe_url
   local api_health_url api_ready_url api_readiness_probe_url
   local web_bind_address web_port api_bind_address api_port
   local api_health_json setup_status_json worker_status_json
-  local compose_ps
+  local compose_file compose_ps
 
   require_command curl
   require_command docker
@@ -84,7 +98,8 @@ main() {
   done
 
   env_file="${INSTALL_DIR}/.env"
-  [[ -f "$(resolve_install_compose_file "${INSTALL_DIR}")" ]] || die "Missing a self-hosted compose file in ${INSTALL_DIR}"
+  compose_file="$(resolve_install_compose_file "${INSTALL_DIR}")"
+  [[ -f "${compose_file}" ]] || die "Missing a self-hosted compose file in ${INSTALL_DIR}"
   [[ -f "${env_file}" ]] || die "Missing ${env_file}"
 
   web_url="$(env_get "${env_file}" "WEB_APP_URL" "")"
@@ -111,11 +126,20 @@ main() {
   api_ready_url="${api_probe_url}/api/ready"
 
   log_step "Waiting for Pantro services"
-  wait_for_http_ok "${web_probe_url}/" "${TIMEOUT_SECONDS}" || die "Web health check timed out at ${web_probe_url}/"
+  wait_for_http_ok "${web_probe_url}/" "${TIMEOUT_SECONDS}" || {
+    print_healthcheck_guidance "${env_file}" "${compose_file}" "${web_probe_url}" "${api_probe_url}"
+    die "Web health check timed out at ${web_probe_url}/"
+  }
   web_api_probe_url="$(wait_for_ready_or_health_ok "${web_api_ready_url}" "${web_api_health_url}" "${TIMEOUT_SECONDS}")" \
-    || die "Web API proxy timed out at ${web_api_ready_url} (fallback ${web_api_health_url})"
+    || {
+      print_healthcheck_guidance "${env_file}" "${compose_file}" "${web_probe_url}" "${api_probe_url}"
+      die "Web API proxy timed out at ${web_api_ready_url} (fallback ${web_api_health_url})"
+    }
   api_readiness_probe_url="$(wait_for_ready_or_health_ok "${api_ready_url}" "${api_health_url}" "${TIMEOUT_SECONDS}")" \
-    || die "API readiness check timed out at ${api_ready_url} (fallback ${api_health_url})"
+    || {
+      print_healthcheck_guidance "${env_file}" "${compose_file}" "${web_probe_url}" "${api_probe_url}"
+      die "API readiness check timed out at ${api_ready_url} (fallback ${api_health_url})"
+    }
 
   log_step "Inspecting running containers"
   compose_ps="$(docker_compose_in_dir "${INSTALL_DIR}" ps)"

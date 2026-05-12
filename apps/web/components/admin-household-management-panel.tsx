@@ -13,7 +13,7 @@ import { patchToApi, postFormToApi, postToApi } from "../lib/client-api";
 import { getHouseholdRoleLabel } from "../lib/role-labels";
 import { ModalShell } from "./modal-shell";
 
-const HOUSEHOLD_RESTORE_CONFIRMATION_PHRASE = "RESTORE PANTRY HOUSEHOLD";
+const HOUSEHOLD_RESTORE_CONFIRMATION_PHRASE = "RESTORE PANTRO HOUSEHOLD";
 
 type AdminHouseholdManagementPanelProps = {
   households: AdminHouseholdSummary[];
