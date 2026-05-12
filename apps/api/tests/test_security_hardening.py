@@ -284,6 +284,19 @@ def test_production_settings_reject_placeholder_or_shared_secrets():
         validate_production_settings(settings)
 
 
+def test_production_settings_require_secure_session_cookies():
+    settings = replace(
+        get_settings(),
+        environment="production",
+        session_secret_key="x" * 40,
+        settings_encryption_key="y" * 40,
+        session_https_only=False,
+    )
+
+    with pytest.raises(ValueError, match="SESSION_HTTPS_ONLY"):
+        validate_production_settings(settings)
+
+
 def test_setup_mutation_endpoints_close_after_setup_completion(client, db_session):
     create_platform_admin(
         db_session,
@@ -293,6 +306,20 @@ def test_setup_mutation_endpoints_close_after_setup_completion(client, db_sessio
     )
 
     response = client.put("/api/setup/wizard/welcome", json={"acknowledged": True})
+
+    assert response.status_code == 403
+    assert "already been completed" in response.json()["detail"]
+
+
+def test_setup_wizard_cannot_reopen_when_users_exist_without_setup_state(client, db_session):
+    create_platform_admin(
+        db_session,
+        email="setup-upgrade-admin@example.com",
+        password=PASSWORD,
+        display_name="Setup Upgrade Admin",
+    )
+
+    response = client.get("/api/setup/wizard")
 
     assert response.status_code == 403
     assert "already been completed" in response.json()["detail"]

@@ -226,6 +226,29 @@ def _get_setup_state_record(db: Session) -> SetupState | None:
     return db.scalar(select(SetupState).where(SetupState.scope_key == SETUP_SCOPE_KEY))
 
 
+def _has_existing_users(db: Session) -> bool:
+    return db.scalar(select(User.id).limit(1)) is not None
+
+
+def ensure_completed_setup_state_for_existing_users(db: Session) -> SetupState | None:
+    state = _get_setup_state_record(db)
+    if state is not None or not _has_existing_users(db):
+        return state
+
+    state = SetupState(
+        scope_key=SETUP_SCOPE_KEY,
+        status=SETUP_STATUS_COMPLETED,
+        payload={},
+        encrypted_ai_api_key=None,
+        encrypted_smtp_password=None,
+        completed_at=_utc_now(),
+    )
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+    return state
+
+
 def _get_or_create_setup_state(db: Session) -> SetupState:
     state = _get_setup_state_record(db)
     if state is None:
@@ -479,10 +502,10 @@ def _missing_requirements(payload: dict[str, object]) -> list[str]:
 
 
 def is_setup_complete(db: Session) -> bool:
-    state = _get_setup_state_record(db)
+    state = ensure_completed_setup_state_for_existing_users(db)
     if state and state.status == SETUP_STATUS_COMPLETED:
         return True
-    return state is None and db.scalar(select(User.id).limit(1)) is not None
+    return False
 
 
 def mark_setup_completed(db: Session) -> SetupState:
@@ -499,12 +522,10 @@ def mark_setup_completed(db: Session) -> SetupState:
 
 
 def get_setup_status(db: Session) -> SetupStatusResponse:
-    state = _get_setup_state_record(db)
+    state = ensure_completed_setup_state_for_existing_users(db)
     payload = _merged_payload(state.payload if state else None)
     platform_admin_count = count_platform_admins(db)
-    is_initialized = bool(state and state.status == SETUP_STATUS_COMPLETED) or (
-        state is None and db.scalar(select(User.id).limit(1)) is not None
-    )
+    is_initialized = bool(state and state.status == SETUP_STATUS_COMPLETED)
     has_staged_progress = bool(
         state
         and state.status != SETUP_STATUS_COMPLETED

@@ -88,6 +88,12 @@ function getPrimaryBarcode(value: string) {
   return splitBarcodes(value)[0] ?? "";
 }
 
+function buildRequestKey(name: string, barcode: string) {
+  const normalizedName = name.trim().toLowerCase();
+  const normalizedBarcode = barcode.trim();
+  return normalizedName || normalizedBarcode ? `${normalizedName}|${normalizedBarcode}` : "";
+}
+
 function normalizeTagValue(value: string) {
   return value.trim();
 }
@@ -149,7 +155,9 @@ export function PantryAddEntryDialog({
   );
   const [showOptionalDetails, setShowOptionalDetails] = useState(entryMode === "manual");
   const duplicateCheckRequestIdRef = useRef(0);
-  const lastBarcodeLookupValueRef = useRef("");
+  const enrichmentLookupRequestIdRef = useRef(0);
+  const lastDuplicateCheckKeyRef = useRef("");
+  const lastEnrichmentLookupKeyRef = useRef("");
 
   const selectedCandidate =
     lookupPreview?.candidates.find(
@@ -167,6 +175,11 @@ export function PantryAddEntryDialog({
     setLookupStatus(null);
     setLookupSuccessMessage(null);
     setSelectedEnrichmentSourceProductId(null);
+  }
+
+  function resetLookupGuards() {
+    lastDuplicateCheckKeyRef.current = "";
+    lastEnrichmentLookupKeyRef.current = "";
   }
 
   function clearDuplicateState() {
@@ -217,9 +230,15 @@ export function PantryAddEntryDialog({
     if (!candidateName && !candidateBarcode) {
       clearDuplicateState();
       setDuplicateCheckPending(false);
+      lastDuplicateCheckKeyRef.current = "";
       return;
     }
 
+    const requestKey = buildRequestKey(candidateName, candidateBarcode);
+    if (requestKey && requestKey === lastDuplicateCheckKeyRef.current) {
+      return;
+    }
+    lastDuplicateCheckKeyRef.current = requestKey;
     setDuplicateCheckPending(true);
 
     try {
@@ -238,6 +257,7 @@ export function PantryAddEntryDialog({
       if (duplicateCheckRequestIdRef.current !== requestId) {
         return;
       }
+      lastDuplicateCheckKeyRef.current = "";
       setError(
         requestError instanceof Error ? requestError.message : "Could not check for duplicates.",
       );
@@ -249,7 +269,6 @@ export function PantryAddEntryDialog({
   }
 
   async function findProductDetails(
-    source: "manual" | "blur" = "manual",
     overrides?: {
       name?: string;
       barcodesInput?: string;
@@ -261,6 +280,13 @@ export function PantryAddEntryDialog({
       return;
     }
 
+    const requestKey = buildRequestKey(candidateName, candidateBarcode);
+    if (requestKey && requestKey === lastEnrichmentLookupKeyRef.current) {
+      return;
+    }
+    lastEnrichmentLookupKeyRef.current = requestKey;
+    const requestId = enrichmentLookupRequestIdRef.current + 1;
+    enrichmentLookupRequestIdRef.current = requestId;
     setLookupPending(true);
     setError(null);
 
@@ -273,6 +299,9 @@ export function PantryAddEntryDialog({
         },
       );
 
+      if (enrichmentLookupRequestIdRef.current !== requestId) {
+        return;
+      }
       setLookupPreview(response);
       const shouldAutoApply =
         response.candidates.length === 1 || response.lookup_strategy === "barcode";
@@ -292,11 +321,11 @@ export function PantryAddEntryDialog({
       setLookupSuccessMessage(
         nextSelectedSourceProductId ? "Open Food Facts data found and ready to apply." : null,
       );
-
-      if (source === "blur") {
-        lastBarcodeLookupValueRef.current = candidateBarcode;
-      }
     } catch (requestError) {
+      if (enrichmentLookupRequestIdRef.current !== requestId) {
+        return;
+      }
+      lastEnrichmentLookupKeyRef.current = "";
       setLookupPreview(null);
       setSelectedEnrichmentSourceProductId(null);
       setLookupStatus(null);
@@ -304,7 +333,9 @@ export function PantryAddEntryDialog({
         requestError instanceof Error ? requestError.message : "Could not look up product details.",
       );
     } finally {
-      setLookupPending(false);
+      if (enrichmentLookupRequestIdRef.current === requestId) {
+        setLookupPending(false);
+      }
     }
   }
 
@@ -315,7 +346,7 @@ export function PantryAddEntryDialog({
     resetEnrichmentPreview();
     setIsInlineScannerOpen(entryMode === "scan");
     setShowOptionalDetails(entryMode === "manual");
-    lastBarcodeLookupValueRef.current = "";
+    resetLookupGuards();
     router.refresh();
     await onCompleted?.(response);
     window.setTimeout(() => onClose(), 250);
@@ -399,6 +430,7 @@ export function PantryAddEntryDialog({
   function handleDetectedBarcode(barcode: string, mode: "inline" | "dialog") {
     clearDuplicateState();
     resetEnrichmentPreview();
+    resetLookupGuards();
     setStatusMessage(null);
 
     const nextBarcodeInput =
@@ -410,9 +442,8 @@ export function PantryAddEntryDialog({
       ...current,
       barcodesInput: nextBarcodeInput,
     }));
-    lastBarcodeLookupValueRef.current = "";
     void runDuplicateCheck({ name: form.name, barcodesInput: nextBarcodeInput });
-    void findProductDetails("manual", { name: form.name, barcodesInput: nextBarcodeInput });
+    void findProductDetails({ name: form.name, barcodesInput: nextBarcodeInput });
   }
 
   return (
@@ -491,13 +522,14 @@ export function PantryAddEntryDialog({
                       onChange={(event) => {
                         clearDuplicateState();
                         resetEnrichmentPreview();
+                        resetLookupGuards();
                         setForm((current) => ({ ...current, barcodesInput: event.target.value }));
                       }}
                       onBlur={() => {
                         const trimmedBarcode = getPrimaryBarcode(form.barcodesInput);
                         void runDuplicateCheck();
-                        if (trimmedBarcode && trimmedBarcode !== lastBarcodeLookupValueRef.current) {
-                          void findProductDetails("blur");
+                        if (trimmedBarcode) {
+                          void findProductDetails();
                         }
                       }}
                       placeholder="5000111046244"
@@ -529,6 +561,7 @@ export function PantryAddEntryDialog({
                   onChange={(event) => {
                     clearDuplicateState();
                     resetEnrichmentPreview();
+                    resetLookupGuards();
                     setForm((current) => ({ ...current, name: event.target.value }));
                   }}
                   onBlur={() => void runDuplicateCheck()}

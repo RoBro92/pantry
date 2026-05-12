@@ -1,6 +1,7 @@
 import argparse
 import json
-import time
+import signal
+import threading
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -13,6 +14,22 @@ from app.services.runtime_status import publish_worker_heartbeat
 from worker.core.config import get_settings
 from worker.core.logging import configure_logging
 from worker.status import build_status_snapshot
+
+
+class ShutdownController:
+    def __init__(self) -> None:
+        self._event = threading.Event()
+
+    @property
+    def requested(self) -> bool:
+        return self._event.is_set()
+
+    def request(self, signum: int, _frame) -> None:
+        structlog.get_logger(__name__).info("worker.shutdown.requested", signal=signum)
+        self._event.set()
+
+    def wait(self, timeout: int) -> bool:
+        return self._event.wait(timeout)
 
 
 def main() -> None:
@@ -29,6 +46,9 @@ def main() -> None:
     )
     logger = structlog.get_logger(__name__)
     started_at = datetime.now(timezone.utc)
+    shutdown = ShutdownController()
+    signal.signal(signal.SIGTERM, shutdown.request)
+    signal.signal(signal.SIGINT, shutdown.request)
 
     if args.status:
         print(json.dumps(build_status_snapshot(settings)))
@@ -77,7 +97,7 @@ def main() -> None:
         logger.info("worker.exiting", reason="single_run", processed_job=processed)
         return
 
-    while True:
+    while not shutdown.requested:
         processed = (
             process_next_import_job()
             or process_next_recipe_url_import()
@@ -101,7 +121,10 @@ def main() -> None:
             status="idle",
             poll_interval_seconds=settings.poll_interval_seconds,
         )
-        time.sleep(settings.poll_interval_seconds)
+        if shutdown.wait(settings.poll_interval_seconds):
+            break
+
+    logger.info("worker.exiting", reason="shutdown_requested")
 
 
 if __name__ == "__main__":

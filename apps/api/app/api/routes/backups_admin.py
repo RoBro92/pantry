@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
@@ -100,6 +100,7 @@ async def post_restore_upload(
 @router.post("/restore", response_model=BackupRestoreResponse)
 def post_restore_backup(
     payload: BackupRestoreRequest,
+    request: Request,
     current_user: User = Depends(require_platform_admin),
     db: Session = Depends(get_db_session),
 ):
@@ -120,6 +121,7 @@ def post_restore_backup(
     except ValueError as exc:
         raise _bad_request(exc) from exc
 
+    request.session.clear()
     return BackupRestoreResponse(
         restored=True,
         requires_reauthentication=True,

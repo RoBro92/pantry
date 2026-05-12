@@ -109,6 +109,10 @@ def validate_production_settings(settings: "AppSettings") -> None:
         )
     if settings.settings_encryption_key == settings.session_secret_key:
         raise ValueError("SETTINGS_ENCRYPTION_KEY must be different from SESSION_SECRET_KEY in production.")
+    if not settings.session_https_only:
+        raise ValueError("SESSION_HTTPS_ONLY must be true in production.")
+    if settings.session_same_site.strip().lower() not in {"lax", "strict", "none"}:
+        raise ValueError("SESSION_SAME_SITE must be one of lax, strict, or none in production.")
 
 
 def _resolve_app_version() -> str:

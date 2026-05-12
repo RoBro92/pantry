@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
@@ -15,7 +15,9 @@ from app.models.household import Household
 from app.models.import_job import ImportJob
 from app.models.instance_setting import InstanceSetting
 from app.models.membership import Membership
+from app.models.product_intelligence_run import ProductIntelligenceRun
 from app.models.recipe import Recipe
+from app.models.recipe_url_import import RecipeURLImport
 from app.models.user import User
 from app.models.usage_counter import UsageCounter
 from app.services.ai_config import upsert_instance_provider_config
@@ -298,6 +300,42 @@ def test_platform_admin_diagnostics_report_uses_measured_data(client, db_session
             note=None,
         )
     )
+    db_session.add(
+        ImportJob(
+            household_id=household.id,
+            requested_by_user_id=member.id,
+            source_type="upload",
+            status="processing",
+            source_label="stale-receipt.csv",
+            note=None,
+            processing_started_at=datetime.now(timezone.utc) - timedelta(hours=1),
+        )
+    )
+    db_session.add(
+        RecipeURLImport(
+            household_id=household.id,
+            requested_by_user_id=member.id,
+            source_url="https://recipes.example/soup",
+            normalized_url="https://recipes.example/soup",
+            status="processing",
+            note="Fetching recipe metadata.",
+        )
+    )
+    db_session.add(
+        ProductIntelligenceRun(
+            household_id=household.id,
+            requested_by_user_id=member.id,
+            provider_type="ollama",
+            source_model="llama3.2",
+            mode="all",
+            status="failed",
+            target_product_external_ids=[product.external_id],
+            target_product_count=1,
+            items_payload=[],
+            events_payload=[],
+            diagnostics_payload={},
+        )
+    )
     db_session.commit()
 
     upsert_instance_provider_config(
@@ -368,10 +406,13 @@ def test_platform_admin_diagnostics_report_uses_measured_data(client, db_session
     assert payload["counts"]["products"] == 1
     assert payload["counts"]["stock_lots"] == 1
     assert payload["counts"]["recipes"] == 1
-    assert payload["counts"]["import_jobs"] == 1
+    assert payload["counts"]["import_jobs"] == 2
     assert payload["worker"]["status"] == "ok"
     assert payload["redis"]["status"] == "ok"
     assert payload["queue"]["queued_import_jobs"] == 1
+    assert payload["queue"]["stale_processing_import_jobs"] == 1
+    assert payload["queue"]["recipe_url_imports"]["processing"] == 1
+    assert payload["queue"]["product_intelligence_runs"]["failed"] == 1
     assert payload["smtp"]["configured"] is True
     assert payload["release_check"]["status"] == "update_available"
     assert payload["release_check"]["latest_version"] == "0.1.1"
@@ -808,6 +849,7 @@ def test_platform_admin_can_export_and_restore_instance_backups(client, db_sessi
     restore_payload = restore_response.json()
     assert restore_payload["restored"] is True
     assert restore_payload["requires_reauthentication"] is True
+    assert client.get("/api/auth/session").status_code == 401
 
     restored_users = db_session.scalars(select(User).order_by(User.email)).all()
     assert [user.email for user in restored_users] == ["backup-admin@example.com", "backup-member@example.com"]

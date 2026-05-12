@@ -82,7 +82,7 @@ RUN_STATUS_PARTIALLY_COMPLETED = "partially_completed"
 
 RUN_TERMINAL_STATUSES = {RUN_STATUS_COMPLETED, RUN_STATUS_FAILED, RUN_STATUS_PARTIALLY_COMPLETED}
 RUN_PROGRESS_ITEM_STATUSES = {"classified", "reclassified", "skipped", "failed"}
-RUN_RESUME_TIMEOUT = timedelta(minutes=5)
+RUN_RESUME_TIMEOUT = timedelta(minutes=15)
 RUN_EVENT_LIMIT = 24
 
 
@@ -527,6 +527,7 @@ def _process_claimed_run(db: Session, run: ProductIntelligenceRun) -> None:
                 db.add(run)
                 db.commit()
                 break
+            _heartbeat_product_intelligence_run_lease(db, run)
             time.sleep(profile.retry.cooldown_after_exhausted_seconds)
             continue
         except Exception as exc:
@@ -546,6 +547,7 @@ def _process_claimed_run(db: Session, run: ProductIntelligenceRun) -> None:
             continue
 
         if pending_candidates and profile.pause_between_batches_seconds > 0:
+            _heartbeat_product_intelligence_run_lease(db, run)
             time.sleep(profile.pause_between_batches_seconds)
         run = _load_run_by_id(db, run_id=run.id) or run
 
@@ -566,6 +568,7 @@ def _process_batch(
 ) -> None:
     batch_path = batch[0].path if batch else PRODUCT_INTELLIGENCE_PATH_FULL_AI
     parsed_items = _execute_batch_with_retry(
+        db=db,
         adapter=adapter,
         provider_type=provider_type,
         model=model,
@@ -664,6 +667,7 @@ def _process_batch(
 
 def _execute_batch_with_retry(
     *,
+    db: Session,
     adapter,
     provider_type: str,
     model: str,
@@ -681,6 +685,7 @@ def _execute_batch_with_retry(
     while True:
         attempts += 1
         try:
+            _heartbeat_product_intelligence_run_lease(db, run)
             system_prompt = (
                 "You classify pantry products into structured recipe-matching metadata. "
                 "Only use the supplied evidence for each product. "
@@ -785,6 +790,7 @@ def _execute_batch_with_retry(
                 ),
                 batch_index=batch_index,
             )
+            _heartbeat_product_intelligence_run_lease(db, run)
             time.sleep(delay)
 
 
@@ -931,6 +937,14 @@ def _finish_run(db: Session, run: ProductIntelligenceRun, *, actor: User | None)
             "rate_limit_count": diagnostics.rate_limit_count,
         },
     )
+    db.commit()
+
+
+def _heartbeat_product_intelligence_run_lease(db: Session, run: ProductIntelligenceRun) -> None:
+    if run.status in RUN_TERMINAL_STATUSES:
+        return
+    run.last_progress_at = utc_now()
+    db.add(run)
     db.commit()
 
 

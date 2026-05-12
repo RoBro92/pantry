@@ -4,7 +4,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import Date, DateTime, ForeignKey, Numeric, String
+from sqlalchemy import CheckConstraint, Date, DateTime, ForeignKey, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
@@ -13,6 +13,7 @@ from app.models.identifiers import generate_external_id
 
 class StockLot(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "stock_lots"
+    __table_args__ = (CheckConstraint("quantity >= 0", name="ck_stock_lots_quantity_non_negative"),)
 
     external_id: Mapped[str] = mapped_column(
         String(32), default=lambda: generate_external_id("lot"), unique=True, nullable=False

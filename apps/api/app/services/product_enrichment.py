@@ -31,8 +31,11 @@ class ProductEnrichmentError(ValueError):
     pass
 
 
+ADVISORY_OPEN_FOOD_FACTS_TIMEOUT_SECONDS = 1.25
+
+
 def get_default_open_food_facts_client() -> OpenFoodFactsClient:
-    return OpenFoodFactsClient()
+    return OpenFoodFactsClient(timeout_seconds=ADVISORY_OPEN_FOOD_FACTS_TIMEOUT_SECONDS)
 
 
 def get_primary_enrichment(product: Product, *, source_name: str = OPEN_FOOD_FACTS_SOURCE) -> ProductEnrichment | None:

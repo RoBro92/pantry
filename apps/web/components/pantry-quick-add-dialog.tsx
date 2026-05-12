@@ -56,6 +56,12 @@ function normalizeBarcodeValue(value: string) {
   return value.trim().replace(/[\s,]+/g, "");
 }
 
+function buildHydrationKey(barcode: string, productName: string) {
+  const normalizedBarcode = normalizeBarcodeValue(barcode);
+  const normalizedName = productName.trim().toLowerCase();
+  return normalizedBarcode || normalizedName ? `${normalizedBarcode}|${normalizedName}` : "";
+}
+
 function splitQueuedBarcodes(value: string) {
   return value
     .split(/[\s,]+/)
@@ -192,6 +198,8 @@ export function PantryQuickAddDialog({
   const router = useRouter();
   const captureInputRef = useRef<HTMLInputElement | null>(null);
   const itemsRef = useRef<QuickAddItem[]>([]);
+  const hydrationRequestIdsRef = useRef<Record<string, number>>({});
+  const lastHydrationKeyByItemRef = useRef<Record<string, string>>({});
   const [captureValue, setCaptureValue] = useState("");
   const [captureError, setCaptureError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -261,9 +269,11 @@ export function PantryQuickAddDialog({
     {
       barcode,
       productName,
+      force = false,
     }: {
       barcode: string;
       productName: string;
+      force?: boolean;
     },
   ) {
     const normalizedBarcode = normalizeBarcodeValue(barcode);
@@ -280,6 +290,14 @@ export function PantryQuickAddDialog({
       });
       return;
     }
+
+    const hydrationKey = buildHydrationKey(normalizedBarcode, normalizedName);
+    if (!force && hydrationKey && lastHydrationKeyByItemRef.current[itemId] === hydrationKey) {
+      return;
+    }
+    lastHydrationKeyByItemRef.current[itemId] = hydrationKey;
+    const requestId = (hydrationRequestIdsRef.current[itemId] ?? 0) + 1;
+    hydrationRequestIdsRef.current[itemId] = requestId;
 
     mutateItems((current) =>
       current.map((item) =>
@@ -324,6 +342,10 @@ export function PantryQuickAddDialog({
         requestError instanceof Error ? requestError.message : "Could not look up product details.";
     }
 
+    if (hydrationRequestIdsRef.current[itemId] !== requestId) {
+      return;
+    }
+
     try {
       duplicateResponse = await postToApi<PantryDuplicateCheckResponse>(
         `/api/households/${householdExternalId}/pantry/entries/duplicate-check`,
@@ -339,6 +361,10 @@ export function PantryQuickAddDialog({
             ? requestError.message
             : "Could not check for existing product records.";
       }
+    }
+
+    if (hydrationRequestIdsRef.current[itemId] !== requestId) {
+      return;
     }
 
     mutateItems((current) =>
@@ -430,6 +456,8 @@ export function PantryQuickAddDialog({
   }
 
   function removeItem(itemId: string) {
+    delete hydrationRequestIdsRef.current[itemId];
+    delete lastHydrationKeyByItemRef.current[itemId];
     mutateItems((current) => current.filter((item) => item.id !== itemId));
     setStatusMessage("Removed that item from the scan queue.");
   }
@@ -474,6 +502,7 @@ export function PantryQuickAddDialog({
     await hydrateQuickAddItem(currentItem.id, {
       barcode: currentItem.barcode,
       productName: currentItem.name,
+      force: true,
     });
   }
 
@@ -783,7 +812,8 @@ export function PantryQuickAddDialog({
                       <span>Barcode</span>
                       <input
                         value={currentItem.barcode}
-                        onChange={(event) =>
+                        onChange={(event) => {
+                          delete lastHydrationKeyByItemRef.current[currentItem.id];
                           updateItem(currentItem.id, {
                             barcode: normalizeBarcodeValue(event.target.value),
                             duplicateMatch: null,
@@ -792,8 +822,8 @@ export function PantryQuickAddDialog({
                             lookupStatus: null,
                             selectedEnrichmentSourceProductId: null,
                             error: null,
-                          })
-                        }
+                          });
+                        }}
                         onKeyDown={(event) => {
                           if (event.key !== "Enter") {
                             return;
@@ -813,7 +843,8 @@ export function PantryQuickAddDialog({
                       <span>Product name</span>
                       <input
                         value={currentItem.name}
-                        onChange={(event) =>
+                        onChange={(event) => {
+                          delete lastHydrationKeyByItemRef.current[currentItem.id];
                           updateItem(currentItem.id, {
                             name: event.target.value,
                             duplicateMatch: null,
@@ -822,8 +853,8 @@ export function PantryQuickAddDialog({
                             lookupStatus: null,
                             selectedEnrichmentSourceProductId: null,
                             error: null,
-                          })
-                        }
+                          });
+                        }}
                         placeholder="Open Food Facts will try to fill this"
                       />
                     </label>

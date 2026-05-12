@@ -46,8 +46,9 @@ def _load_import_job(
     *,
     household: Household,
     import_external_id: str,
+    for_update: bool = False,
 ) -> ImportJob | None:
-    return db.scalar(
+    statement = (
         select(ImportJob)
         .where(ImportJob.household_id == household.id)
         .where(ImportJob.external_id == import_external_id)
@@ -58,7 +59,11 @@ def _load_import_job(
             selectinload(ImportJob.lines).selectinload(ImportLine.suggested_product),
             selectinload(ImportJob.lines).selectinload(ImportLine.confirmed_stock_lot),
         )
+        .execution_options(populate_existing=True)
     )
+    if for_update:
+        statement = statement.with_for_update()
+    return db.scalar(statement)
 
 
 def get_import_job_by_external_id(
@@ -271,7 +276,11 @@ def update_import_line(
 
 
 def _iter_pending_confirmation_lines(lines: Iterable[ImportLine]) -> list[ImportLine]:
-    return [line for line in lines if line.status not in {"ignored", "confirmed"}]
+    return [
+        line
+        for line in lines
+        if line.status not in {"ignored", "confirmed"} and line.confirmed_stock_lot_id is None
+    ]
 
 
 def confirm_import_job(
@@ -283,7 +292,12 @@ def confirm_import_job(
     location_external_id: str,
     purchased_on: date | None,
 ) -> ImportJob:
-    import_job = _load_import_job(db, household=household, import_external_id=import_external_id)
+    import_job = _load_import_job(
+        db,
+        household=household,
+        import_external_id=import_external_id,
+        for_update=True,
+    )
     if import_job is None:
         raise ValueError("Import job not found.")
     if import_job.status in {"queued", "processing"}:
@@ -291,7 +305,7 @@ def confirm_import_job(
     if import_job.status == "failed":
         raise ValueError("Failed imports cannot be confirmed.")
     if import_job.status == "confirmed":
-        raise ValueError("Import job has already been confirmed.")
+        return import_job
     if not import_job.lines:
         raise ValueError("Import job has no lines to confirm.")
 

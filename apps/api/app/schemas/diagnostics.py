@@ -45,9 +45,13 @@ class QueueDiagnosticsSummary(BaseModel):
     backend: str
     queued_import_jobs: int
     processing_import_jobs: int
+    stale_processing_import_jobs: int
     failed_import_jobs: int
     completed_import_jobs: int
     confirmed_import_jobs: int
+    imports: dict[str, int]
+    recipe_url_imports: dict[str, int]
+    product_intelligence_runs: dict[str, int]
     message: str
 
 

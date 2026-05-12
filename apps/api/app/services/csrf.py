@@ -24,11 +24,6 @@ def _origin_from_url(value: str | None) -> str | None:
     return f"{parsed.scheme.lower()}://{host.lower()}{port}"
 
 
-def _request_origin(request: Request) -> str:
-    host = request.headers.get("host") or request.url.netloc
-    return f"{request.url.scheme}://{host.lower()}"
-
-
 def request_passes_csrf_origin_check(request: Request, settings: AppSettings) -> bool:
     if not settings.csrf_protection_enabled:
         return True
@@ -43,6 +38,4 @@ def request_passes_csrf_origin_check(request: Request, settings: AppSettings) ->
     if candidate is None:
         return False
 
-    allowed_origins = set(settings.csrf_allowed_origins)
-    allowed_origins.add(_request_origin(request))
-    return candidate in allowed_origins
+    return candidate in settings.csrf_allowed_origins
