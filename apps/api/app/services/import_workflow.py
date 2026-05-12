@@ -192,7 +192,7 @@ def update_import_line(
     line_external_id: str,
     updates: dict[str, object],
 ) -> ImportJob:
-    import_job = _load_import_job(db, household=household, import_external_id=import_external_id)
+    import_job = _load_import_job(db, household=household, import_external_id=import_external_id, for_update=True)
     if import_job is None:
         raise ValueError("Import job not found.")
     if import_job.status in {"queued", "processing"}:

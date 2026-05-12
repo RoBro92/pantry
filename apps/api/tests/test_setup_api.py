@@ -14,6 +14,7 @@ from app.models.location_group import LocationGroup
 from app.models.membership import Membership
 from app.models.setup_state import SetupState
 from app.models.user import User
+from app.services.auth import create_user
 from app.services.ai_providers import AIProviderHealth
 from app.services.secrets import decrypt_secret
 from app.services.smtp import SMTPTestResult
@@ -102,6 +103,36 @@ def test_setup_wizard_persists_staged_progress(client):
     assert step_states["public_url"] is False
     assert step_states["ai"] is False
     assert step_states["smtp"] is False
+
+
+def test_setup_wizard_closes_existing_incomplete_setup_state_when_users_exist(client, db_session):
+    create_user(
+        db_session,
+        email="existing-user@example.com",
+        password="correct horse battery",
+        display_name="Existing User",
+    )
+    db_session.add(
+        SetupState(
+            scope_key="instance",
+            status="in_progress",
+            payload={"welcome_acknowledged": True, "admin_user": {"login": "draft"}},
+            encrypted_ai_api_key="encrypted-ai-key",
+            encrypted_smtp_password="encrypted-smtp-password",
+        )
+    )
+    db_session.commit()
+
+    response = client.get("/api/setup/wizard")
+
+    assert response.status_code == 403
+    setup_state = db_session.scalar(select(SetupState))
+    assert setup_state is not None
+    assert setup_state.status == "completed"
+    assert setup_state.payload == {}
+    assert setup_state.encrypted_ai_api_key is None
+    assert setup_state.encrypted_smtp_password is None
+    assert setup_state.completed_at is not None
 
 
 def test_setup_wizard_prefills_local_ai_and_smtp_from_env(client, db_session, monkeypatch):

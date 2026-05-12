@@ -6,9 +6,11 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
+from fastapi.testclient import TestClient
 from sqlalchemy import delete, func, select
 
 from app.core.config import get_settings
+from app.main import app
 from app.domain.ai import AI_HEALTH_HEALTHY
 from app.models.ai_provider_config import AIProviderConfig
 from app.models.household import Household
@@ -811,6 +813,9 @@ def test_platform_admin_can_export_and_restore_instance_backups(client, db_sessi
     db_session.commit()
 
     login(client, email="backup-admin@example.com")
+    second_client = TestClient(app, headers={"origin": "http://testserver"})
+    login(second_client, email="backup-admin@example.com")
+    assert second_client.get("/api/auth/session").status_code == 200
 
     export_response = client.get("/api/platform-admin/backups/export/instance")
     assert export_response.status_code == 200
@@ -850,9 +855,13 @@ def test_platform_admin_can_export_and_restore_instance_backups(client, db_sessi
     assert restore_payload["restored"] is True
     assert restore_payload["requires_reauthentication"] is True
     assert client.get("/api/auth/session").status_code == 401
+    assert second_client.get("/api/auth/session").status_code == 401
 
+    db_session.expire_all()
     restored_users = db_session.scalars(select(User).order_by(User.email)).all()
     assert [user.email for user in restored_users] == ["backup-admin@example.com", "backup-member@example.com"]
+    assert all(user.session_version >= 1 for user in restored_users)
+    second_client.close()
     assert db_session.scalar(select(func.count(Household.id))) == 1
     assert db_session.scalar(select(User).where(User.email == "extra-user@example.com")) is None
     assert db_session.scalar(select(Household).where(Household.name == "Extra Household")) is None

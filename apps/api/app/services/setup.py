@@ -232,7 +232,18 @@ def _has_existing_users(db: Session) -> bool:
 
 def ensure_completed_setup_state_for_existing_users(db: Session) -> SetupState | None:
     state = _get_setup_state_record(db)
-    if state is not None or not _has_existing_users(db):
+    if not _has_existing_users(db):
+        return state
+    if state is not None:
+        if state.status != SETUP_STATUS_COMPLETED:
+            state.status = SETUP_STATUS_COMPLETED
+            state.payload = {}
+            state.encrypted_ai_api_key = None
+            state.encrypted_smtp_password = None
+            state.completed_at = state.completed_at or _utc_now()
+            db.add(state)
+            db.commit()
+            db.refresh(state)
         return state
 
     state = SetupState(

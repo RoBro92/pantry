@@ -10,6 +10,7 @@ services:
       - ALL
     environment:
       NODE_ENV: production
+      HOSTNAME: 0.0.0.0
       NEXT_PUBLIC_APP_VERSION: ${PANTRO_VERSION:-0.2.1}
       INTERNAL_API_BASE_URL: ${INTERNAL_API_BASE_URL:-http://api:8000}
       INTERNAL_API_PROXY_TOKEN: ${INTERNAL_API_PROXY_TOKEN:-}

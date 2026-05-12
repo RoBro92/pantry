@@ -23,8 +23,20 @@ depends_on = None
 def upgrade() -> None:
     bind = op.get_bind()
     has_users = bind.scalar(sa.text("SELECT 1 FROM users LIMIT 1")) is not None
+    if not has_users:
+        return
+
     has_setup_state = bind.scalar(sa.text("SELECT 1 FROM setup_states WHERE scope_key = 'instance' LIMIT 1")) is not None
-    if not has_users or has_setup_state:
+    if has_setup_state:
+        op.execute(
+            sa.text(
+                "UPDATE setup_states "
+                "SET status = 'completed', payload = '{}', encrypted_ai_api_key = NULL, "
+                "encrypted_smtp_password = NULL, completed_at = COALESCE(completed_at, CURRENT_TIMESTAMP), "
+                "updated_at = CURRENT_TIMESTAMP "
+                "WHERE scope_key = 'instance' AND status <> 'completed'"
+            )
+        )
         return
 
     setup_states = sa.table(

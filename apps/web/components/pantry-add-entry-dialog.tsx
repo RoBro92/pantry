@@ -224,8 +224,6 @@ export function PantryAddEntryDialog({
   }) {
     const candidateName = (overrides?.name ?? form.name).trim();
     const candidateBarcode = getPrimaryBarcode(overrides?.barcodesInput ?? form.barcodesInput);
-    const requestId = duplicateCheckRequestIdRef.current + 1;
-    duplicateCheckRequestIdRef.current = requestId;
 
     if (!candidateName && !candidateBarcode) {
       clearDuplicateState();
@@ -239,6 +237,8 @@ export function PantryAddEntryDialog({
       return;
     }
     lastDuplicateCheckKeyRef.current = requestKey;
+    const requestId = duplicateCheckRequestIdRef.current + 1;
+    duplicateCheckRequestIdRef.current = requestId;
     setDuplicateCheckPending(true);
 
     try {

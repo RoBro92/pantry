@@ -39,7 +39,7 @@ The installer:
 
 When the install completes, open the configured public URL.
 
-For production use, serve Pantro through HTTPS. Production API startup now requires `SESSION_HTTPS_ONLY=true` so signed session cookies are only sent over secure connections. Browser camera scanning and installable PWA behaviour also require a secure context in production; localhost remains supported for development.
+For production use, serve Pantro through HTTPS. Production API startup now requires `SESSION_HTTPS_ONLY=true` so signed session cookies are only sent over secure connections. The installer refuses non-HTTPS public URLs, and the updater stops before changing the stack if an existing `.env` still points browser traffic at `http://`. Browser camera scanning and installable PWA behaviour also require a secure context in production; localhost remains supported for development.
 
 ## Manual Install
 
@@ -118,7 +118,9 @@ Keep your existing `pantro.yml` and `pantro.env.example` if you manage them manu
 
 If you are upgrading an older Pantry-named install, `./update-pantry.sh`, `pantry.yml`, and `pantry.env.example` remain supported as compatibility aliases for this migration.
 
-The update script refreshes release assets by default, updates `PANTRO_VERSION`, pulls images, runs migrations, restarts services, and runs the bundled health check.
+The update script refreshes release assets by default, updates `PANTRO_VERSION`, sets `SESSION_HTTPS_ONLY=true`, pulls images, runs migrations, restarts services, and runs the bundled health check. Before updating older installs, set `PUBLIC_BROWSER_BASE_URL` or `WEB_APP_URL` to the HTTPS URL served by your reverse proxy.
+
+Before upgrading to the release that introduces the stock quantity constraint, repair any rows where `stock_lots.quantity < 0`. The migration stops with an explicit error if negative stock quantities are present, because Pantro now enforces non-negative stock at the database layer.
 
 For a concise maintainer and operator checklist, see [docs/RELEASE_RUNBOOK.md](RELEASE_RUNBOOK.md).
 

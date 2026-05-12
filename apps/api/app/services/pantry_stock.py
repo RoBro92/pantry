@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.location import Location
@@ -122,6 +122,29 @@ def _find_mergeable_stock_lot(
     return db.scalar(statement)
 
 
+def _lock_stock_lot_merge_key(
+    db: Session,
+    *,
+    household_id,
+    product_id,
+    location_id,
+    unit: str,
+    expires_on: date | None,
+) -> None:
+    if db.bind is None or db.bind.dialect.name != "postgresql":
+        return
+    lock_key = "|".join(
+        [
+            str(household_id),
+            str(product_id),
+            str(location_id),
+            unit,
+            expires_on.isoformat() if expires_on is not None else "",
+        ]
+    )
+    db.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:lock_key, 0))"), {"lock_key": lock_key})
+
+
 def _merge_into_stock_lot(
     lot: StockLot,
     *,
@@ -172,6 +195,14 @@ def add_stock_lot(
     if purchased_on and expires_on and expires_on < purchased_on:
         raise ValueError("Expiry date cannot be earlier than purchase date.")
 
+    _lock_stock_lot_merge_key(
+        db,
+        household_id=household.id,
+        product_id=product.id,
+        location_id=location.id,
+        unit=normalized_unit,
+        expires_on=expires_on,
+    )
     merge_target = _find_mergeable_stock_lot(
         db,
         household=household,
@@ -768,6 +799,14 @@ def update_stock_lot(
     if purchased_on and expires_on and expires_on < purchased_on:
         raise ValueError("Expiry date cannot be earlier than purchase date.")
 
+    _lock_stock_lot_merge_key(
+        db,
+        household_id=household.id,
+        product_id=lot.product_id,
+        location_id=location.id,
+        unit=lot.unit,
+        expires_on=expires_on,
+    )
     merge_target = _find_mergeable_stock_lot(
         db,
         household=household,
@@ -865,6 +904,14 @@ def move_stock_lot(
 
     created_lot: StockLot | None = None
     source_location = lot.location
+    _lock_stock_lot_merge_key(
+        db,
+        household_id=household.id,
+        product_id=lot.product_id,
+        location_id=destination.id,
+        unit=lot.unit,
+        expires_on=lot.expires_on,
+    )
     merge_target = _find_mergeable_stock_lot(
         db,
         household=household,

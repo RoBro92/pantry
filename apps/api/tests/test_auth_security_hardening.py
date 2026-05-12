@@ -507,10 +507,16 @@ def test_csrf_origin_protection_rejects_missing_and_invalid_origins(db_session):
         headers={"origin": "https://evil.example"},
         json={"email": "csrf-reject-admin@example.com", "password": PASSWORD},
     )
+    malformed_origin = raw_client.post(
+        "/api/auth/login",
+        headers={"origin": "https://trusted.example:bad"},
+        json={"email": "csrf-reject-admin@example.com", "password": PASSWORD},
+    )
     safe_method = raw_client.get("/api/health")
 
     assert missing_origin.status_code == 403
     assert invalid_origin.status_code == 403
+    assert malformed_origin.status_code == 403
     assert missing_origin.json()["detail"] == invalid_origin.json()["detail"]
     assert safe_method.status_code == 200
 
