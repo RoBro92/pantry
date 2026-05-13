@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import type { SessionMembership, SessionResponse } from "../lib/api-types";
 import { LogoutButtonInner } from "./logout-button";
@@ -12,6 +12,7 @@ type AppShellProps = {
 };
 
 type NavItem = {
+  id?: "pantry" | "add" | "shopping" | "recipes" | "more";
   href: string;
   label: string;
   mobileLabel?: string;
@@ -57,18 +58,19 @@ function getHouseholdNavItems(membership: SessionMembership): NavItem[] {
 
   return [
     {
+      id: "pantry",
       href: basePath,
-      label: "Inventory",
-      mobileLabel: "Stock",
+      label: "Pantry",
       isActive: (pathname) => pathname === basePath,
     },
     {
+      id: "shopping",
       href: `${basePath}/shopping-list`,
-      label: "Shopping List",
-      mobileLabel: "Shop",
+      label: "Shopping",
       matchPrefix: `${basePath}/shopping-list`,
     },
     {
+      id: "recipes",
       href: `${basePath}/recipes`,
       label: "Recipes",
       matchPrefix: `${basePath}/recipes`,
@@ -100,11 +102,52 @@ function getCurrentMembership(pathname: string, memberships: SessionMembership[]
 
 export function AppShell({ session, children }: AppShellProps) {
   const pathname = usePathname() ?? "/app";
+  const searchParams = useSearchParams();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const currentMembership = getCurrentMembership(pathname, session.memberships);
   const householdNavItems = currentMembership ? getHouseholdNavItems(currentMembership) : [];
-  const mobileBottomNavItems = currentMembership ? householdNavItems.slice(0, 4) : [];
-  const mobileMenuHouseholdItems = currentMembership ? householdNavItems.slice(4) : [];
+  const currentHouseholdBasePath = currentMembership
+    ? `/app/households/${currentMembership.household_external_id}`
+    : null;
+  const mobileBottomNavItems: NavItem[] = currentHouseholdBasePath
+    ? [
+        {
+          id: "pantry",
+          href: currentHouseholdBasePath,
+          label: "Pantry",
+          isActive: (currentPathname) =>
+            currentPathname === currentHouseholdBasePath && !searchParams.get("add"),
+        },
+        {
+          id: "add",
+          href: `${currentHouseholdBasePath}?add=scan`,
+          label: "Add / Scan",
+          mobileLabel: "Add",
+          isActive: (currentPathname) =>
+            currentPathname === currentHouseholdBasePath && Boolean(searchParams.get("add")),
+        },
+        {
+          id: "shopping",
+          href: `${currentHouseholdBasePath}/shopping-list`,
+          label: "Shopping",
+          mobileLabel: "Shop",
+          matchPrefix: `${currentHouseholdBasePath}/shopping-list`,
+        },
+        {
+          id: "recipes",
+          href: `${currentHouseholdBasePath}/recipes`,
+          label: "Recipes",
+          matchPrefix: `${currentHouseholdBasePath}/recipes`,
+        },
+      ]
+    : [];
+  const mobileMenuHouseholdItems: NavItem[] = currentHouseholdBasePath
+    ? [
+        { href: `${currentHouseholdBasePath}?add=manual`, label: "Add manually" },
+        { href: `${currentHouseholdBasePath}?add=quick`, label: "Bulk scan" },
+        ...householdNavItems.filter((item) => !["pantry", "shopping", "recipes"].includes(item.id ?? "")),
+      ]
+    : [];
   const mobileUtilityNavItems: NavItem[] = [
     { href: "/app", label: "Dashboard" },
     { href: "/app/settings", label: "Settings", matchPrefix: "/app/settings" },
@@ -144,7 +187,7 @@ export function AppShell({ session, children }: AppShellProps) {
               aria-controls="mobile-account-menu-panel"
               onClick={() => setIsMobileMenuOpen((current) => !current)}
             >
-              Menu
+              Account
             </button>
             {isMobileMenuOpen ? (
               <>
@@ -258,6 +301,16 @@ export function AppShell({ session, children }: AppShellProps) {
               </Link>
             );
           })}
+          <button
+            type="button"
+            className={`mobile-bottom-nav-link mobile-bottom-nav-more${isMobileMenuOpen ? " mobile-bottom-nav-link-active" : ""}`}
+            aria-label="More household options"
+            aria-expanded={isMobileMenuOpen}
+            aria-controls="mobile-account-menu-panel"
+            onClick={() => setIsMobileMenuOpen((current) => !current)}
+          >
+            <span className="mobile-bottom-nav-link-text">More</span>
+          </button>
         </nav>
       ) : null}
     </main>

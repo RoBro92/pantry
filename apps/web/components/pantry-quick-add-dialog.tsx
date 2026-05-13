@@ -614,7 +614,7 @@ export function PantryQuickAddDialog({
         description="Scan multiple barcodes first, let Pantro look up Open Food Facts data in the background, then review each queued item one at a time before saving the whole batch."
         onClose={onClose}
         closeOnBackdropClick={false}
-        panelClassName="modal-panel modal-panel-wide"
+        panelClassName="modal-panel modal-panel-wide modal-panel-mobile-shell"
       >
         <div className="stack pantry-quick-add-shell" data-testid="pantry-quick-add-dialog">
           <section className="modal-form-section">
@@ -702,9 +702,9 @@ export function PantryQuickAddDialog({
                 <button
                   type="button"
                   className="ghost-button"
-                  onClick={() => setIsScannerOpen(true)}
+                  onClick={() => setIsScannerOpen((current) => !current)}
                 >
-                  Scan with camera
+                  {isScannerOpen ? "Hide camera" : "Scan with camera"}
                 </button>
                 <button
                   type="button"
@@ -715,6 +715,19 @@ export function PantryQuickAddDialog({
                   Apply defaults to queued items
                 </button>
               </div>
+
+              {isScannerOpen ? (
+                <div className="pantry-quick-add-inline-scanner">
+                  <BarcodeScannerDialog
+                    mode="continuous"
+                    variant="inline"
+                    onClose={() => setIsScannerOpen(false)}
+                    onDetected={(barcode) => {
+                      queueBarcodes(barcode);
+                    }}
+                  />
+                </div>
+              ) : null}
             </div>
 
             {captureError ? <p className="error-text">{captureError}</p> : null}
@@ -1082,7 +1095,7 @@ export function PantryQuickAddDialog({
             </div>
           </section>
 
-          <div className="page-actions">
+          <div className="page-actions pantry-quick-add-submit-actions">
             <button
               type="button"
               className="primary-button"
@@ -1097,15 +1110,6 @@ export function PantryQuickAddDialog({
         </div>
       </ModalShell>
 
-      {isScannerOpen ? (
-        <BarcodeScannerDialog
-          mode="continuous"
-          onClose={() => setIsScannerOpen(false)}
-          onDetected={(barcode) => {
-            queueBarcodes(barcode);
-          }}
-        />
-      ) : null}
     </>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { PantryAuditEventSummary } from "../lib/api-types";
 import { ModalShell } from "./modal-shell";
 
@@ -10,10 +10,11 @@ type PantryActivityFeedProps = {
 
 type ActivityFilter = "24h" | "1w" | "all";
 
-function formatTimestamp(value: string) {
+function formatTimestamp(value: string, useLocalTime: boolean) {
   return new Date(value).toLocaleString("en-GB", {
     dateStyle: "medium",
     timeStyle: "short",
+    timeZone: useLocalTime ? undefined : "UTC",
   });
 }
 
@@ -31,6 +32,11 @@ function isEventVisible(event: PantryAuditEventSummary, filter: ActivityFilter) 
 export function PantryActivityFeed({ events }: PantryActivityFeedProps) {
   const [filter, setFilter] = useState<ActivityFilter>("24h");
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [useLocalTime, setUseLocalTime] = useState(false);
+
+  useEffect(() => {
+    setUseLocalTime(true);
+  }, []);
 
   const filteredEvents = useMemo(
     () => events.filter((event) => isEventVisible(event, filter)),
@@ -83,7 +89,9 @@ export function PantryActivityFeed({ events }: PantryActivityFeedProps) {
             {visibleEvents.map((event) => (
               <li key={event.external_id} className="activity-feed-item">
                 <div className="activity-feed-time">
-                  <time dateTime={event.occurred_at}>{formatTimestamp(event.occurred_at)}</time>
+                  <time dateTime={event.occurred_at}>
+                    {formatTimestamp(event.occurred_at, useLocalTime)}
+                  </time>
                 </div>
                 <div className="activity-feed-copy">
                   <strong>{event.summary}</strong>
@@ -116,7 +124,9 @@ export function PantryActivityFeed({ events }: PantryActivityFeedProps) {
               {filteredEvents.map((event) => (
                 <li key={event.external_id} className="activity-feed-item">
                   <div className="activity-feed-time">
-                    <time dateTime={event.occurred_at}>{formatTimestamp(event.occurred_at)}</time>
+                    <time dateTime={event.occurred_at}>
+                      {formatTimestamp(event.occurred_at, useLocalTime)}
+                    </time>
                   </div>
                   <div className="activity-feed-copy">
                     <strong>{event.summary}</strong>

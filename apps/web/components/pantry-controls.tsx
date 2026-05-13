@@ -57,6 +57,7 @@ export function PantryControls({
   const [locationExternalId, setLocationExternalId] = useState(filters.location_external_id ?? "");
   const [nearExpiryOnly, setNearExpiryOnly] = useState(filters.near_expiry_only);
   const canAddItems = locations.length > 0;
+  const requestedAddMode = searchParams.get("add");
 
   const hasActiveFilters = Boolean(
     filters.q ||
@@ -76,6 +77,54 @@ export function PantryControls({
     filters.location_external_id,
     filters.near_expiry_only,
   ]);
+
+  useEffect(() => {
+    if (!canAddItems) {
+      return;
+    }
+    if (requestedAddMode === "scan") {
+      setIsManualAddOpen(false);
+      setIsQuickAddOpen(false);
+      setIsScanAddOpen(true);
+      return;
+    }
+    if (requestedAddMode === "manual") {
+      setIsScanAddOpen(false);
+      setIsQuickAddOpen(false);
+      setIsManualAddOpen(true);
+      return;
+    }
+    if (requestedAddMode === "quick") {
+      setIsScanAddOpen(false);
+      setIsManualAddOpen(false);
+      setIsQuickAddOpen(true);
+    }
+  }, [canAddItems, requestedAddMode]);
+
+  function clearAddIntent() {
+    if (!searchParams.has("add")) {
+      return;
+    }
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("add");
+    const url = params.toString() ? `${pathname}?${params.toString()}` : pathname;
+    router.replace(url, { scroll: false });
+  }
+
+  function closeManualAdd() {
+    setIsManualAddOpen(false);
+    clearAddIntent();
+  }
+
+  function closeScanAdd() {
+    setIsScanAddOpen(false);
+    clearAddIntent();
+  }
+
+  function closeQuickAdd() {
+    setIsQuickAddOpen(false);
+    clearAddIntent();
+  }
 
   function pushFilters(
     nextQuery: string,
@@ -118,10 +167,10 @@ export function PantryControls({
       <section className="panel pantry-actions-panel">
         <div className="pantry-actions-header">
           <div className="stack compact-stack">
-            <p className="eyebrow">Inventory</p>
+            <p className="eyebrow">Pantry</p>
             <h1 className="pantry-page-title">{householdName}</h1>
             <p className="section-copy">
-              Add new products, search your pantry and manage locations.
+              Browse stock, scan new items and keep household shopping in sync.
             </p>
           </div>
           <div className="pantry-action-pills pantry-primary-actions">
@@ -157,56 +206,34 @@ export function PantryControls({
           </div>
         </div>
 
-        <div className="pantry-secondary-toolbar">
-          <div className="pantry-secondary-links">
-            <Link
-              href={`/app/households/${householdExternalId}/shopping-list`}
-              className="secondary-link compact-link"
-            >
-              Shopping list
-            </Link>
-            <Link
-              href={`/app/households/${householdExternalId}/recipes`}
-              className="secondary-link compact-link"
-            >
-              Recipes
-            </Link>
-            <Link
-              href={`/app/households/${householdExternalId}/ai`}
-              className="secondary-link compact-link"
-            >
-              Meal suggestions
-            </Link>
-            <Link
-              href={`/app/households/${householdExternalId}/imports`}
-              className="secondary-link compact-link"
-            >
-              Imports
-            </Link>
-          </div>
-
-          <div className="pantry-action-pills pantry-admin-actions">
-            {canAdminister ? (
-              <button type="button" className="ghost-button" onClick={() => setIsRoomOpen(true)}>
+        {canAdminister ? (
+          <details className="compact-disclosure pantry-admin-disclosure">
+            <summary>Household admin tools</summary>
+            <div className="compact-disclosure-body pantry-admin-tools">
+              <button type="button" className="ghost-button compact-button" onClick={() => setIsRoomOpen(true)}>
                 Manage rooms
               </button>
-            ) : null}
-            {canAdminister ? (
               <button
                 type="button"
-                className="ghost-button"
+                className="ghost-button compact-button"
                 onClick={() => setIsProductIntelligenceOpen(true)}
               >
                 Product intelligence
               </button>
-            ) : null}
-          </div>
-        </div>
+              <Link
+                href={`/app/households/${householdExternalId}/imports`}
+                className="secondary-link compact-link"
+              >
+                Imports
+              </Link>
+            </div>
+          </details>
+        ) : null}
 
         <div className="pantry-mobile-add-note">
           <div className="inline-status-card">
             <div className="stack compact-stack">
-              <strong>{canAddItems ? "Add a new product" : "Create storage first"}</strong>
+              <strong>{canAddItems ? "Add an item" : "Create storage first"}</strong>
               {!canAddItems ? (
                 <p className="helper-text">
                   {canAdminister
@@ -327,7 +354,7 @@ export function PantryControls({
           </div>
         </form>
 
-        <div className="pantry-metric-chips" aria-label="Inventory quick filters">
+        <div className="pantry-metric-chips" aria-label="Pantry quick filters">
           <button
             type="button"
             className="metric-chip"
@@ -384,7 +411,7 @@ export function PantryControls({
           canAdminister={canAdminister}
           locations={locations}
           entryMode="manual"
-          onClose={() => setIsManualAddOpen(false)}
+          onClose={closeManualAdd}
         />
       ) : null}
 
@@ -394,7 +421,7 @@ export function PantryControls({
           canAdminister={canAdminister}
           locations={locations}
           entryMode="scan"
-          onClose={() => setIsScanAddOpen(false)}
+          onClose={closeScanAdd}
         />
       ) : null}
 
@@ -403,7 +430,7 @@ export function PantryControls({
           householdExternalId={householdExternalId}
           canAdminister={canAdminister}
           locations={locations}
-          onClose={() => setIsQuickAddOpen(false)}
+          onClose={closeQuickAdd}
         />
       ) : null}
 

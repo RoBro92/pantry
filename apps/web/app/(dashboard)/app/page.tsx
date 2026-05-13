@@ -56,19 +56,19 @@ export default async function SessionPage() {
                     href={`/app/households/${membership.household_external_id}`}
                     className="primary-link compact-link"
                   >
-                    Inventory
+                    Pantry
+                  </Link>
+                  <Link
+                    href={`/app/households/${membership.household_external_id}/shopping-list`}
+                    className="secondary-link compact-link"
+                  >
+                    Shopping
                   </Link>
                   <Link
                     href={`/app/households/${membership.household_external_id}/recipes`}
                     className="secondary-link compact-link"
                   >
                     Recipes
-                  </Link>
-                  <Link
-                    href={`/app/households/${membership.household_external_id}/ai`}
-                    className="secondary-link compact-link"
-                  >
-                    Meals
                   </Link>
                 </div>
               </article>

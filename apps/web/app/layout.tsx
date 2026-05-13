@@ -4,7 +4,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   applicationName: "Pantro",
   title: "Pantro",
-  description: "Self-hosted-first household inventory foundation",
+  description: "Self-hosted household pantry and meal companion",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,

@@ -19,6 +19,28 @@ export default async function AdminLayout({
     <main className="page-shell dashboard-page-shell">
       <AdminReleaseNotesDialog initialReleaseStatus={releaseStatus} />
 
+      <div className="mobile-shell-header admin-mobile-shell-header">
+        <div className="mobile-shell-topbar">
+          <div className="stack compact-stack">
+            <p className="eyebrow">Installation</p>
+            <h1 className="shell-title mobile-shell-title">Admin console</h1>
+            <p className="sidebar-copy">{displayName}</p>
+          </div>
+          <LogoutButtonInner className="ghost-button compact-button" />
+        </div>
+        <nav className="mobile-shell-utility-links" aria-label="Installation quick links">
+          <Link href="/app" className="shell-nav-link">
+            Household dashboard
+          </Link>
+          <Link href="/app/settings" className="shell-nav-link">
+            Account settings
+          </Link>
+          <Link href="/admin" className="shell-nav-link">
+            Admin home
+          </Link>
+        </nav>
+      </div>
+
       <div className="shell-grid">
         <aside className="sidebar panel">
           <p className="eyebrow">Pantro</p>
