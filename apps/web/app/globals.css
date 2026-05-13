@@ -42,6 +42,12 @@ body {
   min-height: 100vh;
 }
 
+@media (display-mode: standalone) {
+  body {
+    min-height: 100svh;
+  }
+}
+
 a {
   color: inherit;
   text-decoration: none;
@@ -3093,6 +3099,12 @@ button.smtp-template-pill {
   .page-shell {
     width: min(100%, calc(100% - 1rem));
     padding: 1rem 0 calc(6.5rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  @media (display-mode: standalone) {
+    .page-shell {
+      padding-top: calc(1rem + env(safe-area-inset-top, 0px));
+    }
   }
 
   .auth-stage-shell,

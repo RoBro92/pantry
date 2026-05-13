@@ -41,6 +41,26 @@ When the install completes, open the configured public URL.
 
 For production use, serve Pantro through HTTPS. Production API startup now requires `SESSION_HTTPS_ONLY=true` so signed session cookies are only sent over secure connections. The installer refuses non-HTTPS public URLs, and the updater stops before changing the stack if an existing `.env` still points browser traffic at `http://`. Browser camera scanning and installable PWA behaviour also require a secure context in production; localhost remains supported for development.
 
+## Mobile Install / PWA Behaviour
+
+Pantro can be installed from supported mobile browsers as a basic Progressive Web
+App convenience. This is still the same self-hosted web product: there is no
+native app, push notification service, hosted control plane, or offline sync.
+
+Installability depends on the browser and deployment:
+
+- production installs must be served over valid HTTPS; localhost is the only
+  supported insecure exception for development
+- install starts at `/app`, which sends unauthenticated users through the normal
+  setup or login flow and returns authenticated users to the household dashboard
+- the manifest scope is `/` so setup, login, household, shopping, recipe, and
+  admin routes stay inside the installed shell
+- Pantro does not register a service worker yet and does not cache authenticated
+  API responses for offline use
+
+If the app is installed on iOS or Android, treat it as a faster launcher for the
+live self-hosted site. It still needs network access to the Pantro server.
+
 ## Manual Install
 
 1. Download the release assets for the version you want to run.
