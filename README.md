@@ -37,6 +37,11 @@ Open the configured public URL when the installer finishes.
 
 For production use, put Pantro behind HTTPS. Production session cookies are secure-only, and browser camera scanning plus the best installable PWA experience depend on a secure browser context, except for localhost during development.
 
+Pantro exposes a basic installable PWA shell for mobile browsers. It is a
+convenience launcher for the live self-hosted web app, not offline sync; see
+[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#mobile-install--pwa-behaviour) for
+operator expectations.
+
 ## Manual Installation
 
 1. Download the release assets for the version you want to run.

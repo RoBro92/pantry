@@ -805,6 +805,7 @@ test("web app exposes installable PWA metadata", async ({ page }) => {
     name: "Pantro",
     short_name: "Pantro",
     id: "/app",
+    description: "Self-hosted household pantry, shopping and meal planning.",
     display: "standalone",
     start_url: "/app",
     scope: "/",
@@ -813,15 +814,31 @@ test("web app exposes installable PWA metadata", async ({ page }) => {
   });
   expect(manifest.icons).toEqual(
     expect.arrayContaining([
-      expect.objectContaining({ src: "/icon.svg", sizes: "any", type: "image/svg+xml" }),
+      expect.objectContaining({ src: "/icon.svg", sizes: "any", type: "image/svg+xml", purpose: "any" }),
+      expect.objectContaining({ src: "/icons/pantro-192.png", sizes: "192x192", type: "image/png", purpose: "any" }),
+      expect.objectContaining({ src: "/icons/pantro-512.png", sizes: "512x512", type: "image/png", purpose: "any" }),
+      expect.objectContaining({ src: "/icons/pantro-maskable-192.png", sizes: "192x192", type: "image/png", purpose: "maskable" }),
+      expect.objectContaining({ src: "/icons/pantro-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" }),
       expect.objectContaining({ src: "/apple-icon.svg", sizes: "180x180", type: "image/svg+xml" })
     ])
   );
 
+  for (const iconPath of [
+    "/icons/pantro-192.png",
+    "/icons/pantro-512.png",
+    "/icons/pantro-maskable-192.png",
+    "/icons/pantro-maskable-512.png",
+    "/apple-touch-icon.png"
+  ]) {
+    const iconResponse = await page.request.get(iconPath);
+    expect(iconResponse.ok()).toBeTruthy();
+    expect(iconResponse.headers()["content-type"]).toContain("image/png");
+  }
+
   await page.goto("/login");
   await expect(page.locator('link[rel="manifest"]')).toHaveAttribute("href", "/manifest.webmanifest");
   await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute("content", "#ad5b1f");
-  await expect(page.locator('link[rel="apple-touch-icon"]')).toHaveAttribute("href", "/apple-icon.svg");
+  await expect(page.locator('link[rel="apple-touch-icon"]')).toHaveAttribute("href", "/apple-touch-icon.png");
 });
 
 test("scanner dialog falls back cleanly to manual entry when camera access is blocked", async ({
