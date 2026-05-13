@@ -581,6 +581,7 @@ test("pantry flow covers room management, combined add flow, duplicate handling,
 
   await page.goto(`/app/households/${manifest.household_external_id}`);
 
+  await page.getByText("Household admin tools").click();
   await page.getByRole("button", { name: "Manage rooms" }).click();
   const createLocationForm = page.getByTestId("pantry-create-location-form");
   await createLocationForm
@@ -594,6 +595,7 @@ test("pantry flow covers room management, combined add flow, duplicate handling,
   await page.getByRole("button", { name: "Add manually" }).click();
   const addEntryForm = page.getByTestId("pantry-add-entry-form");
   await addEntryForm.getByLabel("Product name").fill("Beef mince");
+  await addEntryForm.getByRole("button", { name: "Show optional details" }).click();
   await addEntryForm.getByLabel("Manual ingredients").fill("Beef");
   await addEntryForm.getByRole("button", { name: "Add", exact: true }).click();
   await addEntryForm.getByLabel("Storage location").selectOption({ label: "Kitchen / Freezer" });
@@ -603,7 +605,10 @@ test("pantry flow covers room management, combined add flow, duplicate handling,
   await addEntryForm.getByLabel("Purchase date").fill("2026-04-01");
   await addEntryForm.getByLabel("Expiry date").fill("2026-04-04");
   await addEntryForm.getByLabel("Lot note").fill("First pack");
-  await expect(addEntryForm.getByText("Manual add", { exact: true })).toBeVisible();
+  await expect(addEntryForm.getByRole("button", { name: "Manual item" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
   await expect(addEntryForm.getByLabel("Barcode")).toHaveCount(0);
   await addEntryForm.getByRole("button", { name: "Save item" }).click();
 
@@ -626,6 +631,7 @@ test("pantry flow covers room management, combined add flow, duplicate handling,
   await duplicateForm.getByLabel("Storage location").selectOption({ label: "Kitchen / Shelf A" });
   await duplicateForm.getByLabel("Quantity").fill("1");
   await duplicateForm.getByLabel("Unit").selectOption("kg");
+  await duplicateForm.getByRole("button", { name: "Show optional details" }).click();
   await duplicateForm.getByLabel("Lot note").fill("Second pack");
   await expect(page.getByText("Beef mince already looks like the right product")).toBeVisible();
   await expect(
@@ -658,6 +664,7 @@ test("pantry add flow warns when an alias is already used by another product", a
   await addEntryForm.getByLabel("Storage location").selectOption({ label: "Kitchen / Shelf A" });
   await addEntryForm.getByLabel("Quantity").fill("1");
   await addEntryForm.getByLabel("Unit").selectOption("count");
+  await addEntryForm.getByRole("button", { name: "Show optional details" }).click();
   await addEntryForm.getByLabel("Aliases").fill("Dry pasta");
   await addEntryForm.getByRole("button", { name: "Save item" }).click();
 
@@ -722,7 +729,7 @@ test("mobile household pantry uses bottom navigation, card-first inventory, and 
 
   await page.getByRole("button", { name: "Scan first" }).click();
   const addEntryForm = page.getByTestId("pantry-add-entry-form");
-  await expect(addEntryForm).toContainText("Scan-first add");
+  await expect(addEntryForm).toContainText("Scan barcode");
   await expect(addEntryForm).toContainText("Barcode capture");
   await expect(addEntryForm.getByRole("button", { name: "Hide scanner" })).toBeVisible();
   await page.getByRole("button", { name: "Close" }).click();
@@ -736,6 +743,57 @@ test("mobile household pantry uses bottom navigation, card-first inventory, and 
   await expectStockLotDialogVisible(page, "Edit stock lot", "Edit stock lot");
   await expectStockLotDialogVisible(page, "Move stock lot", "Move stock lot");
   await expectStockLotDialogVisible(page, "Delete stock lot", "Use up stock lot");
+});
+
+test("manual add deep link uses defaults and shares the capture dialog modes", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await loginThroughApi(page, {
+    email: manifest.member_email,
+    password: manifest.password
+  });
+
+  const householdUrl = `/app/households/${manifest.household_external_id}`;
+  await page.goto(householdUrl);
+  await page
+    .getByLabel("Household quick navigation")
+    .getByRole("link", { name: "Add / Scan" })
+    .click();
+
+  await expect(page.getByRole("dialog", { name: "Add to pantry" })).toBeVisible();
+  await page.goBack();
+  await expect(page.getByRole("dialog", { name: "Add to pantry" })).toHaveCount(0);
+  await expect(page).toHaveURL(new RegExp(`${householdUrl}$`));
+
+  await page.goto(`${householdUrl}?add=manual`);
+
+  const captureDialog = page.getByRole("dialog", { name: "Add to pantry" });
+  await expect(captureDialog).toBeVisible();
+  await expect(captureDialog.getByRole("button", { name: "Manual item" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expect(captureDialog.getByLabel("Quantity")).toHaveValue("1");
+  await expect(captureDialog.getByLabel("Storage location")).toHaveValue(
+    manifest.primary_location_external_id,
+  );
+
+  await captureDialog.getByRole("button", { name: "Scan barcode" }).click();
+  await expect(captureDialog.getByRole("button", { name: "Scan barcode" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expect(captureDialog.getByTestId("barcode-scanner-dialog")).toBeVisible();
+
+  await captureDialog.getByRole("button", { name: "Manual item" }).click();
+  await expect(captureDialog.getByTestId("barcode-scanner-dialog")).toHaveCount(0);
+  await captureDialog.getByLabel("Product name").fill("Rice cakes");
+  await captureDialog.getByRole("button", { name: "Save item" }).click();
+
+  await expect(page.getByRole("dialog", { name: "Add to pantry" })).toHaveCount(0);
+  await expect(page).toHaveURL(new RegExp(`/app/households/${manifest.household_external_id}$`));
+  await expect(
+    page.locator('[data-testid^="mobile-product-card-"]').filter({ hasText: "Rice cakes" }),
+  ).toBeVisible();
 });
 
 test("web app exposes installable PWA metadata", async ({ page }) => {
@@ -798,9 +856,41 @@ test("scanner dialog falls back cleanly to manual entry when camera access is bl
   await expect(addEntryForm.locator('input[name="barcode"]')).toHaveValue("5000111046244");
   await expect(
     addEntryForm.getByText(
-      /Open Food Facts data found and ready to apply\.|No Open Food Facts result found for this barcode\.|Open Food Facts request failed\./,
+      /Product details found and ready to apply\.|No product details were found\. Complete the item and save when ready\.|Product lookup is unavailable\. Add the item manually and save when ready\./,
     ),
   ).toBeVisible();
+});
+
+test("scan add can save when advisory product lookup fails", async ({ page }) => {
+  await page.route("**/api/households/**/pantry/enrichment/preview", async (route) => {
+    await route.fulfill({
+      status: 503,
+      contentType: "application/json",
+      body: JSON.stringify({ detail: "Open Food Facts request failed." }),
+    });
+  });
+
+  await loginThroughApi(page, {
+    email: manifest.member_email,
+    password: manifest.password
+  });
+
+  await page.goto(`/app/households/${manifest.household_external_id}?add=scan`);
+
+  const captureDialog = page.getByRole("dialog", { name: "Add to pantry" });
+  const scannerPanel = captureDialog.getByTestId("barcode-scanner-dialog");
+  await scannerPanel.getByLabel("Type or scan barcode").fill("7777777777777");
+  await scannerPanel.getByLabel("Type or scan barcode").press("Enter");
+
+  await expect(captureDialog.locator('input[name="barcode"]')).toHaveValue("7777777777777");
+  await expect(captureDialog).toContainText(
+    "Product lookup is unavailable. Add the item manually and save when ready.",
+  );
+  await captureDialog.getByLabel("Product name").fill("Emergency oats");
+  await captureDialog.getByRole("button", { name: "Save item" }).click();
+
+  await expect(page.getByRole("dialog", { name: "Add to pantry" })).toHaveCount(0);
+  await expect(page.locator('[data-testid^="product-card-"]').filter({ hasText: "Emergency oats" })).toBeVisible();
 });
 
 test("scanner dialog explains the secure-context requirement when camera scanning is unavailable on HTTP", async ({
@@ -1277,6 +1367,7 @@ test("platform admin can manage household memberships from the consolidated pane
 
   await expect(page.getByRole("heading", { name: "Weekday Household" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Add manually" })).toBeVisible();
+  await page.getByText("Household admin tools").click();
   await expect(page.getByRole("button", { name: "Manage rooms" })).toBeVisible();
 });
 
