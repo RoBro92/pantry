@@ -49,6 +49,7 @@ export function PantryControls({
   const searchParams = useSearchParams();
   const roomSelectRef = useRef<HTMLSelectElement | null>(null);
   const locationSelectRef = useRef<HTMLSelectElement | null>(null);
+  const previousRequestedAddModeRef = useRef<string | null>(null);
   const [captureMode, setCaptureMode] = useState<CaptureMode | null>(null);
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
   const [isRoomOpen, setIsRoomOpen] = useState(false);
@@ -84,18 +85,27 @@ export function PantryControls({
       return;
     }
     if (requestedAddMode === "scan") {
+      previousRequestedAddModeRef.current = requestedAddMode;
       setIsQuickAddOpen(false);
       setCaptureMode("scan");
       return;
     }
     if (requestedAddMode === "manual") {
+      previousRequestedAddModeRef.current = requestedAddMode;
       setIsQuickAddOpen(false);
       setCaptureMode("manual");
       return;
     }
     if (requestedAddMode === "quick") {
+      previousRequestedAddModeRef.current = requestedAddMode;
       setCaptureMode(null);
       setIsQuickAddOpen(true);
+      return;
+    }
+    if (previousRequestedAddModeRef.current) {
+      previousRequestedAddModeRef.current = null;
+      setCaptureMode(null);
+      setIsQuickAddOpen(false);
     }
   }, [canAddItems, requestedAddMode]);
 

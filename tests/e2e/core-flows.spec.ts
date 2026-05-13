@@ -752,7 +752,19 @@ test("manual add deep link uses defaults and shares the capture dialog modes", a
     password: manifest.password
   });
 
-  await page.goto(`/app/households/${manifest.household_external_id}?add=manual`);
+  const householdUrl = `/app/households/${manifest.household_external_id}`;
+  await page.goto(householdUrl);
+  await page
+    .getByLabel("Household quick navigation")
+    .getByRole("link", { name: "Add / Scan" })
+    .click();
+
+  await expect(page.getByRole("dialog", { name: "Add to pantry" })).toBeVisible();
+  await page.goBack();
+  await expect(page.getByRole("dialog", { name: "Add to pantry" })).toHaveCount(0);
+  await expect(page).toHaveURL(new RegExp(`${householdUrl}$`));
+
+  await page.goto(`${householdUrl}?add=manual`);
 
   const captureDialog = page.getByRole("dialog", { name: "Add to pantry" });
   await expect(captureDialog).toBeVisible();
