@@ -4,6 +4,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "Pantro",
     short_name: "Pantro",
+    id: "/app",
     description: "Self-hosted household pantry and shopping flows.",
     start_url: "/app",
     scope: "/",

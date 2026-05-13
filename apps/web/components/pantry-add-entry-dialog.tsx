@@ -127,12 +127,12 @@ export function PantryAddEntryDialog({
   locations,
   onClose,
   entryMode = "manual",
-  title = entryMode === "scan" ? "Scan to add" : "Add manually",
+  title = entryMode === "scan" ? "Scan item" : "Add manually",
   description =
     entryMode === "scan"
-      ? "Capture the barcode first."
-      : "Create a pantry item manually",
-  submitLabel = "Add to inventory",
+      ? "Scan a barcode, then save the item once the essentials are set."
+      : "Save a pantry item without waiting for barcode lookup.",
+  submitLabel = "Save item",
   initialValues,
   onCompleted,
 }: PantryAddEntryDialogProps) {
@@ -319,7 +319,7 @@ export function PantryAddEntryDialog({
 
       setLookupStatus(buildLookupStatus(response, candidateBarcode));
       setLookupSuccessMessage(
-        nextSelectedSourceProductId ? "Open Food Facts data found and ready to apply." : null,
+        nextSelectedSourceProductId ? "Product details found and ready to apply." : null,
       );
     } catch (requestError) {
       if (enrichmentLookupRequestIdRef.current !== requestId) {
@@ -467,12 +467,12 @@ export function PantryAddEntryDialog({
             <div className="setup-card-toolbar">
               <div className="stack compact-stack">
                 <h3 className="modal-section-title">
-                  {entryMode === "scan" ? "Scan-first household add" : "Manual household add"}
+                  {entryMode === "scan" ? "Scan-first add" : "Manual add"}
                 </h3>
                 <p className="helper-text">
                   {entryMode === "scan"
-                    ? "Scan the barcodes on your products."
-                    : "Start with the essentials and save the product quickly."}
+                    ? "Scan the barcode, check the basics, then save."
+                    : "Enter the essentials and save the item."}
                 </p>
               </div>
               <span className="pill">
@@ -544,9 +544,9 @@ export function PantryAddEntryDialog({
             ) : (
               <div className="inline-status-card">
                 <div className="stack compact-stack">
-                  <strong>Manual add keeps barcode lookup out of the way</strong>
+                  <strong>Manual add</strong>
                   <p className="helper-text">
-                    Use the scan-first flow whenever you want to import Open Food Facts data from a barcode.
+                    Add the item now. Barcode lookup is optional and stays out of this path.
                   </p>
                 </div>
               </div>
@@ -736,7 +736,7 @@ export function PantryAddEntryDialog({
           {lookupStatus || lookupPreview || selectedCandidate ? (
             <section className="modal-form-section">
               <details className="compact-disclosure" open={entryMode === "manual"}>
-                <summary>Open Food Facts details</summary>
+                <summary>Optional product details</summary>
                 <div className="compact-disclosure-body">
                   <div className="inline-status-card">
                     <div className="stack compact-stack">
@@ -818,7 +818,7 @@ export function PantryAddEntryDialog({
           ) : null}
 
           {error ? <p className="error-text">{error}</p> : null}
-          {statusMessage ? <p className="status-note">{statusMessage}</p> : null}
+          {statusMessage ? <p className="status-note" role="status">{statusMessage}</p> : null}
 
           <div className="page-actions pantry-submit-actions">
             <button type="submit" className="primary-button" disabled={pending}>

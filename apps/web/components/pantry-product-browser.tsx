@@ -384,7 +384,7 @@ export function PantryProductBrowser({
               <strong>Stock lots</strong>
               <p className="helper-text">
                 {product.stock_lots.length > 0
-                  ? "Lot actions stay available, but the product summary stays lighter on mobile."
+                  ? "Stored quantities and expiry dates for this product."
                   : "No active stock lots remain for this product."}
               </p>
             </div>
@@ -465,17 +465,6 @@ export function PantryProductBrowser({
         >
           {product.is_in_shopping_list ? "On list" : "Buy again"}
         </button>
-        {canAdminister ? (
-          <button
-            type="button"
-            className="ghost-button compact-button inventory-mobile-action-button"
-            onClick={() => setProductEditorProduct(product)}
-          >
-            Edit
-          </button>
-        ) : (
-          <span className="inventory-mobile-action-spacer" aria-hidden="true" />
-        )}
       </div>
     );
   }
@@ -509,12 +498,12 @@ export function PantryProductBrowser({
       <section className="panel">
         <div className="inventory-header">
           <div className="stack compact-stack">
-            <p className="eyebrow">Inventory</p>
+            <p className="eyebrow">Pantry</p>
             <h2>No matching products</h2>
           </div>
         </div>
         <div className="empty-state">
-          <p>Try a different search, clear a filter, or add a new product and stock lot.</p>
+          <p>Try a different search, clear a filter, or add an item from the top of the page.</p>
         </div>
       </section>
     );
@@ -525,7 +514,7 @@ export function PantryProductBrowser({
       <section className="panel">
         <div className="inventory-header">
           <div className="stack compact-stack">
-            <p className="eyebrow">Inventory</p>
+            <p className="eyebrow">Pantry</p>
             <p className="helper-text">
               {hasActiveFilters
                 ? `${matchedProductCount} matching product${matchedProductCount === 1 ? "" : "s"}`
@@ -534,7 +523,7 @@ export function PantryProductBrowser({
           </div>
           <span className="pill">{matchedProductCount} results</span>
         </div>
-        {renderPagination()}
+        <div className="inventory-pagination-top">{renderPagination()}</div>
 
         <div className="inventory-mobile-list">
           {products.map((product) => {
@@ -620,7 +609,7 @@ export function PantryProductBrowser({
             })}
           </table>
         </div>
-        {renderPagination()}
+        <div className="inventory-pagination-bottom">{renderPagination()}</div>
       </section>
 
       {shoppingDialogProduct ? (

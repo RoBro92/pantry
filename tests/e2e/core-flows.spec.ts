@@ -603,9 +603,9 @@ test("pantry flow covers room management, combined add flow, duplicate handling,
   await addEntryForm.getByLabel("Purchase date").fill("2026-04-01");
   await addEntryForm.getByLabel("Expiry date").fill("2026-04-04");
   await addEntryForm.getByLabel("Lot note").fill("First pack");
-  await expect(addEntryForm.getByText("Manual add keeps barcode lookup out of the way")).toBeVisible();
+  await expect(addEntryForm.getByText("Manual add", { exact: true })).toBeVisible();
   await expect(addEntryForm.getByLabel("Barcode")).toHaveCount(0);
-  await addEntryForm.getByRole("button", { name: "Add to inventory" }).click();
+  await addEntryForm.getByRole("button", { name: "Save item" }).click();
 
   const beefMinceCard = page
     .locator('[data-testid^="product-card-"]')
@@ -659,7 +659,7 @@ test("pantry add flow warns when an alias is already used by another product", a
   await addEntryForm.getByLabel("Quantity").fill("1");
   await addEntryForm.getByLabel("Unit").selectOption("count");
   await addEntryForm.getByLabel("Aliases").fill("Dry pasta");
-  await addEntryForm.getByRole("button", { name: "Add to inventory" }).click();
+  await addEntryForm.getByRole("button", { name: "Save item" }).click();
 
   await expect(page.getByText("Dry pasta is already used by Pasta")).toBeVisible();
 });
@@ -679,34 +679,40 @@ test("mobile household pantry uses bottom navigation, card-first inventory, and 
   await expect(page.locator(".mobile-shell-header")).not.toContainText(/Pantro\s+\d/);
   await expect(page.locator(".mobile-shell-header")).not.toContainText("Welcome to Pantro!");
   await expect(page.locator(".mobile-bottom-nav")).toBeVisible();
-  await page.getByRole("button", { name: "Menu" }).click();
-  await expect(page.getByRole("link", { name: "Dashboard" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Settings" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Logout" })).toBeVisible();
   await expect(
     page
       .getByLabel("Household quick navigation")
-      .getByRole("link", { name: "Shopping List" }),
+      .getByRole("link", { name: "Add / Scan" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "More household options" }).click();
+  await expect(page.getByRole("link", { name: "Dashboard" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Settings" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Logout" })).toBeVisible();
+  await page.getByLabel("Close menu").click();
+  await expect(
+    page
+      .getByLabel("Household quick navigation")
+      .getByRole("link", { name: "Shopping" }),
   ).toBeVisible();
   await expect(
     page
       .getByLabel("Household quick navigation")
-      .getByRole("link", { name: "Inventory" }),
+      .getByRole("link", { name: "Pantry" }),
   ).toHaveAttribute("aria-current", "page");
   await page
     .getByLabel("Household quick navigation")
-    .getByRole("link", { name: "Shopping List" })
+    .getByRole("link", { name: "Shopping" })
     .click();
   await expect(page).toHaveURL(/\/shopping-list$/);
   await expect(
     page
       .getByLabel("Household quick navigation")
-      .getByRole("link", { name: "Shopping List" }),
+      .getByRole("link", { name: "Shopping" }),
   ).toHaveAttribute("aria-current", "page");
   await expect(
     page
       .getByLabel("Household quick navigation")
-      .getByRole("link", { name: "Inventory" }),
+      .getByRole("link", { name: "Pantry" }),
   ).not.toHaveAttribute("aria-current", "page");
   await page.goto(`/app/households/${manifest.household_external_id}`);
 
@@ -716,7 +722,7 @@ test("mobile household pantry uses bottom navigation, card-first inventory, and 
 
   await page.getByRole("button", { name: "Scan first" }).click();
   const addEntryForm = page.getByTestId("pantry-add-entry-form");
-  await expect(addEntryForm).toContainText("Scan-first household add");
+  await expect(addEntryForm).toContainText("Scan-first add");
   await expect(addEntryForm).toContainText("Barcode capture");
   await expect(addEntryForm.getByRole("button", { name: "Hide scanner" })).toBeVisible();
   await page.getByRole("button", { name: "Close" }).click();
@@ -740,6 +746,7 @@ test("web app exposes installable PWA metadata", async ({ page }) => {
   expect(manifest).toMatchObject({
     name: "Pantro",
     short_name: "Pantro",
+    id: "/app",
     display: "standalone",
     start_url: "/app",
     scope: "/",
@@ -1265,7 +1272,7 @@ test("platform admin can manage household memberships from the consolidated pane
   await expect(page.locator(".household-card").getByText("Weekday Household")).toBeVisible();
   await page
     .locator(".household-card", { hasText: "Weekday Household" })
-    .getByRole("link", { name: "Inventory" })
+    .getByRole("link", { name: "Pantry" })
     .click();
 
   await expect(page.getByRole("heading", { name: "Weekday Household" })).toBeVisible();

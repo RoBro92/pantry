@@ -17,6 +17,7 @@ test("shared modal keeps keyboard focus inside the dialog and restores it on clo
 
   await page.goto(`/app/households/${manifest.household_external_id}`);
 
+  await page.getByText("Household admin tools").click();
   const manageRoomsTrigger = page.getByRole("button", { name: "Manage rooms" });
   await manageRoomsTrigger.focus();
   await expect(manageRoomsTrigger).toBeFocused();
@@ -40,7 +41,7 @@ test("shared modal keeps keyboard focus inside the dialog and restores it on clo
   await expect(manageRoomsTrigger).toBeFocused();
 });
 
-test("nested bulk-scan dialogs move focus to the topmost modal and return it to the parent flow", async ({
+test("bulk-scan camera stays inline inside the parent dialog", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
@@ -64,17 +65,15 @@ test("nested bulk-scan dialogs move focus to the topmost modal and return it to 
   await expect(scanWithCameraButton).toBeFocused();
   await scanWithCameraButton.click();
 
-  const scannerDialog = page.getByRole("dialog", { name: "Scan pantry items" });
-  const scannerCloseButton = scannerDialog.getByRole("button", { name: "Close" });
-  const manualBarcodeField = scannerDialog.getByLabel("Type or scan barcodes");
+  const scannerPanel = bulkDialog.getByTestId("barcode-scanner-dialog");
+  const manualBarcodeField = scannerPanel.getByLabel("Type or scan barcodes");
 
-  await expect(scannerDialog).toBeVisible();
-  await expect(manualBarcodeField).toBeFocused();
+  await expect(page.getByRole("dialog")).toHaveCount(1);
+  await expect(scannerPanel).toBeVisible();
+  await expect(manualBarcodeField).toBeVisible();
 
-  await page.keyboard.press("Shift+Tab");
-  await expect(scannerCloseButton).toBeFocused();
+  await bulkDialog.getByRole("button", { name: "Hide camera" }).click();
 
-  await page.keyboard.press("Escape");
-  await expect(scannerDialog).toBeHidden();
-  await expect(scanWithCameraButton).toBeFocused();
+  await expect(scannerPanel).toBeHidden();
+  await expect(bulkDialog.getByRole("button", { name: "Scan with camera" })).toBeVisible();
 });
