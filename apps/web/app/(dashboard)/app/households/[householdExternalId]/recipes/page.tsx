@@ -19,12 +19,11 @@ export default async function HouseholdRecipeListPage({ params }: RecipeListPage
       <section className="panel">
         <p className="eyebrow">Recipes</p>
         <h1>{response.household_name}</h1>
-        <p>
-          Manual recipe entry is live. Coverage is calculated against current pantry stock with
-          deterministic ingredient-to-product matching and shopping gaps derived from missing
-          quantities.
+        <p className="section-copy">
+          Build simple household recipes and check them against the pantry before adding gaps to
+          the shopping list.
         </p>
-        <div className="page-actions">
+        <div className="page-actions recipe-page-actions">
           <Link
             href={`/app/households/${response.household_external_id}`}
             className="secondary-link"
@@ -92,7 +91,7 @@ export default async function HouseholdRecipeListPage({ params }: RecipeListPage
                 href={`/app/households/${response.household_external_id}`}
                 className="secondary-link"
               >
-                Check inventory setup
+                Check pantry setup
               </Link>
             </div>
           </div>

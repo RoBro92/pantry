@@ -1053,7 +1053,48 @@ test("shopping reconciliation uses dense rows, full product-record creation, and
   await expect(page.locator('[data-testid^="product-card-"]').filter({ hasText: "Extra virgin olive oil" })).toBeVisible();
 });
 
+test("mobile shopping keeps add and reconcile actions readable", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await loginThroughApi(page, {
+    email: manifest.member_email,
+    password: manifest.password
+  });
+
+  await page.goto(`/app/households/${manifest.household_external_id}/shopping-list`);
+
+  await expect(
+    page
+      .getByLabel("Household quick navigation")
+      .getByRole("link", { name: "Shopping" }),
+  ).toHaveAttribute("aria-current", "page");
+
+  const addForm = page.locator(".shopping-add-form");
+  await addForm.getByLabel("Add item").fill("Yoghurt");
+  await addForm.getByLabel("Qty").fill("4");
+  await addForm.getByLabel("Unit").fill("pot");
+  await addForm.getByRole("button", { name: "Add item" }).click();
+
+  await expect(page.locator(".shopping-item-card").filter({ hasText: "Yoghurt" })).toBeVisible();
+  await page.getByRole("button", { name: "Export List (.txt)" }).click();
+
+  const pendingTrips = page
+    .locator(".content-grid.shopping-columns article.panel")
+    .nth(1)
+    .locator(".shopping-item-card");
+  await pendingTrips.first().getByRole("button").click();
+
+  await expect(page.locator(".shopping-reconcile-table-heading")).toBeHidden();
+  const yoghurtRow = page
+    .locator('[data-testid^="shopping-reconcile-row-"]')
+    .filter({ hasText: "Yoghurt" });
+  await expect(yoghurtRow).toBeVisible();
+  await expect(yoghurtRow.getByText("Purchased qty")).toBeVisible();
+  await expect(yoghurtRow.getByText("Reconcile item")).toBeVisible();
+  await expect(yoghurtRow.getByText("Return item to shopping list")).toBeVisible();
+});
+
 test("recipe flow covers create, detail view, and pantry coverage display", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
   await loginThroughApi(page, {
     email: manifest.member_email,
     password: manifest.password
@@ -1083,6 +1124,10 @@ test("recipe flow covers create, detail view, and pantry coverage display", asyn
 
   await expect(page.getByRole("heading", { name: "Weeknight Pasta" })).toBeVisible();
   await expect(page.getByText("Partially covered")).toBeVisible();
+  await expect(page.getByTestId("recipe-coverage-mobile-list")).toBeVisible();
+  await expect(
+    page.getByTestId("recipe-coverage-mobile-list").locator("article").filter({ hasText: "Tomatoes" }),
+  ).toContainText("Missing");
   await expect(page.getByText("Tomatoes · 1.000 can")).toBeVisible();
   await page.getByRole("button", { name: "Add gap to shopping list" }).click();
   await expect(page.getByText("Added the recipe gap to the active shopping list.")).toBeVisible();

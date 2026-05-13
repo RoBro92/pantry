@@ -545,8 +545,8 @@ export function ShoppingListPanel({
   return (
     <>
       <div className="stack">
-        <section className="panel">
-          <div className="inventory-header">
+        <section className="panel shopping-overview-panel">
+          <div className="inventory-header shopping-page-header">
             <div className="stack compact-stack">
               <p className="eyebrow">Shopping List</p>
               <h1>Household shopping</h1>
@@ -566,7 +566,7 @@ export function ShoppingListPanel({
             </div>
           </div>
 
-          <div className="page-actions">
+          <div className="page-actions shopping-page-actions">
             <button
               type="button"
               className="primary-button"
@@ -635,7 +635,7 @@ export function ShoppingListPanel({
                           {item.note ? ` · ${item.note}` : ""}
                         </p>
                       </div>
-                      <div className="tag-row">
+                      <div className="tag-row shopping-card-actions">
                         <span className="pill">{item.source_type.replaceAll("_", " ")}</span>
                         <button
                           type="button"

@@ -21,7 +21,7 @@ export default async function RecipeDetailPage({ params }: RecipeDetailPageProps
     <div className="stack">
       <section className="panel">
         <p className="eyebrow">Recipe Detail</p>
-        <div className="page-actions">
+        <div className="page-actions recipe-detail-header">
           <div>
             <h1>{recipe.title}</h1>
             <p>
@@ -36,7 +36,7 @@ export default async function RecipeDetailPage({ params }: RecipeDetailPageProps
           <CoverageBadge status={recipe.pantry_coverage.status} />
         </div>
         {recipe.notes ? <p>{recipe.notes}</p> : null}
-        <div className="page-actions">
+        <div className="page-actions recipe-page-actions">
           <Link href={`/app/households/${householdExternalId}/recipes`} className="secondary-link">
             Back to recipes
           </Link>
@@ -74,7 +74,54 @@ export default async function RecipeDetailPage({ params }: RecipeDetailPageProps
 
       <section className="panel">
         <p className="eyebrow">Ingredient Coverage</p>
-        <div className="table-wrap">
+        <div className="recipe-coverage-mobile-list" data-testid="recipe-coverage-mobile-list">
+          {recipe.ingredients.map((ingredient) => (
+            <article key={ingredient.external_id} className="recipe-coverage-card">
+              <div className="recipe-coverage-card-header">
+                <div className="stack compact-stack">
+                  <strong>{ingredient.name}</strong>
+                  {ingredient.note ? <span className="helper-text">{ingredient.note}</span> : null}
+                </div>
+                <CoverageBadge status={ingredient.coverage.status} />
+              </div>
+              <dl className="recipe-coverage-meta">
+                <div>
+                  <dt>Linked product</dt>
+                  <dd>
+                    {ingredient.product ? (
+                      <>
+                        {ingredient.product.name}
+                        <span>{ingredient.match_source === "manual" ? "Manual link" : "Auto match"}</span>
+                      </>
+                    ) : (
+                      "No match"
+                    )}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Needed</dt>
+                  <dd>
+                    {ingredient.quantity} {ingredient.unit}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Covered</dt>
+                  <dd>
+                    {ingredient.coverage.covered_quantity} {ingredient.unit}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Missing</dt>
+                  <dd>
+                    {ingredient.coverage.missing_quantity} {ingredient.unit}
+                    {ingredient.coverage.reason ? <span>{ingredient.coverage.reason}</span> : null}
+                  </dd>
+                </div>
+              </dl>
+            </article>
+          ))}
+        </div>
+        <div className="table-wrap recipe-coverage-table">
           <table className="data-table">
             <thead>
               <tr>
