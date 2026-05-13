@@ -161,7 +161,7 @@ export function RecipeForm({
       </label>
 
       <div className="stack">
-        <div className="page-actions">
+        <div className="page-actions recipe-form-section-header">
           <div>
             <p className="eyebrow">Ingredients</p>
             <p className="section-copy">
@@ -187,7 +187,7 @@ export function RecipeForm({
         <div className="recipe-ingredient-list">
           {ingredients.map((ingredient, index) => (
             <article key={ingredient.key} className="recipe-ingredient-card">
-              <div className="page-actions">
+              <div className="page-actions recipe-ingredient-header">
                 <strong>Ingredient {index + 1}</strong>
                 <button
                   type="button"
@@ -266,7 +266,7 @@ export function RecipeForm({
 
       {error ? <p className="error-text">{error}</p> : null}
 
-      <div className="page-actions">
+      <div className="page-actions recipe-form-submit-actions">
         <button type="submit" className="primary-button" disabled={pending}>
           {pending ? "Saving..." : mode === "create" ? "Create recipe" : "Save recipe"}
         </button>
