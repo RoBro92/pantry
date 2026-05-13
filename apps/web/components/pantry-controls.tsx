@@ -33,6 +33,8 @@ type PantryControlsProps = {
   };
 };
 
+type CaptureMode = "manual" | "scan";
+
 export function PantryControls({
   householdExternalId,
   householdName,
@@ -47,8 +49,7 @@ export function PantryControls({
   const searchParams = useSearchParams();
   const roomSelectRef = useRef<HTMLSelectElement | null>(null);
   const locationSelectRef = useRef<HTMLSelectElement | null>(null);
-  const [isManualAddOpen, setIsManualAddOpen] = useState(false);
-  const [isScanAddOpen, setIsScanAddOpen] = useState(false);
+  const [captureMode, setCaptureMode] = useState<CaptureMode | null>(null);
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
   const [isRoomOpen, setIsRoomOpen] = useState(false);
   const [isProductIntelligenceOpen, setIsProductIntelligenceOpen] = useState(false);
@@ -83,47 +84,53 @@ export function PantryControls({
       return;
     }
     if (requestedAddMode === "scan") {
-      setIsManualAddOpen(false);
       setIsQuickAddOpen(false);
-      setIsScanAddOpen(true);
+      setCaptureMode("scan");
       return;
     }
     if (requestedAddMode === "manual") {
-      setIsScanAddOpen(false);
       setIsQuickAddOpen(false);
-      setIsManualAddOpen(true);
+      setCaptureMode("manual");
       return;
     }
     if (requestedAddMode === "quick") {
-      setIsScanAddOpen(false);
-      setIsManualAddOpen(false);
+      setCaptureMode(null);
       setIsQuickAddOpen(true);
     }
   }, [canAddItems, requestedAddMode]);
 
-  function clearAddIntent() {
+  function replaceAddIntent(nextMode: CaptureMode | "quick" | null) {
     if (!searchParams.has("add")) {
       return;
     }
     const params = new URLSearchParams(searchParams.toString());
-    params.delete("add");
+    if (nextMode) {
+      params.set("add", nextMode);
+    } else {
+      params.delete("add");
+    }
     const url = params.toString() ? `${pathname}?${params.toString()}` : pathname;
     router.replace(url, { scroll: false });
   }
 
-  function closeManualAdd() {
-    setIsManualAddOpen(false);
-    clearAddIntent();
+  function openCaptureMode(nextMode: CaptureMode) {
+    setIsQuickAddOpen(false);
+    setCaptureMode(nextMode);
   }
 
-  function closeScanAdd() {
-    setIsScanAddOpen(false);
-    clearAddIntent();
+  function switchCaptureMode(nextMode: CaptureMode) {
+    setCaptureMode(nextMode);
+    replaceAddIntent(nextMode);
+  }
+
+  function closeCapture() {
+    setCaptureMode(null);
+    replaceAddIntent(null);
   }
 
   function closeQuickAdd() {
     setIsQuickAddOpen(false);
-    clearAddIntent();
+    replaceAddIntent(null);
   }
 
   function pushFilters(
@@ -179,7 +186,7 @@ export function PantryControls({
               className="primary-button"
               disabled={!canAddItems}
               title={!canAddItems ? "Create a storage location before adding inventory." : undefined}
-              onClick={() => setIsScanAddOpen(true)}
+              onClick={() => openCaptureMode("scan")}
             >
               Scan item
             </button>
@@ -188,7 +195,7 @@ export function PantryControls({
               className="ghost-button"
               disabled={!canAddItems}
               title={!canAddItems ? "Create a storage location before adding inventory." : undefined}
-              onClick={() => setIsManualAddOpen(true)}
+              onClick={() => openCaptureMode("manual")}
             >
               Add manually
             </button>
@@ -252,7 +259,7 @@ export function PantryControls({
                 type="button"
                 className="primary-button compact-button"
                 disabled={!canAddItems}
-                onClick={() => setIsScanAddOpen(true)}
+                onClick={() => openCaptureMode("scan")}
               >
                 Scan first
               </button>
@@ -260,7 +267,7 @@ export function PantryControls({
                 type="button"
                 className="ghost-button compact-button"
                 disabled={!canAddItems}
-                onClick={() => setIsManualAddOpen(true)}
+                onClick={() => openCaptureMode("manual")}
               >
                 Manual add
               </button>
@@ -405,23 +412,14 @@ export function PantryControls({
         </div>
       </section>
 
-      {isManualAddOpen ? (
+      {captureMode ? (
         <PantryAddEntryDialog
           householdExternalId={householdExternalId}
           canAdminister={canAdminister}
           locations={locations}
-          entryMode="manual"
-          onClose={closeManualAdd}
-        />
-      ) : null}
-
-      {isScanAddOpen ? (
-        <PantryAddEntryDialog
-          householdExternalId={householdExternalId}
-          canAdminister={canAdminister}
-          locations={locations}
-          entryMode="scan"
-          onClose={closeScanAdd}
+          entryMode={captureMode}
+          onEntryModeChange={switchCaptureMode}
+          onClose={closeCapture}
         />
       ) : null}
 

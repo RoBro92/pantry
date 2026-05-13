@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type {
   PantryDuplicateCheckResponse,
   PantryEnrichmentPreviewResponse,
@@ -21,6 +21,7 @@ type PantryAddEntryDialogProps = {
   locations: PantryLocationSummary[];
   onClose: () => void;
   entryMode?: "manual" | "scan";
+  onEntryModeChange?: (mode: "manual" | "scan") => void;
   title?: string;
   description?: string;
   submitLabel?: string;
@@ -50,7 +51,7 @@ const UNIT_OPTIONS = ["g", "kg", "oz", "lb", "ml", "l", "count", "pack", "bottle
 const EMPTY_FORM: FormState = {
   name: "",
   barcodesInput: "",
-  quantity: "",
+  quantity: "1",
   unit: "count",
   locationExternalId: "",
   aliases: "",
@@ -62,9 +63,13 @@ const EMPTY_FORM: FormState = {
   manualIngredientTags: [],
 };
 
-function createInitialForm(initialValues?: Partial<FormState>): FormState {
+function createInitialForm(
+  initialValues?: Partial<FormState>,
+  defaultLocationExternalId = "",
+): FormState {
   return {
     ...EMPTY_FORM,
+    locationExternalId: defaultLocationExternalId,
     ...initialValues,
     manualIngredientTags: initialValues?.manualIngredientTags ?? [],
   };
@@ -103,7 +108,7 @@ function buildLookupStatus(preview: PantryEnrichmentPreviewResponse, barcode: st
     return preview.message;
   }
   if (preview.status === "no_match" && barcode) {
-    return "No Open Food Facts result found for this barcode.";
+    return "No product details were found. Complete the item and save when ready.";
   }
   return preview.message;
 }
@@ -127,17 +132,16 @@ export function PantryAddEntryDialog({
   locations,
   onClose,
   entryMode = "manual",
-  title = entryMode === "scan" ? "Scan item" : "Add manually",
-  description =
-    entryMode === "scan"
-      ? "Scan a barcode, then save the item once the essentials are set."
-      : "Save a pantry item without waiting for barcode lookup.",
+  onEntryModeChange,
+  title = "Add to pantry",
+  description = "Scan a barcode or add the item manually. Product lookup is advisory.",
   submitLabel = "Save item",
   initialValues,
   onCompleted,
 }: PantryAddEntryDialogProps) {
   const router = useRouter();
-  const initialForm = createInitialForm(initialValues);
+  const defaultLocationExternalId = initialValues?.locationExternalId ?? locations[0]?.external_id ?? "";
+  const initialForm = createInitialForm(initialValues, defaultLocationExternalId);
   const [form, setForm] = useState<FormState>(initialForm);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -153,7 +157,7 @@ export function PantryAddEntryDialog({
   const [isInlineScannerOpen, setIsInlineScannerOpen] = useState(
     entryMode === "scan" && !getPrimaryBarcode(initialForm.barcodesInput),
   );
-  const [showOptionalDetails, setShowOptionalDetails] = useState(entryMode === "manual");
+  const [showOptionalDetails, setShowOptionalDetails] = useState(false);
   const duplicateCheckRequestIdRef = useRef(0);
   const enrichmentLookupRequestIdRef = useRef(0);
   const lastDuplicateCheckKeyRef = useRef("");
@@ -169,6 +173,24 @@ export function PantryAddEntryDialog({
       : matchedProduct && duplicateDecision === "separate"
         ? "Create separate product"
         : submitLabel;
+
+  useEffect(() => {
+    if (entryMode === "scan" && !getPrimaryBarcode(form.barcodesInput)) {
+      setIsInlineScannerOpen(true);
+    }
+    if (entryMode === "manual") {
+      setIsInlineScannerOpen(false);
+    }
+  }, [entryMode, form.barcodesInput]);
+
+  function changeEntryMode(nextMode: "manual" | "scan") {
+    if (nextMode === entryMode) {
+      return;
+    }
+    setError(null);
+    setStatusMessage(null);
+    onEntryModeChange?.(nextMode);
+  }
 
   function resetEnrichmentPreview() {
     setLookupPreview(null);
@@ -329,9 +351,8 @@ export function PantryAddEntryDialog({
       setLookupPreview(null);
       setSelectedEnrichmentSourceProductId(null);
       setLookupStatus(null);
-      setError(
-        requestError instanceof Error ? requestError.message : "Could not look up product details.",
-      );
+      setLookupStatus("Product lookup is unavailable. Add the item manually and save when ready.");
+      setLookupSuccessMessage(null);
     } finally {
       if (enrichmentLookupRequestIdRef.current === requestId) {
         setLookupPending(false);
@@ -342,10 +363,10 @@ export function PantryAddEntryDialog({
   async function handleSuccessfulMutation(response: PantryEntryMutationResponse) {
     clearDuplicateState();
     setStatusMessage(response.message);
-    setForm(createInitialForm(initialValues));
+    setForm(createInitialForm(initialValues, defaultLocationExternalId));
     resetEnrichmentPreview();
     setIsInlineScannerOpen(entryMode === "scan");
-    setShowOptionalDetails(entryMode === "manual");
+    setShowOptionalDetails(false);
     resetLookupGuards();
     router.refresh();
     await onCompleted?.(response);
@@ -463,11 +484,30 @@ export function PantryAddEntryDialog({
             void submit();
           }}
         >
+          <div className="capture-mode-toggle" role="group" aria-label="Capture mode">
+            <button
+              type="button"
+              className={entryMode === "scan" ? "primary-button compact-button" : "ghost-button compact-button"}
+              aria-pressed={entryMode === "scan"}
+              onClick={() => changeEntryMode("scan")}
+            >
+              Scan barcode
+            </button>
+            <button
+              type="button"
+              className={entryMode === "manual" ? "primary-button compact-button" : "ghost-button compact-button"}
+              aria-pressed={entryMode === "manual"}
+              onClick={() => changeEntryMode("manual")}
+            >
+              Manual item
+            </button>
+          </div>
+
           <section className="modal-form-section">
             <div className="setup-card-toolbar">
               <div className="stack compact-stack">
                 <h3 className="modal-section-title">
-                  {entryMode === "scan" ? "Scan-first add" : "Manual add"}
+                  {entryMode === "scan" ? "Scan barcode" : "Manual item"}
                 </h3>
                 <p className="helper-text">
                   {entryMode === "scan"
@@ -735,7 +775,7 @@ export function PantryAddEntryDialog({
 
           {lookupStatus || lookupPreview || selectedCandidate ? (
             <section className="modal-form-section">
-              <details className="compact-disclosure" open={entryMode === "manual"}>
+              <details className="compact-disclosure">
                 <summary>Optional product details</summary>
                 <div className="compact-disclosure-body">
                   <div className="inline-status-card">
